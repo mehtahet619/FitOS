@@ -1,6 +1,71 @@
 import { Pool, PoolClient, QueryResultRow } from "pg";
 import type { DatabaseLike } from "./types";
 
+const camelCaseColumns: Record<string, string> = {
+  passwordhash: "passwordHash",
+  googleid: "googleId",
+  createdat: "createdAt",
+  updatedat: "updatedAt",
+  userid: "userId",
+  heightcm: "heightCm",
+  weightkg: "weightKg",
+  fitnesslevel: "fitnessLevel",
+  primarygoal: "primaryGoal",
+  daysperweek: "daysPerWeek",
+  sessionminutes: "sessionMinutes",
+  dietarypref: "dietaryPref",
+  foodlikes: "foodLikes",
+  dailybudget: "dailyBudget",
+  iscustom: "isCustom",
+  secondarymuscles: "secondaryMuscles",
+  movementpattern: "movementPattern",
+  defaultsets: "defaultSets",
+  reprangelow: "repRangeLow",
+  reprangehigh: "repRangeHigh",
+  requiredequipmentids: "requiredEquipmentIds",
+  equipmentid: "equipmentId",
+  exerciseid: "exerciseId",
+  baseexerciseid: "baseExerciseId",
+  substituteid: "substituteId",
+  orderindex: "orderIndex",
+  targetsets: "targetSets",
+  replacedfromid: "replacedFromId",
+  painreported: "painReported",
+  workoutid: "workoutId",
+  workoutplanid: "workoutPlanId",
+  durationmin: "durationMin",
+  completedat: "completedAt",
+  workoutexerciseid: "workoutExerciseId",
+  setnumber: "setNumber",
+  nutritionprofileid: "nutritionProfileId",
+  calorietarget: "calorieTarget",
+  proteintargetg: "proteinTargetG",
+  carbtargetg: "carbTargetG",
+  fattargetg: "fatTargetG",
+  mealslot: "mealSlot",
+  proteing: "proteinG",
+  carbsg: "carbsG",
+  fatg: "fatG",
+  estpriceinr: "estPriceInr",
+  nutritionrecommendationid: "nutritionRecommendationId",
+  totalcalories: "totalCalories",
+  totalproteing: "totalProteinG",
+  totalcarbsg: "totalCarbsG",
+  totalfatg: "totalFatG",
+  isopennow: "isOpenNow",
+  userlocationid: "userLocationId",
+  recordedat: "recordedAt",
+  checkedinat: "checkedInAt",
+};
+
+export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    normalized[camelCaseColumns[key] || key] = value;
+  }
+  return normalized as T;
+}
+
 export function toPostgresSql(sql: string): string {
   let parameter = 0;
   return sql.replace(/\?/g, () => `$${++parameter}`);
@@ -25,7 +90,7 @@ export class PostgresDatabase implements DatabaseLike {
 
   async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
     const result = await this.pool.query<T>(toPostgresSql(sql), params);
-    return result.rows;
+    return result.rows.map(normalizePostgresRow);
   }
 
   async get<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {

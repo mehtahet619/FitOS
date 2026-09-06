@@ -23,7 +23,9 @@ services:
       - key: AI_PROVIDER
         value: template
       - key: MAPS_PROVIDER
-        value: mock
+        value: apify_swiggy
+      - key: APIFY_API_KEY
+        sync: false
       - key: ROBOFLOW_WORKFLOW_MODE
         value: "true"
       - key: ROBOFLOW_API_KEY
