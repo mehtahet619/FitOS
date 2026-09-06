@@ -1,10 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
 import path from "path";
 import { PostgresDatabase, isPostgresUrl } from "./postgres";
 import type { DatabaseLike } from "./types";
 
 class SqliteDatabase implements DatabaseLike {
-  constructor(private readonly database: DatabaseSync) {}
+  constructor(private readonly database: { prepare(sql: string): { all(...params: unknown[]): unknown[]; get(...params: unknown[]): unknown; run(...params: unknown[]): { changes: number | bigint } }; exec(sql: string): void }) {}
 
   async all<T>(sql: string, ...params: unknown[]): Promise<T[]> {
     return this.database.prepare(sql).all(...params) as T[];
@@ -27,6 +26,7 @@ class SqliteDatabase implements DatabaseLike {
 function createDatabase(): DatabaseLike {
   if (isPostgresUrl()) return new PostgresDatabase();
 
+  const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
   const dbPath = process.env.DATABASE_URL?.startsWith("file:")
     ? process.env.DATABASE_URL.slice("file:".length)
     : path.join(__dirname, "../../dev.db");
