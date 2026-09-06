@@ -74,7 +74,7 @@ export interface MealPlanResult {
   totals: { calories: number; proteinG: number; carbsG: number; fatG: number; estPriceInr: number };
 }
 
-interface FoodRow {
+export interface FoodRow {
   id: string;
   name: string;
   dietType: string;
@@ -85,6 +85,18 @@ interface FoodRow {
   allergens: string;
   estPriceInr: number;
   mealSlot: string;
+}
+
+export function generateMealPlanFromFoods(
+  foods: FoodRow[],
+  input: {
+    dietaryPref: string;
+    allergies: string[];
+    dailyBudget: number;
+    targets: MacroTargets;
+  }
+): MealPlanResult {
+  return chooseMealPlan(foods, input);
 }
 
 // dietType filtering: vegan is a subset of vegetarian, etc. Since the Food
@@ -115,6 +127,30 @@ export async function generateDailyMealPlan(
     targets: MacroTargets;
   }
 ): Promise<MealPlanResult> {
+  const foods: FoodRow[] = [];
+  for (const slot of ["breakfast", "lunch", "snack", "dinner"]) {
+    const dietTypes = compatibleDietTypes(input.dietaryPref);
+    const placeholders = dietTypes.map(() => "?").join(",");
+    foods.push(
+      ...(await database.all<FoodRow>(
+        `SELECT * FROM Food WHERE mealSlot = ? AND dietType IN (${placeholders})`,
+        slot,
+        ...dietTypes
+      ))
+    );
+  }
+  return chooseMealPlan(foods, input);
+}
+
+function chooseMealPlan(
+  foods: FoodRow[],
+  input: {
+    dietaryPref: string;
+    allergies: string[];
+    dailyBudget: number;
+    targets: MacroTargets;
+  }
+): MealPlanResult {
   const slots = ["breakfast", "lunch", "snack", "dinner"];
   const slotCalorieShare: Record<string, number> = {
     breakfast: 0.25,
@@ -133,12 +169,7 @@ export async function generateDailyMealPlan(
   const allergies = input.allergies.filter((a) => a.trim() !== "");
 
   for (const slot of slots) {
-    const placeholders = dietTypes.map(() => "?").join(",");
-    const candidates = await database.all<FoodRow>(
-      `SELECT * FROM Food WHERE mealSlot = ? AND dietType IN (${placeholders})`,
-      slot,
-      ...dietTypes
-    );
+    const candidates = foods.filter((food) => food.mealSlot === slot && dietTypes.includes(food.dietType));
 
     const filtered = candidates.filter(
       (f) => !allergies.some((a) => f.allergens.toLowerCase().includes(a.toLowerCase()))

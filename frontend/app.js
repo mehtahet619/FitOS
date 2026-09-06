@@ -470,7 +470,14 @@ async function loadDiet() {
       `;
       $("generate-diet-btn").addEventListener("click", async () => {
         try {
-          await Api.post("/nutrition/generate", {});
+          if (!navigator.geolocation) throw new Error("Location is required to suggest nearby food.");
+          const position = await new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error("Allow location access to find available nearby food.")))
+          );
+          await Api.post("/nutrition/generate", {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
           await loadDiet();
         } catch (err) {
           el.innerHTML = `<div class="banner banner-error">${err.message}</div>` + el.innerHTML;
