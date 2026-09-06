@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#f4f2ec" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Adaptive Fit" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<title>Adaptive Fit</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="screen-auth" class="screen active">
+    <div class="auth-wrap">
+      <div class="header">
+        <h1 id="auth-title">Welcome back</h1>
+        <p>Adaptive workouts, nutrition, and gym check-in — built around what you actually have.</p>
+      </div>
+      <div id="auth-banner"></div>
+      <div class="field">
+        <label>Email</label>
+        <input id="auth-email" type="email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="auth-password" type="password" placeholder="••••••••" />
+      </div>
+      <button class="btn btn-primary" id="auth-submit">Log in</button>
+      <button class="link-btn" id="auth-toggle">New here? Create an account</button>
+    </div>
+  </div>
+
+  <!-- ============ ONBOARDING SCREEN ============ -->
+  <div id="screen-onboarding" class="screen">
+    <div class="header">
+      <h1>Set up your plan</h1>
+      <p>This tunes your workouts, nutrition targets, and equipment matching.</p>
+    </div>
+    <div id="onboarding-banner"></div>
+    <div class="card">
+      <div class="field"><label>Name</label><input id="ob-name" placeholder="Het" /></div>
+      <div class="card-grid-2">
+        <div class="field"><label>Age</label><input id="ob-age" type="number" placeholder="24" /></div>
+        <div class="field"><label>Gender</label>
+          <select id="ob-gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+        </div>
+      </div>
+      <div class="card-grid-2">
+        <div class="field"><label>Height (cm)</label><input id="ob-height" type="number" placeholder="175" /></div>
+        <div class="field"><label>Weight (kg)</label><input id="ob-weight" type="number" placeholder="72" /></div>
+      </div>
+      <div class="field"><label>Fitness level</label>
+        <select id="ob-level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
+      </div>
+      <div class="field"><label>Primary goal</label>
+        <select id="ob-goal">
+          <option value="muscle_gain">Muscle gain</option>
+          <option value="fat_loss">Fat loss</option>
+          <option value="strength">Strength</option>
+          <option value="general_fitness">General fitness</option>
+          <option value="endurance">Endurance</option>
+        </select>
+      </div>
+      <div class="card-grid-2">
+        <div class="field"><label>Days / week</label><input id="ob-days" type="number" placeholder="4" /></div>
+        <div class="field"><label>Session (min)</label><input id="ob-duration" type="number" placeholder="45" /></div>
+      </div>
+      <div class="field"><label>Dietary preference</label>
+        <select id="ob-diet">
+          <option value="vegetarian">Vegetarian</option>
+          <option value="vegan">Vegan</option>
+          <option value="non_vegetarian">Non-vegetarian</option>
+          <option value="eggetarian">Eggetarian</option>
+        </select>
+      </div>
+      <div class="field"><label>Daily food budget (₹)</label><input id="ob-budget" type="number" placeholder="300" /></div>
+      <div class="field"><label>Allergies (comma separated, optional)</label><input id="ob-allergies" placeholder="peanut, dairy" /></div>
+    </div>
+    <div class="card">
+      <div class="card-label">🏋️ What equipment do you have?</div>
+      <button class="btn btn-outline" id="onboarding-scan-btn" type="button" style="margin-bottom:12px;">📷 Scan with camera instead</button>
+      <div id="onboarding-scan-area"></div>
+      <div class="chip-group" id="equipment-chips"></div>
+    </div>
+    <button class="btn btn-primary" id="onboarding-submit">Save & continue</button>
+  </div>
+
+  <!-- ============ MAIN APP (tabs) ============ -->
+  <div id="main-app" style="display:none; flex:1; display:flex; flex-direction:column;">
+
+    <!-- TODAY -->
+    <div id="screen-today" class="screen active">
+      <div class="header">
+        <h1 id="today-greeting">Today</h1>
+        <p>Your day at a glance.</p>
+      </div>
+      <div id="today-content"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- WORKOUT -->
+    <div id="screen-workout" class="screen">
+      <div class="header header-row">
+        <div><h1>Workout</h1><p id="workout-focus-label">No workout yet</p></div>
+      </div>
+      <div id="workout-scan-area"></div>
+      <div id="workout-content"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- DIET -->
+    <div id="screen-diet" class="screen">
+      <div class="header">
+        <h1>Diet</h1>
+        <p>Approximate estimates, not medical advice.</p>
+      </div>
+      <div id="diet-content"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- VISION -->
+    <div id="screen-vision" class="screen">
+      <div class="header">
+        <h1>Vision Coach</h1>
+        <p>CV rep counter, form scoring, and model gates</p>
+      </div>
+
+      <div class="segment" id="vision-segment">
+        <button class="active" data-exercise="squat">✓ Squat</button>
+        <button data-exercise="curl">↗ Curl</button>
+        <button data-exercise="pushup">↘ Push-up</button>
+      </div>
+
+      <div class="camera-panel" id="camera-panel">
+        <video id="vision-video" autoplay playsinline muted style="display:none;"></video>
+        <canvas id="vision-canvas"></canvas>
+        <div class="camera-placeholder-text" id="camera-placeholder">
+          Tap "Start Camera" to begin pose analysis in your browser.
+        </div>
+        <div class="camera-feedback" id="camera-feedback" style="display:none;"></div>
+      </div>
+
+      <button class="btn btn-mint" id="vision-start-btn" style="margin-bottom:14px;">Start Camera</button>
+
+      <div class="card-grid-2">
+        <div class="card">
+          <div class="card-label">⇄ Reps</div>
+          <div class="card-value" id="vision-reps">0</div>
+        </div>
+        <div class="card">
+          <div class="card-label">∠ Angle</div>
+          <div class="card-value" id="vision-angle">0 deg</div>
+        </div>
+      </div>
+      <button class="btn btn-outline" id="vision-reset-btn">Reset rep count</button>
+    </div>
+
+    <!-- GYM -->
+    <div id="screen-gym" class="screen">
+      <div class="header">
+        <h1>Gym Check-in</h1>
+        <p>One attendance entry per day.</p>
+      </div>
+      <div id="gym-content"><div class="empty-state">Loading…</div></div>
+    </div>
+
+  </div>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <div id="bottom-nav" class="bottom-nav" style="display:none;">
+    <button class="nav-item active" data-tab="today">
+      <span class="nav-icon">🏠</span><span>Today</span>
+    </button>
+    <button class="nav-item" data-tab="workout">
+      <span class="nav-icon">🏋️</span><span>Workout</span>
+    </button>
+    <button class="nav-item" data-tab="diet">
+      <span class="nav-icon">🍽️</span><span>Diet</span>
+    </button>
+    <button class="nav-item" data-tab="vision">
+      <span class="nav-icon">🎯</span><span>Vision</span>
+    </button>
+    <button class="nav-item" data-tab="gym">
+      <span class="nav-icon">📇</span><span>Gym</span>
+    </button>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+<script type="module" src="vision.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed", e));
+    });
+  }
+</script>
+</body>
+</html>

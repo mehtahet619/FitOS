@@ -1,0 +1,26 @@
+# Secrets and local configuration
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and generated output
+**/node_modules/
+**/dist/
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/coverage/
+**/.gradle/
+
+# Local databases and IDE files
+**/*.db
+**/*.db-shm
+**/*.db-wal
+.vscode/
+.idea/
+*.iml
+
+# Temporary workspace artifacts
+.dist/

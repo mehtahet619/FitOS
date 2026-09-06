@@ -1,0 +1,32 @@
+name: adaptive_fit_mobile
+description: Adaptive Fit — equipment-aware workouts, nutrition, vision coaching, gym check-in.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Networking + local token storage
+  http: ^1.2.1
+  shared_preferences: ^2.2.3
+
+  # Camera + vision
+  camera: ^0.12.0
+  google_mlkit_pose_detection: ^0.14.0
+  mobile_scanner: ^7.0.0
+
+  # Location, for "find this near me"
+  geolocator: ^12.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
