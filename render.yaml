@@ -6,7 +6,7 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run migrate:postgres && npm run seed && npm start
     healthCheckPath: /health
-    plan: starter
+    plan: free
     envVars:
       - key: NODE_VERSION
         value: 22.5.0
