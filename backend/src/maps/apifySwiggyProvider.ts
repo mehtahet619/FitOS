@@ -17,14 +17,14 @@ import type { NearbyPlace } from "./provider";
 interface ApifyRun {
   id: string;
   status: "SUCCEEDED" | "FAILED" | "RUNNING" | "READY";
-  output?: {
-    restaurants?: ApifyRestaurant[];
-  };
+  defaultDatasetId?: string;
 }
 
 interface ApifyRestaurant {
-  name: string;
+  name?: string;
+  restaurantName?: string;
   rating?: number;
+  avgRating?: number;
   deliveryPrice?: number;
   deliveryTime?: number;
   latitude?: number;
@@ -32,11 +32,15 @@ interface ApifyRestaurant {
   address?: string;
   url?: string;
   menus?: ApifyMenuItem[];
+  menuItems?: ApifyMenuItem[];
+  dishes?: ApifyMenuItem[];
 }
 
 interface ApifyMenuItem {
-  name: string;
+  name?: string;
+  itemName?: string;
   price?: number;
+  priceInr?: number;
   category?: string;
   description?: string;
 }
@@ -47,7 +51,7 @@ interface ApifyMenuItem {
  */
 export class ApifySwiggyMapsProvider {
   private readonly apifyApiUrl = "https://api.apify.com/v2";
-  private readonly actorId = "swiggy-restaurants-scraper"; // Actor ID for Swiggy scraper
+  private readonly actorId = "PAPknIT75qTicSSUI";
   private readonly timeoutMs = 60000; // 1 minute timeout for scraper runs
   private readonly maxRetries = 2;
 
@@ -82,13 +86,13 @@ export class ApifySwiggyMapsProvider {
         const runId = await this.startActorRun(latitude, longitude, query);
         const runData = await this.waitForActorRun(runId);
 
-        if (!runData.output?.restaurants) {
+        if (!runData.defaultDatasetId) {
           return [];
         }
 
-        // Transform Apify data to our NearbyPlace format
+        const restaurants = await this.getDatasetItems(runData.defaultDatasetId);
         const places = this.transformToNearbyPlaces(
-          runData.output.restaurants,
+          restaurants,
           latitude,
           longitude
         );
@@ -128,7 +132,7 @@ export class ApifySwiggyMapsProvider {
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify(input),
     });
 
     if (!response.ok) {
@@ -153,7 +157,7 @@ export class ApifySwiggyMapsProvider {
     const pollIntervalMs = 1000; // Poll every second
 
     while (Date.now() - startTime < this.timeoutMs) {
-      const url = `${this.apifyApiUrl}/acts/runs/${runId}?token=${this.apiKey}`;
+      const url = `${this.apifyApiUrl}/actor-runs/${runId}?token=${this.apiKey}`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -184,6 +188,16 @@ export class ApifySwiggyMapsProvider {
     );
   }
 
+  private async getDatasetItems(datasetId: string): Promise<ApifyRestaurant[]> {
+    const url = `${this.apifyApiUrl}/datasets/${datasetId}/items?clean=true&token=${this.apiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Apify dataset read failed (${response.status})`);
+    }
+    const data = (await response.json()) as unknown;
+    return Array.isArray(data) ? (data as ApifyRestaurant[]) : [];
+  }
+
   /**
    * Transform Apify restaurant data to our NearbyPlace format.
    */
@@ -193,8 +207,15 @@ export class ApifySwiggyMapsProvider {
     userLng: number
   ): NearbyPlace[] {
     return restaurants
-      .filter((r) => r.latitude && r.longitude && r.name)
+      .map((restaurant) => ({
+        ...restaurant,
+        name: restaurant.name || restaurant.restaurantName,
+        rating: restaurant.rating ?? restaurant.avgRating,
+        menus: restaurant.menus || restaurant.menuItems || restaurant.dishes,
+      }))
+      .filter((r) => r.latitude != null && r.longitude != null && r.name)
       .map((r) => {
+        const restaurantName = r.name as string;
         const distance = this.calculateDistance(
           userLat,
           userLng,
@@ -206,15 +227,15 @@ export class ApifySwiggyMapsProvider {
         const dishes = (r.menus || [])
           .slice(0, 5) // Top 5 items
           .map((item) => ({
-            name: item.name,
-            estPriceInr: item.price || 200, // Fallback estimate
+            name: item.name || item.itemName || "Menu item",
+            estPriceInr: item.price ?? item.priceInr ?? 0,
             estCalories: this.estimateCalories(item),
             estProteinG: this.estimateProtein(item),
           }));
 
         return {
-          id: r.url || `swiggy-${r.name.replace(/\s+/g, "-")}`,
-          name: r.name,
+          id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
+          name: restaurantName,
           distanceKm: distance,
           rating: r.rating || 4.0,
           priceRange: this.estimatePriceRange(r.deliveryPrice),
@@ -256,7 +277,7 @@ export class ApifySwiggyMapsProvider {
    * This is a rough heuristic — real data would come from a nutrition API.
    */
   private estimateCalories(item: ApifyMenuItem): number | undefined {
-    const name = (item.name + item.category).toLowerCase();
+    const name = `${item.name || item.itemName || ""} ${item.category || ""}`.toLowerCase();
 
     // Simple heuristics based on common categories
     if (
@@ -295,7 +316,7 @@ export class ApifySwiggyMapsProvider {
    * Estimate protein content based on category.
    */
   private estimateProtein(item: ApifyMenuItem): number | undefined {
-    const name = (item.name + item.category).toLowerCase();
+    const name = `${item.name || item.itemName || ""} ${item.category || ""}`.toLowerCase();
 
     if (
       name.includes("paneer") ||
