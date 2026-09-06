@@ -91,7 +91,7 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
     return res.json({
       configured: false,
       message:
-        "No equipment-vision model is connected in this MVP, so nothing was auto-detected. Set ROBOFLOW_API_KEY and ROBOFLOW_MODEL in .env to enable camera-based detection — see src/vision/equipmentVisionProvider.ts for two ready-to-use public models.",
+        "No equipment-vision model is connected, so nothing was auto-detected. Set ROBOFLOW_API_KEY in the Render service environment to enable camera-based detection.",
       detections: [],
       suggestedExercises: [],
     });

@@ -24,6 +24,12 @@ services:
         value: template
       - key: MAPS_PROVIDER
         value: mock
+      - key: ROBOFLOW_WORKFLOW_MODE
+        value: "true"
+      - key: ROBOFLOW_API_KEY
+        sync: false
+      - key: ROBOFLOW_MODEL
+        value: lifttrack/4
 
   - type: web
     name: adaptive-fit-web
