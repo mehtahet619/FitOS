@@ -25,7 +25,7 @@ services:
       - key: MAPS_PROVIDER
         value: mock
 
-  - type: static
+  - type: static_site
     name: adaptive-fit-web
     buildCommand: echo "No frontend build required"
     staticPublishPath: frontend
