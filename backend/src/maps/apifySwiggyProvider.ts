@@ -124,9 +124,12 @@ export class ApifySwiggyMapsProvider {
     const input = {
       latitude,
       longitude,
-      searchQuery: query,
-      maxRestaurants: 20,
-      includeMenus: true,
+      mode: "search",
+      proxyConfiguration: {
+        useApifyProxy: true,
+        apifyProxyGroups: ["RESIDENTIAL"],
+      },
+      maxItems: 100,
     };
 
     const response = await fetch(url, {
