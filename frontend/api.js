@@ -11,11 +11,24 @@ const Api = (() => {
     localStorage.removeItem("refreshToken");
   }
 
+  async function fetchWithRetry(url, options) {
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await fetch(url, options);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
+    throw lastError;
+  }
+
   async function request(path, opts = {}) {
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
     if (token()) headers["Authorization"] = "Bearer " + token();
 
-    let res = await fetch(window.API_BASE + path, {
+    let res = await fetchWithRetry(window.API_BASE + path, {
       method: opts.method || "GET",
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -23,7 +36,7 @@ const Api = (() => {
 
     // one silent refresh attempt on 401
     if (res.status === 401 && localStorage.getItem("refreshToken") && path !== "/auth/refresh") {
-      const refreshed = await fetch(window.API_BASE + "/auth/refresh", {
+      const refreshed = await fetchWithRetry(window.API_BASE + "/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: localStorage.getItem("refreshToken") }),
@@ -32,7 +45,7 @@ const Api = (() => {
         const data = await refreshed.json();
         setTokens(data.accessToken, null);
         headers["Authorization"] = "Bearer " + data.accessToken;
-        res = await fetch(window.API_BASE + path, {
+        res = await fetchWithRetry(window.API_BASE + path, {
           method: opts.method || "GET",
           headers,
           body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -43,7 +56,12 @@ const Api = (() => {
     }
 
     const text = await res.text();
-    const json = text ? JSON.parse(text) : null;
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
     if (!res.ok) {
       const err = new Error((json && json.error) || res.statusText);
       err.status = res.status;
