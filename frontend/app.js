@@ -465,10 +465,15 @@ async function loadDiet() {
   } catch (e) {
     if (e.status === 404) {
       el.innerHTML = `
-        <div class="empty-state">No nutrition plan generated for today yet.</div>
-        <button class="btn btn-primary" id="generate-diet-btn">Generate today's meal plan</button>
+        <div id="diet-generate-area">
+          <div class="empty-state">No nutrition plan generated for today yet.</div>
+          <button class="btn btn-primary" id="generate-diet-btn">Generate today's meal plan</button>
+        </div>
       `;
       $("generate-diet-btn").addEventListener("click", async () => {
+        const area = $("diet-generate-area");
+        area.innerHTML = mealPlanLoaderMarkup();
+        const stopLoader = startMealPlanLoader();
         try {
           if (!navigator.geolocation) throw new Error("Location is required to suggest nearby food.");
           const position = await new Promise((resolve, reject) =>
@@ -478,9 +483,12 @@ async function loadDiet() {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
+          stopLoader(true);
           await loadDiet();
         } catch (err) {
-          el.innerHTML = `<div class="banner banner-error">${err.message}</div>` + el.innerHTML;
+          stopLoader(false);
+          area.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find enough food data right now.</strong><span>${err.message || "Try again and we'll search for fresh options!"}</span><button class="btn btn-primary" id="try-diet-again">Try again</button></div>`;
+          $("try-diet-again").addEventListener("click", () => loadDiet());
         }
       });
     } else {
@@ -492,6 +500,10 @@ async function loadDiet() {
 function renderDiet(nutrition) {
   const el = $("diet-content");
   el.innerHTML = `
+    <div class="card meal-plan-ready">
+      <div class="meal-plan-success">🎉 Your meal plan is ready!</div>
+      <div class="pill pill-muted">${nutrition.sourceLabel || "General nutrition recommendation"}</div>
+    </div>
     <div class="card">
       <div class="card-label">Today's totals</div>
       <div class="card-value">${nutrition.totals.calories} kcal</div>
@@ -517,6 +529,60 @@ function renderDiet(nutrition) {
   mealsCard.querySelectorAll("[data-food-id]").forEach((btn) => {
     btn.addEventListener("click", () => findNearby(btn.dataset.foodId, btn.dataset.foodName));
   });
+}
+
+const MEAL_FACTS = [
+  ["🥦 Fun fact", "Protein helps repair and build muscle after workouts."],
+  ["🍌 Did you know?", "Bananas are a great source of quick energy before a workout."],
+  ["💧 Hydration tip", "Drinking enough water can improve workout performance."],
+  ["🍚 Nutrition fact", "Carbohydrates are your body's preferred energy source for intense exercise."],
+  ["🥚 Protein fact", "Eggs contain all nine essential amino acids."],
+  ["🥜 Smart snack", "Combining protein and carbohydrates can help with post-workout recovery."],
+];
+
+function mealPlanLoaderMarkup() {
+  return `<div class="meal-plan-loader" aria-live="polite">
+    <div class="floating-food" aria-hidden="true">🍎 🥗 🍗 🥦 🍕 🍌</div>
+    <div class="loader-orbit">🍽️</div>
+    <div class="loader-progress-label">Generating your meal plan... <strong id="meal-progress">10%</strong></div>
+    <div class="loader-progress"><span id="meal-progress-bar"></span></div>
+    <div class="loader-stage"><strong id="meal-stage-title">🔍 Finding restaurants near you</strong><span id="meal-stage-copy">Looking for delicious options nearby...</span></div>
+    <div class="meal-fact"><strong id="meal-fact-title">🥦 Fun fact</strong><span id="meal-fact-copy">Protein helps repair and build muscle after workouts.</span></div>
+    <div class="meal-skeletons"><div class="meal-skeleton"><i>BREAKFAST</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>LUNCH</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>DINNER</i><b></b><b></b><small>Calories · Protein</small></div></div>
+  </div>`;
+}
+
+function startMealPlanLoader() {
+  const stages = [
+    ["🔍 Finding restaurants near you", "Looking for delicious options nearby...", 25],
+    ["🍽️ Checking available food options", "Exploring menus and cuisines...", 45],
+    ["🧠 Building your personalized meal plan", "Matching meals with your fitness goals...", 65],
+    ["📊 Estimating nutrition", "Calculating calories and protein...", 80],
+    ["✨ Almost ready", "Putting together today's perfect meals...", 90],
+  ];
+  let stage = 0;
+  let fact = 0;
+  const update = () => {
+    const current = stages[stage];
+    const title = $("meal-stage-title");
+    const copy = $("meal-stage-copy");
+    if (!title || !copy) return;
+    title.textContent = current[0]; copy.textContent = current[1];
+    $("meal-progress").textContent = `${current[2]}%`;
+    $("meal-progress-bar").style.width = `${current[2]}%`;
+    stage = Math.min(stage + 1, stages.length - 1);
+  };
+  const stageTimer = setInterval(update, 1800);
+  const factTimer = setInterval(() => {
+    fact = (fact + 1) % MEAL_FACTS.length;
+    $("meal-fact-title").textContent = MEAL_FACTS[fact][0];
+    $("meal-fact-copy").textContent = MEAL_FACTS[fact][1];
+  }, 3500);
+  update();
+  return (success) => {
+    clearInterval(stageTimer); clearInterval(factTimer);
+    if (success && $("meal-progress")) { $("meal-progress").textContent = "100%"; $("meal-progress-bar").style.width = "100%"; }
+  };
 }
 
 function findNearby(foodId, foodName) {

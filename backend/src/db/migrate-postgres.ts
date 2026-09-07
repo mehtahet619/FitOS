@@ -11,6 +11,7 @@ async function main() {
     .replace(/\bUser\b/g, '"User"');
 
   await database.exec(schema);
+  await database.exec(`ALTER TABLE NutritionRecommendation ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'general-nutrition'`);
   await database.close();
   console.log("PostgreSQL migration applied.");
 }

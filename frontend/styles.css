@@ -265,5 +265,29 @@ html, body {
 
 .empty-state { text-align: center; padding: 30px 10px; color: var(--muted); font-size: 13px; }
 
+.meal-plan-loader { padding: 20px 0 8px; text-align: center; animation: fade-up .35s ease both; }
+.floating-food { color: var(--muted); letter-spacing: 8px; font-size: 20px; animation: float-food 3s ease-in-out infinite; }
+.loader-orbit { width: 70px; height: 70px; margin: 18px auto; display: grid; place-items: center; border: 5px solid var(--border); border-top-color: var(--mint-strong); border-radius: 50%; font-size: 28px; animation: spin 1.2s linear infinite; }
+.loader-progress-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; margin-bottom: 8px; }
+.loader-progress { height: 9px; border-radius: 9px; background: var(--border); overflow: hidden; }
+.loader-progress span { display: block; width: 10%; height: 100%; border-radius: inherit; background: var(--mint-strong); transition: width .7s ease; }
+.loader-stage, .meal-fact { display: flex; flex-direction: column; gap: 5px; margin: 18px 0; padding: 14px; border-radius: var(--radius-md); background: var(--card); border: 1px solid var(--border); text-align: left; }
+.loader-stage span, .meal-fact span { color: var(--muted); font-size: 12px; }
+.meal-fact { background: #fff9e7; border-color: #f0dfaa; }
+.meal-skeletons { display: grid; gap: 10px; text-align: left; }
+.meal-skeleton { padding: 14px; border-radius: var(--radius-md); background: var(--card); border: 1px solid var(--border); }
+.meal-skeleton i { display: block; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 800; margin-bottom: 10px; }
+.meal-skeleton b { display: block; height: 12px; width: 75%; margin: 7px 0; border-radius: 6px; background: linear-gradient(90deg, #eeeae1 25%, #faf8f2 50%, #eeeae1 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; }
+.meal-skeleton b:nth-child(3) { width: 45%; }
+.meal-skeleton small { color: var(--muted); font-size: 11px; }
+.meal-plan-success { font-weight: 800; margin-bottom: 10px; animation: fade-up .45s ease both; }
+.meal-plan-error { display: flex; flex-direction: column; gap: 10px; padding: 20px 8px; text-align: center; color: var(--muted); animation: fade-up .35s ease both; }
+.meal-plan-error strong { color: var(--ink); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@keyframes float-food { 50% { transform: translateY(-7px); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.15); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -168,7 +168,8 @@ CREATE TABLE IF NOT EXISTS NutritionRecommendation (
   totalCalories INTEGER NOT NULL,
   totalProteinG REAL NOT NULL,
   totalCarbsG REAL NOT NULL,
-  totalFatG REAL NOT NULL
+  totalFatG REAL NOT NULL,
+  source TEXT NOT NULL DEFAULT 'general-nutrition'
 );
 
 CREATE TABLE IF NOT EXISTS Meal (

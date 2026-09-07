@@ -2,8 +2,7 @@ import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
-import { generateDailyMealPlan } from "./nutritionEngine";
-import { generateMealPlanFromFoods, FoodRow } from "./nutritionEngine";
+import { generateDailyMealPlan, generateMealPlanFromFoods, FoodRow } from "./nutritionEngine";
 import { getMapsProvider } from "../../maps/provider";
 
 export const nutritionRouter = Router();
@@ -31,7 +30,7 @@ nutritionRouter.post("/generate", async (req: AuthedRequest, res) => {
     longitude,
     query: "healthy food",
   });
-  const nearbyFoods = nearby.places.flatMap((place) =>
+  const verifiedFoods = nearby.places.flatMap((place) =>
     place.dishes.map((dish, index): FoodRow => ({
       id: uuidv4(),
       name: dish.name,
@@ -45,31 +44,58 @@ nutritionRouter.post("/generate", async (req: AuthedRequest, res) => {
       mealSlot: inferMealSlot(dish.name, index),
     }))
   );
-  if (nearbyFoods.length === 0) {
-    return res.status(424).json({
-      error: nearby.configured
-        ? "No verified nearby menu items were returned by Swiggy. No meal plan was generated."
-        : "Nearby food provider is not configured. Add APIFY_API_KEY in Render before generating a meal plan.",
-    });
+  let dataSource: "verified-menu" | "restaurant-estimate" | "general-nutrition";
+  let nearbyFoods = verifiedFoods;
+  if (verifiedFoods.length > 0) {
+    dataSource = "verified-menu";
+  } else if (nearby.places.length > 0) {
+    dataSource = "restaurant-estimate";
+    nearbyFoods = nearby.places.map((place, index): FoodRow => ({
+      id: uuidv4(),
+      name: place.name,
+      dietType: inferDietType(`${place.name} ${place.cuisines || ""}`),
+      calories: estimateRestaurantCalories(place.cuisines || place.name),
+      proteinG: estimateRestaurantProtein(place.cuisines || place.name),
+      carbsG: 55,
+      fatG: 18,
+      allergens: "",
+      estPriceInr: estimateCostForTwo(place.costForTwo),
+      mealSlot: ["breakfast", "lunch", "snack", "dinner"][index % 4],
+    }));
+  } else {
+    dataSource = "general-nutrition";
   }
 
-  const plan = generateMealPlanFromFoods(nearbyFoods, {
-    dietaryPref: profile.dietaryPref,
-    allergies: (profile.allergies || "").split(",").filter(Boolean),
-    dailyBudget: profile.dailyBudget,
-    targets: {
-      calorieTarget: nutritionProfile.calorieTarget,
-      proteinTargetG: nutritionProfile.proteinTargetG,
-      carbTargetG: nutritionProfile.carbTargetG,
-      fatTargetG: nutritionProfile.fatTargetG,
-    },
-  });
+  const plan = dataSource === "general-nutrition"
+    ? await generateDailyMealPlan(db, {
+        dietaryPref: profile.dietaryPref,
+        allergies: (profile.allergies || "").split(",").filter(Boolean),
+        dailyBudget: profile.dailyBudget,
+        targets: {
+          calorieTarget: nutritionProfile.calorieTarget,
+          proteinTargetG: nutritionProfile.proteinTargetG,
+          carbTargetG: nutritionProfile.carbTargetG,
+          fatTargetG: nutritionProfile.fatTargetG,
+        },
+      })
+    : generateMealPlanFromFoods(nearbyFoods, {
+        dietaryPref: profile.dietaryPref,
+        allergies: (profile.allergies || "").split(",").filter(Boolean),
+        dailyBudget: profile.dailyBudget,
+        targets: {
+          calorieTarget: nutritionProfile.calorieTarget,
+          proteinTargetG: nutritionProfile.proteinTargetG,
+          carbTargetG: nutritionProfile.carbTargetG,
+          fatTargetG: nutritionProfile.fatTargetG,
+        },
+      });
 
-  if (Object.keys(plan.slots).length === 0) {
-    return res.status(424).json({ error: "No nearby menu items matched your dietary preferences and allergies." });
-  }
+  console.log("Apify restaurants:", nearby.places.length);
+  console.log("Verified menu items:", verifiedFoods.length);
+  console.log("Meal plan data source:", dataSource);
+  console.log("Generated meals:", Object.keys(plan.slots).length);
 
-  for (const food of nearbyFoods) {
+  for (const food of dataSource === "general-nutrition" ? [] : nearbyFoods) {
     await db.run(
       `INSERT INTO Food (id, name, dietType, calories, proteinG, carbsG, fatG, allergens, estPriceInr, mealSlot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       food.id,
@@ -88,14 +114,15 @@ nutritionRouter.post("/generate", async (req: AuthedRequest, res) => {
   const recId = uuidv4();
   const ts = nowIso();
   await db.run(
-    `INSERT INTO NutritionRecommendation (id, nutritionProfileId, createdAt, totalCalories, totalProteinG, totalCarbsG, totalFatG) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO NutritionRecommendation (id, nutritionProfileId, createdAt, totalCalories, totalProteinG, totalCarbsG, totalFatG, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     recId,
     nutritionProfile.id,
     ts,
     Math.round(plan.totals.calories),
     plan.totals.proteinG,
     plan.totals.carbsG,
-    plan.totals.fatG
+    plan.totals.fatG,
+    dataSource
   );
 
   for (const [slot, meal] of Object.entries(plan.slots)) {
@@ -112,6 +139,8 @@ nutritionRouter.post("/generate", async (req: AuthedRequest, res) => {
     },
     plan: plan.slots,
     totals: plan.totals,
+    dataSource,
+    sourceLabel: dataSource === "verified-menu" ? "Verified menu data" : dataSource === "restaurant-estimate" ? "Restaurant-based estimate" : "General nutrition recommendation",
     disclaimer: DISCLAIMER,
   });
 });
@@ -122,6 +151,27 @@ function inferMealSlot(name: string, index: number): string {
   if (/snack|shake|juice|fruit|chaat|sandwich/.test(value)) return "snack";
   if (/dinner/.test(value)) return "dinner";
   return index % 4 === 0 ? "breakfast" : index % 4 === 1 ? "lunch" : index % 4 === 2 ? "snack" : "dinner";
+}
+
+function estimateCostForTwo(value?: string | number): number {
+  const parsed = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed / 2 : 250;
+}
+
+function estimateRestaurantCalories(text: string): number {
+  const value = text.toLowerCase();
+  if (/salad|healthy|subway/.test(value)) return 400;
+  if (/burrito|mexican|rice/.test(value)) return 550;
+  if (/andhra|south indian|gunpowder/.test(value)) return 600;
+  if (/burger|mcdonald/.test(value)) return 650;
+  return 500;
+}
+
+function estimateRestaurantProtein(text: string): number {
+  const value = text.toLowerCase();
+  if (/chicken|paneer|protein/.test(value)) return 25;
+  if (/salad|healthy|subway/.test(value)) return 20;
+  return 15;
 }
 
 function inferDietType(name: string): string {
@@ -156,6 +206,8 @@ nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
       carbsG: rec.totalCarbsG,
       fatG: rec.totalFatG,
     },
+    dataSource: rec.source || "general-nutrition",
+    sourceLabel: rec.source === "verified-menu" ? "Verified menu data" : rec.source === "restaurant-estimate" ? "Restaurant-based estimate" : "General nutrition recommendation",
     meals,
     disclaimer: DISCLAIMER,
   });
