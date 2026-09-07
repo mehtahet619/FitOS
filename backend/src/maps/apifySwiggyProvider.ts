@@ -141,7 +141,7 @@ export class ApifySwiggyMapsProvider {
           ? await this.getDatasetItems(searchRun.defaultDatasetId)
           : [];
         const restaurants = this.normalizeRestaurants(searchResults);
-        console.log("Restaurants found:", restaurants.length);
+        console.log("Restaurants found:", searchResults.length);
 
         const restaurantIds = restaurants
           .map((restaurant) => restaurant.id)
@@ -154,7 +154,7 @@ export class ApifySwiggyMapsProvider {
         }
 
         console.log("Starting menu scraping...");
-        const menuResults = await this.getRestaurantMenus(restaurantIds, latitude, longitude);
+        const menuResults = await this.getRestaurantMenus(restaurantIds);
         console.log("Raw menu records:", menuResults.length);
         const dishes = this.normalizeDishes(menuResults, restaurants);
         console.log("Normalized dishes:", dishes.length);
@@ -207,13 +207,9 @@ export class ApifySwiggyMapsProvider {
   }
 
   private async getRestaurantMenus(
-    restaurantIds: string[],
-    latitude: number,
-    longitude: number
+    restaurantIds: string[]
   ): Promise<ApifyRestaurant[]> {
     const runId = await this.startActorRun({
-      latitude,
-      longitude,
       mode: "menu",
       restaurantIds,
       proxyConfiguration: this.proxyConfiguration(),
