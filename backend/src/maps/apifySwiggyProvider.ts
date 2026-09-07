@@ -20,7 +20,27 @@ interface ApifyRun {
   defaultDatasetId?: string;
 }
 
+interface FoodDish {
+  id: string;
+  restaurantId: string;
+  restaurantName: string;
+  restaurantUrl?: string;
+  name: string;
+  category?: string;
+  description?: string;
+  priceInr?: number;
+  isVeg?: boolean;
+  inStock?: boolean;
+  imageUrl?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+}
+
 interface ApifyRestaurant {
+  id?: string;
+  restaurantId?: string;
   name?: string;
   restaurantName?: string;
   Restaurantname?: string;
@@ -32,12 +52,12 @@ interface ApifyRestaurant {
   "Cost for twocostForTwo"?: string | number;
   DeliverydeliveryTime?: string | number;
   LinkrestaurantUrl?: string;
-  rating?: number;
-  avgRating?: number;
+  rating?: number | string;
+  avgRating?: number | string;
   cuisines?: string;
   locality?: string;
   deliveryPrice?: number;
-  deliveryTime?: number;
+  deliveryTime?: string | number;
   latitude?: number;
   longitude?: number;
   address?: string;
@@ -46,13 +66,28 @@ interface ApifyRestaurant {
   menus?: ApifyMenuItem[];
   menuItems?: ApifyMenuItem[];
   dishes?: ApifyMenuItem[];
+  rowType?: string;
+  itemName?: string;
+  price?: number;
+  priceInr?: number;
+  category?: string;
+  description?: string;
+  isVeg?: boolean;
+  inStock?: boolean;
+  imageUrl?: string;
 }
 
 interface ApifyMenuItem {
+  rowType?: string;
+  id?: string;
+  restaurantId?: string;
   name?: string;
   itemName?: string;
   price?: number;
   priceInr?: number;
+  isVeg?: boolean;
+  inStock?: boolean;
+  imageUrl?: string;
   category?: string;
   description?: string;
 }
@@ -94,21 +129,38 @@ export class ApifySwiggyMapsProvider {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        // Call Apify actor to scrape Swiggy
-        const runId = await this.startActorRun(latitude, longitude, query);
-        const runData = await this.waitForActorRun(runId);
-
-        if (!runData.defaultDatasetId) {
-          return [];
-        }
-
-        const restaurants = await this.getDatasetItems(runData.defaultDatasetId);
-        const places = this.transformToNearbyPlaces(
-          restaurants,
+        const searchRunId = await this.startActorRun({
           latitude,
           longitude,
-          query
-        );
+          mode: "search",
+          proxyConfiguration: this.proxyConfiguration(),
+          maxItems: 20,
+        });
+        const searchRun = await this.waitForActorRun(searchRunId);
+        const searchResults = searchRun.defaultDatasetId
+          ? await this.getDatasetItems(searchRun.defaultDatasetId)
+          : [];
+        const restaurants = this.normalizeRestaurants(searchResults);
+        console.log("Restaurants found:", restaurants.length);
+
+        const restaurantIds = restaurants
+          .map((restaurant) => restaurant.id)
+          .filter((id): id is string => Boolean(id))
+          .slice(0, 10);
+        console.log("Restaurant IDs extracted:", restaurantIds.length);
+        console.log("Restaurant IDs:", restaurantIds);
+        if (restaurantIds.length === 0) {
+          throw new Error("Apify search returned restaurants without restaurant IDs; menu mode cannot run.");
+        }
+
+        console.log("Starting menu scraping...");
+        const menuResults = await this.getRestaurantMenus(restaurantIds, latitude, longitude);
+        console.log("Raw menu records:", menuResults.length);
+        const dishes = this.normalizeDishes(menuResults, restaurants);
+        console.log("Normalized dishes:", dishes.length);
+        console.log("Sample dishes:", dishes.slice(0, 5));
+
+        const places = this.transformToNearbyPlaces(restaurants, dishes, latitude, longitude, query);
 
         return places;
       } catch (e: any) {
@@ -127,23 +179,8 @@ export class ApifySwiggyMapsProvider {
   /**
    * Start an Apify actor run to scrape Swiggy.
    */
-  private async startActorRun(
-    latitude: number,
-    longitude: number,
-    query: string
-  ): Promise<string> {
+  private async startActorRun(input: Record<string, unknown>): Promise<string> {
     const url = `${this.apifyApiUrl}/acts/${this.actorId}/runs?token=${this.apiKey}`;
-
-    const input = {
-      latitude,
-      longitude,
-      mode: "search",
-      proxyConfiguration: {
-        useApifyProxy: true,
-        apifyProxyGroups: ["RESIDENTIAL"],
-      },
-      maxItems: 100,
-    };
 
     const response = await fetch(url, {
       method: "POST",
@@ -163,6 +200,73 @@ export class ApifySwiggyMapsProvider {
     }
 
     return runId;
+  }
+
+  private proxyConfiguration() {
+    return { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] };
+  }
+
+  private async getRestaurantMenus(
+    restaurantIds: string[],
+    latitude: number,
+    longitude: number
+  ): Promise<ApifyRestaurant[]> {
+    const runId = await this.startActorRun({
+      latitude,
+      longitude,
+      mode: "menu",
+      restaurantIds,
+      proxyConfiguration: this.proxyConfiguration(),
+      maxItems: 200,
+    });
+    const run = await this.waitForActorRun(runId);
+    console.log("Menu run status:", run.status, "dataset:", run.defaultDatasetId || "none");
+    if (!run.defaultDatasetId) return [];
+    const results = await this.getDatasetItems(run.defaultDatasetId);
+    console.log("Menu dataset response:", results.slice(0, 3));
+    return results;
+  }
+
+  private normalizeRestaurants(records: ApifyRestaurant[]): ApifyRestaurant[] {
+    return records
+      .map((restaurant) => ({
+        ...restaurant,
+        id: restaurant.id || restaurant.restaurantId,
+        name: restaurant.name || restaurant.restaurantName || restaurant.Restaurantname,
+        rating: restaurant.rating ?? restaurant.avgRating ?? restaurant.Ratingrating ?? 4,
+        cuisines: restaurant.cuisines || restaurant.Cuisinescuisines,
+        locality: restaurant.locality || restaurant.Localitylocality,
+        costForTwo: restaurant.costForTwo ?? restaurant.CostforTwo ?? restaurant["Cost for twocostForTwo"],
+        deliveryTime: restaurant.deliveryTime || restaurant.DeliverydeliveryTime,
+        url: restaurant.url || restaurant.restaurantUrl || restaurant.LinkrestaurantUrl,
+      }))
+      .filter((restaurant) => Boolean(restaurant.id && restaurant.name));
+  }
+
+  private normalizeDishes(records: ApifyRestaurant[], restaurants: ApifyRestaurant[]): FoodDish[] {
+    const restaurantMap = new Map(
+      restaurants.map((restaurant) => [restaurant.id!, { name: restaurant.name!, restaurantUrl: restaurant.url }])
+    );
+    return records
+      .filter((row) => row.rowType === "menuItem" && row.inStock !== false && row.id && row.name && row.restaurantId)
+      .map((item) => {
+        const restaurant = restaurantMap.get(item.restaurantId!);
+        return {
+          id: item.id!,
+          restaurantId: item.restaurantId!,
+          restaurantName: restaurant?.name || "Nearby Restaurant",
+          restaurantUrl: restaurant?.restaurantUrl,
+          name: item.name!,
+          category: item.category,
+          description: item.description,
+          priceInr: item.priceInr ?? item.price,
+          isVeg: item.isVeg,
+          inStock: item.inStock,
+          imageUrl: item.imageUrl,
+          calories: this.estimateCalories(item),
+          proteinG: this.estimateProtein(item),
+        };
+      });
   }
 
   /**
@@ -219,42 +323,22 @@ export class ApifySwiggyMapsProvider {
    */
   private transformToNearbyPlaces(
     restaurants: ApifyRestaurant[],
+    dishes: FoodDish[],
     userLat: number,
     userLng: number,
     query: string
   ): NearbyPlace[] {
     console.log(`[Apify Swiggy] restaurants returned: ${restaurants.length}`);
 
-    const normalized = restaurants
-      .map((restaurant) => ({
-        ...restaurant,
-        name: restaurant.name || restaurant.restaurantName || restaurant.Restaurantname,
-        rating:
-          restaurant.rating ??
-          restaurant.avgRating ??
-          restaurant.Ratingrating ??
-          4.0,
-        cuisines: restaurant.cuisines || restaurant.Cuisinescuisines,
-        locality: restaurant.locality || restaurant.Localitylocality,
-        deliveryTime: restaurant.deliveryTime || restaurant.DeliverydeliveryTime,
-        costForTwo:
-          restaurant.costForTwo ??
-          restaurant.CostforTwo ??
-          restaurant["Cost for twocostForTwo"],
-        url: restaurant.url || restaurant.restaurantUrl || restaurant.LinkrestaurantUrl,
-        menus: restaurant.menus || restaurant.menuItems || restaurant.dishes,
-      }))
-      .filter((r) => Boolean(r.name));
-
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = normalizedQuery
-      ? normalized.filter((restaurant) =>
+      ? restaurants.filter((restaurant) =>
           `${restaurant.name || ""} ${restaurant.cuisines || ""}`
             .toLowerCase()
             .includes(normalizedQuery)
         )
-      : normalized;
-    const restaurantsToTransform = filtered.length > 0 ? filtered : normalized;
+      : restaurants;
+    const restaurantsToTransform = filtered.length > 0 ? filtered : restaurants;
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places = restaurantsToTransform
@@ -267,14 +351,20 @@ export class ApifySwiggyMapsProvider {
           ? this.calculateDistance(userLat, userLng, latitude, longitude)
           : 0;
 
-        // Extract common dishes from menu
-        const dishes = (r.menus || [])
-          .slice(0, 5) // Top 5 items
-          .map((item) => ({
-            name: item.name || item.itemName || "Menu item",
-            estPriceInr: item.price ?? item.priceInr ?? 0,
-            estCalories: this.estimateCalories(item),
-            estProteinG: this.estimateProtein(item),
+        const restaurantDishes = dishes
+          .filter((dish) => dish.restaurantId === r.id)
+          .map((dish) => ({
+            id: dish.id,
+            restaurantId: dish.restaurantId,
+            name: dish.name,
+            estPriceInr: dish.priceInr ?? 0,
+            description: dish.description,
+            category: dish.category,
+            isVeg: dish.isVeg,
+            inStock: dish.inStock,
+            imageUrl: dish.imageUrl,
+            estCalories: dish.calories,
+            estProteinG: dish.proteinG,
           }));
 
         return {
@@ -286,7 +376,7 @@ export class ApifySwiggyMapsProvider {
           isOpenNow: true, // Assume open; could enhance with real hours
           latitude,
           longitude,
-          dishes,
+          dishes: restaurantDishes,
           source: "Swiggy",
           locality: r.locality,
           cuisines: r.cuisines,

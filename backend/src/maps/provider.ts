@@ -26,7 +26,21 @@ export interface NearbyPlace {
   isOpenNow: boolean;
   latitude: number;
   longitude: number;
-  dishes: { name: string; estPriceInr: number; estCalories?: number; estProteinG?: number }[];
+  dishes: {
+    id?: string;
+    restaurantId?: string;
+    name: string;
+    estPriceInr: number;
+    description?: string;
+    category?: string;
+    isVeg?: boolean;
+    inStock?: boolean;
+    imageUrl?: string;
+    estCalories?: number;
+    estProteinG?: number;
+    estCarbsG?: number;
+    estFatG?: number;
+  }[];
   source: string;
   locality?: string;
   cuisines?: string;
