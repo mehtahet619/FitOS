@@ -283,6 +283,25 @@ html, body {
 .meal-plan-success { font-weight: 800; margin-bottom: 10px; animation: fade-up .45s ease both; }
 .meal-plan-error { display: flex; flex-direction: column; gap: 10px; padding: 20px 8px; text-align: center; color: var(--muted); animation: fade-up .35s ease both; }
 .meal-plan-error strong { color: var(--ink); }
+.food-finder-empty { text-align: center; padding: 42px 12px; animation: fade-up .35s ease both; }
+.food-finder-empty h2, .food-results-head h2 { margin: 10px 0 6px; font-size: 21px; }
+.food-finder-empty p, .food-results-head p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.food-orbit { width: 78px; height: 78px; margin: 0 auto; display: grid; place-items: center; border-radius: 50%; background: var(--mint); font-size: 38px; animation: float-food 3s ease-in-out infinite; }
+.food-results-head { margin-bottom: 14px; }
+.food-filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.food-filters::-webkit-scrollbar { display: none; }
+.food-filters .filter { flex: 0 0 auto; border: 1px solid var(--border); cursor: pointer; }
+.food-filters .filter.active { background: var(--mint-strong); border-color: var(--mint-strong); }
+.healthy-dish-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); animation: fade-up .42s ease both; }
+.healthy-dish-card:nth-child(2) { animation-delay: .08s; } .healthy-dish-card:nth-child(3) { animation-delay: .16s; }
+.healthy-dish-card h3 { margin: 7px 0 4px; font-size: 18px; }
+.healthy-dish-card > strong { font-size: 13px; color: var(--muted); }
+.dish-rank { color: var(--mint-strong); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.dish-score { margin: 12px 0 8px; font-weight: 800; }
+.dish-nutrition { font-size: 13px; font-weight: 700; line-height: 1.7; }
+.dish-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.dish-reasons span { padding: 5px 8px; border-radius: 999px; background: #e8f9f1; color: #1f9d6d; font-size: 11px; font-weight: 700; }
+.healthy-dish-card p { color: var(--muted); font-size: 11px; margin: 10px 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes float-food { 50% { transform: translateY(-7px); } }

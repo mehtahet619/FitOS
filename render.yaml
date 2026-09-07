@@ -21,7 +21,11 @@ services:
       - key: FRONTEND_ORIGIN
         value: https://adaptive-fit-web.onrender.com
       - key: AI_PROVIDER
-        value: template
+        value: openai
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_API_KEY
+        sync: false
       - key: MAPS_PROVIDER
         value: apify_swiggy
       - key: APIFY_API_KEY

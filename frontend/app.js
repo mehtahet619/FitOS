@@ -458,78 +458,37 @@ function renderWorkout(workout) {
 /* ================= DIET ================= */
 async function loadDiet() {
   const el = $("diet-content");
-  el.innerHTML = `<div class="empty-state">Loading…</div>`;
+  el.innerHTML = `<div class="food-finder-empty"><div class="food-orbit">🥗</div><h2>Hungry for something healthy?</h2><p>We'll search nearby restaurants and find the healthiest dishes available right now.</p><button class="btn btn-primary" id="find-healthy-btn">✨ Find Healthy Food Near Me</button></div>`;
+  $("find-healthy-btn").addEventListener("click", findHealthyFood);
+}
+
+async function findHealthyFood() {
+  const el = $("diet-content");
+  el.innerHTML = healthyFinderLoaderMarkup();
+  const stop = startHealthyFinderLoader();
   try {
-    const nutrition = await Api.get("/nutrition/today");
-    renderDiet(nutrition);
-  } catch (e) {
-    if (e.status === 404) {
-      el.innerHTML = `
-        <div id="diet-generate-area">
-          <div class="empty-state">No nutrition plan generated for today yet.</div>
-          <button class="btn btn-primary" id="generate-diet-btn">Generate today's meal plan</button>
-        </div>
-      `;
-      $("generate-diet-btn").addEventListener("click", async () => {
-        const area = $("diet-generate-area");
-        area.innerHTML = mealPlanLoaderMarkup();
-        const stopLoader = startMealPlanLoader();
-        try {
-          if (!navigator.geolocation) throw new Error("Location is required to suggest nearby food.");
-          const position = await new Promise((resolve, reject) =>
-            navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error("Allow location access to find available nearby food.")))
-          );
-          await Api.post("/nutrition/generate", {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-          stopLoader(true);
-          await loadDiet();
-        } catch (err) {
-          stopLoader(false);
-          area.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find enough food data right now.</strong><span>${err.message || "Try again and we'll search for fresh options!"}</span><button class="btn btn-primary" id="try-diet-again">Try again</button></div>`;
-          $("try-diet-again").addEventListener("click", () => loadDiet());
-        }
-      });
-    } else {
-      el.innerHTML = `<div class="empty-state">${e.message}</div>`;
-    }
+    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error("Allow location access to find healthy food nearby."))));
+    const data = await Api.post("/food/healthy-nearby", { latitude: position.coords.latitude, longitude: position.coords.longitude });
+    stop(true); renderHealthyFood(data);
+  } catch (error) {
+    stop(false);
+    el.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find enough food data right now.</strong><span>${error.message}</span><button class="btn btn-primary" id="try-healthy-again">Try Again</button></div>`;
+    $("try-healthy-again").addEventListener("click", findHealthyFood);
   }
 }
 
-function renderDiet(nutrition) {
-  const el = $("diet-content");
-  el.innerHTML = `
-    <div class="card meal-plan-ready">
-      <div class="meal-plan-success">🎉 Your meal plan is ready!</div>
-      <div class="pill pill-muted">${nutrition.sourceLabel || "General nutrition recommendation"}</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Today's totals</div>
-      <div class="card-value">${nutrition.totals.calories} kcal</div>
-      <div class="card-sub">P ${Math.round(nutrition.totals.proteinG)}g · C ${Math.round(nutrition.totals.carbsG)}g · F ${Math.round(nutrition.totals.fatG)}g</div>
-    </div>
-    <div class="card" id="meals-card"></div>
-    <div class="banner banner-info">${nutrition.disclaimer}</div>
-    <div id="nearby-results"></div>
-  `;
-  const mealsCard = $("meals-card");
-  nutrition.meals.forEach((meal) => {
-    const row = document.createElement("div");
-    row.className = "meal-row";
-    row.innerHTML = `
-      <div class="meal-slot">${meal.slot}</div>
-      <div class="meal-name">${meal.name}</div>
-      <div class="meal-macros">${meal.calories} kcal · P${Math.round(meal.proteinG)}g · ₹${meal.estPriceInr}</div>
-      <button class="btn btn-outline" style="margin-top:8px; width:auto; padding:8px 12px;" data-food-id="${meal.foodId}" data-food-name="${meal.name}">Find this near me</button>
-    `;
-    mealsCard.appendChild(row);
-  });
-
-  mealsCard.querySelectorAll("[data-food-id]").forEach((btn) => {
-    btn.addEventListener("click", () => findNearby(btn.dataset.foodId, btn.dataset.foodName));
-  });
+function healthyFinderLoaderMarkup() { return `<div class="meal-plan-loader" aria-live="polite"><div class="floating-food">🍎 🥗 🍗 🥦 🍕 🍌</div><div class="loader-orbit">🥗</div><div class="loader-progress-label">Finding healthy food... <strong id="healthy-progress">10%</strong></div><div class="loader-progress"><span id="healthy-progress-bar"></span></div><div class="loader-stage"><strong id="healthy-stage-title">📍 Finding restaurants near you</strong><span id="healthy-stage-copy">Looking for delicious options nearby...</span></div><div class="meal-fact"><strong id="healthy-fact-title">💡 Did you know?</strong><span id="healthy-fact-copy">High-protein meals can help you stay full longer.</span></div><div class="meal-skeletons"><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div></div></div>`; }
+function startHealthyFinderLoader() {
+  const stages = [["📍 Finding restaurants near you", "Looking for delicious options nearby...", 22], ["🍽️ Discovering available dishes", "Exploring menus and cuisines...", 42], ["📖 Reading menus", "Collecting real dishes from nearby restaurants...", 58], ["🧠 AI is analyzing nutrition", "Ranking real dishes only...", 74], ["🥗 Finding the healthiest options", "Comparing nutrition and ingredients...", 84], ["✨ Ranking your best choices", "Almost ready...", 90]];
+  const facts = [["💡 Did you know?", "High-protein meals can help you stay full longer."], ["💧 Hydration tip", "Water supports performance and recovery."], ["🥦 Nutrition fact", "Vegetable-rich meals add fibre and micronutrients."]]; let step = 0; let fact = 0;
+  const timer = setInterval(() => { const s = stages[Math.min(step++, stages.length - 1)]; if ($("healthy-stage-title")) { $("healthy-stage-title").textContent = s[0]; $("healthy-stage-copy").textContent = s[1]; $("healthy-progress").textContent = `${s[2]}%`; $("healthy-progress-bar").style.width = `${s[2]}%`; } }, 1500);
+  const factTimer = setInterval(() => { fact = (fact + 1) % facts.length; if ($("healthy-fact-title")) { $("healthy-fact-title").textContent = facts[fact][0]; $("healthy-fact-copy").textContent = facts[fact][1]; } }, 3500);
+  return (success) => { clearInterval(timer); clearInterval(factTimer); if (success && $("healthy-progress")) { $("healthy-progress").textContent = "100%"; $("healthy-progress-bar").style.width = "100%"; } };
 }
+function renderHealthyFood(data) {
+  const el = $("diet-content");
+  el.innerHTML = `<div class="food-results-head"><div><h2>🥗 Healthy options near you</h2><p>✓ Found ${data.restaurantsFound} restaurants · ✓ Found ${data.dishesFound} available dishes</p></div></div><div class="food-filters"><button class="pill filter active" data-filter="all">All</button><button class="pill filter" data-filter="low">🔥 Low Calorie</button><button class="pill filter" data-filter="protein">💪 High Protein</button><button class="pill filter" data-filter="veg">🥗 Vegetarian</button><button class="pill filter" data-filter="budget">💰 Budget</button></div><div id="healthy-dishes"></div><button class="btn btn-outline" id="show-more-dishes">✨ Show More Healthy Options</button><div class="banner banner-info" style="margin-top:14px;">Approximate estimates, not medical advice.</div>`;
+  const cards = data.recommendations; let visible = 5; const render = () => { const filter = document.querySelector(".filter.active")?.dataset.filter || "all"; const filtered = cards.filter((d) => filter === "all" || filter === "low" && (d.calories || 999) <= 500 || filter === "protein" && (d.proteinG || 0) >= 20 || filter === "budget" && (d.priceInr || 9999) <= 300 || filter === "veg" && !/chicken|mutton|fish|prawn|meat/i.test(d.dishName || d.name)); $("healthy-dishes").innerHTML = filtered.slice(0, visible).map((d, i) => `<article class="healthy-dish-card" tabindex="0"><div class="dish-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : `#${i + 1}`} Best Choice</div><h3>${d.name}</h3><strong>${d.restaurantName}</strong><div class="dish-score">⭐ Health Score: ${d.healthScore}/100</div><div class="dish-nutrition">🔥 ~${d.calories || "?"} kcal · 💪 ~${d.proteinG || "?"}g Protein · 💰 ₹${d.priceInr || "?"}</div><div class="dish-reasons">${d.reasons.map((reason) => `<span>✓ ${reason}</span>`).join("")}</div><p>${d.nutritionConfidence === "estimated" ? "Nutrition confidence: Estimated" : "Nutrition confidence: Verified"}</p><button class="btn btn-outline">📍 Find Restaurant</button></article>`).join(""); }; render(); document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach((b) => b.classList.remove("active")); button.classList.add("active"); render(); })); $("show-more-dishes").addEventListener("click", () => { visible += 5; render(); }); }
 
 const MEAL_FACTS = [
   ["🥦 Fun fact", "Protein helps repair and build muscle after workouts."],
