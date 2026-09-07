@@ -23,14 +23,26 @@ interface ApifyRun {
 interface ApifyRestaurant {
   name?: string;
   restaurantName?: string;
+  Restaurantname?: string;
+  Cuisinescuisines?: string;
+  Localitylocality?: string;
+  Ratingrating?: number | string;
+  costForTwo?: string | number;
+  CostforTwo?: string | number;
+  "Cost for twocostForTwo"?: string | number;
+  DeliverydeliveryTime?: string | number;
+  LinkrestaurantUrl?: string;
   rating?: number;
   avgRating?: number;
+  cuisines?: string;
+  locality?: string;
   deliveryPrice?: number;
   deliveryTime?: number;
   latitude?: number;
   longitude?: number;
   address?: string;
   url?: string;
+  restaurantUrl?: string;
   menus?: ApifyMenuItem[];
   menuItems?: ApifyMenuItem[];
   dishes?: ApifyMenuItem[];
@@ -94,7 +106,8 @@ export class ApifySwiggyMapsProvider {
         const places = this.transformToNearbyPlaces(
           restaurants,
           latitude,
-          longitude
+          longitude,
+          query
         );
 
         return places;
@@ -207,24 +220,52 @@ export class ApifySwiggyMapsProvider {
   private transformToNearbyPlaces(
     restaurants: ApifyRestaurant[],
     userLat: number,
-    userLng: number
+    userLng: number,
+    query: string
   ): NearbyPlace[] {
-    return restaurants
+    console.log(`[Apify Swiggy] restaurants returned: ${restaurants.length}`);
+
+    const normalized = restaurants
       .map((restaurant) => ({
         ...restaurant,
-        name: restaurant.name || restaurant.restaurantName,
-        rating: restaurant.rating ?? restaurant.avgRating,
+        name: restaurant.name || restaurant.restaurantName || restaurant.Restaurantname,
+        rating:
+          restaurant.rating ??
+          restaurant.avgRating ??
+          restaurant.Ratingrating ??
+          4.0,
+        cuisines: restaurant.cuisines || restaurant.Cuisinescuisines,
+        locality: restaurant.locality || restaurant.Localitylocality,
+        deliveryTime: restaurant.deliveryTime || restaurant.DeliverydeliveryTime,
+        costForTwo:
+          restaurant.costForTwo ??
+          restaurant.CostforTwo ??
+          restaurant["Cost for twocostForTwo"],
+        url: restaurant.url || restaurant.restaurantUrl || restaurant.LinkrestaurantUrl,
         menus: restaurant.menus || restaurant.menuItems || restaurant.dishes,
       }))
-      .filter((r) => r.latitude != null && r.longitude != null && r.name)
+      .filter((r) => Boolean(r.name));
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const filtered = normalizedQuery
+      ? normalized.filter((restaurant) =>
+          `${restaurant.name || ""} ${restaurant.cuisines || ""}`
+            .toLowerCase()
+            .includes(normalizedQuery)
+        )
+      : normalized;
+    const restaurantsToTransform = filtered.length > 0 ? filtered : normalized;
+    console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
+
+    const places = restaurantsToTransform
       .map((r) => {
         const restaurantName = r.name as string;
-        const distance = this.calculateDistance(
-          userLat,
-          userLng,
-          r.latitude!,
-          r.longitude!
-        );
+        const hasCoordinates = r.latitude != null && r.longitude != null;
+        const latitude = hasCoordinates ? r.latitude! : userLat;
+        const longitude = hasCoordinates ? r.longitude! : userLng;
+        const distance = hasCoordinates
+          ? this.calculateDistance(userLat, userLng, latitude, longitude)
+          : 0;
 
         // Extract common dishes from menu
         const dishes = (r.menus || [])
@@ -240,17 +281,25 @@ export class ApifySwiggyMapsProvider {
           id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
           name: restaurantName,
           distanceKm: distance,
-          rating: r.rating || 4.0,
-          priceRange: this.estimatePriceRange(r.deliveryPrice),
+          rating: Number(r.rating) || 4.0,
+          priceRange: this.estimatePriceRange(r.costForTwo ?? r.deliveryPrice),
           isOpenNow: true, // Assume open; could enhance with real hours
-          latitude: r.latitude!,
-          longitude: r.longitude!,
+          latitude,
+          longitude,
           dishes,
           source: "Swiggy",
+          locality: r.locality,
+          cuisines: r.cuisines,
+          deliveryTime: r.deliveryTime,
+          costForTwo: r.costForTwo,
+          restaurantUrl: r.url,
         };
       })
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 10); // Return top 10 closest restaurants
+
+    console.log(`[Apify Swiggy] final transformed food suggestions: ${places.length}`);
+    return places;
   }
 
   /**
@@ -350,12 +399,15 @@ export class ApifySwiggyMapsProvider {
   /**
    * Estimate price range category from delivery fee.
    */
-  private estimatePriceRange(deliveryPrice?: number): string {
-    if (!deliveryPrice) return "₹₹"; // Default
+  private estimatePriceRange(costForTwo?: string | number): string {
+    const numericCost = typeof costForTwo === "number"
+      ? costForTwo
+      : Number(String(costForTwo ?? "").replace(/[^0-9.]/g, ""));
 
-    if (deliveryPrice < 50) return "₹";
-    if (deliveryPrice < 100) return "₹₹";
-    if (deliveryPrice < 200) return "₹₹₹";
+    if (!Number.isFinite(numericCost)) return "₹₹";
+    if (numericCost <= 250) return "₹";
+    if (numericCost <= 400) return "₹₹";
+    if (numericCost <= 600) return "₹₹₹";
     return "₹₹₹₹";
   }
 }

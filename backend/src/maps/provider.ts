@@ -28,6 +28,11 @@ export interface NearbyPlace {
   longitude: number;
   dishes: { name: string; estPriceInr: number; estCalories?: number; estProteinG?: number }[];
   source: string;
+  locality?: string;
+  cuisines?: string;
+  deliveryTime?: string | number;
+  costForTwo?: string | number;
+  restaurantUrl?: string;
 }
 
 export interface MapsProvider {
