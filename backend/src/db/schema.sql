@@ -1,3 +1,4 @@
+-- Disposable validation change: sensitive-path auto-merge exclusion.
 -- Adaptive Fitness + Food Discovery — schema
 --
 -- Written as plain SQL against SQLite so the MVP runs with zero external
