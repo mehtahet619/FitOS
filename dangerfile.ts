@@ -25,7 +25,7 @@ const matches = (file: string, pattern: string) => {
 const sensitiveFiles = files.filter((file) => sensitivePatterns.some((pattern) => matches(file, pattern)));
 const logicFiles = files.filter((file) => /\.(ts|tsx|js|jsx)$/.test(file) && !/\.test\.|__tests__/.test(file));
 const testFiles = files.filter((file) => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(file) || file.includes("__tests__"));
-const requiredChecks = ["lint", "typecheck", "test", "build", "codeql", "secretlint"];
+const requiredChecks = ["lint", "typecheck", "test", "build", "codeql", "secretlint", "danger"];
 const checkRuns = await danger.github.api.checks.listForRef({
   owner: danger.github.repository.organization || danger.github.repository.owner,
   repo: danger.github.repository.name,
