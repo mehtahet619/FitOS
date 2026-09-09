@@ -1,0 +1,11 @@
+auto_merge: true
+sensitive_paths:
+  - "backend/src/db/**"
+  - "backend/src/common/auth.ts"
+  - "**/auth/**"
+  - "**/payment/**"
+  - "**/payments/**"
+  - ".github/workflows/**"
+  - "render.yaml"
+maintainers:
+  - "mehtahet619"
