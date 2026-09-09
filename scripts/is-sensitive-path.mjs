@@ -6,7 +6,12 @@ const patterns = [...section.matchAll(/^\s+-\s+"([^"]+)"/gm)].map((match) => mat
 
 const globToRegExp = (pattern) => {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escaped.replaceAll("**", ".*").replaceAll("*", "[^/]*")}$`);
+  const doubleStar = "__DOUBLE_STAR__";
+  const regexSource = escaped
+    .replaceAll("**", doubleStar)
+    .replaceAll("*", "[^/]*")
+    .replaceAll(doubleStar, ".*");
+  return new RegExp(`^${regexSource}$`);
 };
 
 const file = process.argv[2] || "";
