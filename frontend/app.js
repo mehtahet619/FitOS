@@ -472,7 +472,10 @@ async function findHealthyFood() {
     stop(true); renderHealthyFood(data);
   } catch (error) {
     stop(false);
-    el.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find enough food data right now.</strong><span>${error.message}</span><button class="btn btn-primary" id="try-healthy-again">Try Again</button></div>`;
+    const details = error.body && error.body.stage
+      ? `${error.body.error} (${error.body.stage}: ${error.body.restaurantsFound} restaurants, ${error.body.rawMenuRecordsFound} raw menu records, ${error.body.normalizedDishesFound} dishes)`
+      : error.message;
+    el.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find exact dishes right now.</strong><span>${details}</span><button class="btn btn-primary" id="try-healthy-again">Try Again</button></div>`;
     $("try-healthy-again").addEventListener("click", findHealthyFood);
   }
 }

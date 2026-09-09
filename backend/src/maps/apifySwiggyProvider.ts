@@ -12,7 +12,7 @@
  * then fetches menu items to estimate prices and nutritional content.
  */
 
-import type { NearbyPlace } from "./provider";
+import type { FoodPipelineDiagnostics, NearbyPlace } from "./provider";
 
 interface ApifyRun {
   id: string;
@@ -92,6 +92,13 @@ interface ApifyMenuItem {
   description?: string;
 }
 
+export class FoodPipelineError extends Error {
+  constructor(public readonly diagnostics: FoodPipelineDiagnostics) {
+    super(diagnostics.error || "Healthy food pipeline failed");
+    this.name = "FoodPipelineError";
+  }
+}
+
 /**
  * Apify Swiggy scraper provider.
  * Transforms Swiggy restaurant data into our NearbyPlace format.
@@ -101,6 +108,14 @@ export class ApifySwiggyMapsProvider {
   private readonly actorId = "PAPknIT75qTicSSUI";
   private readonly timeoutMs = 60000; // 1 minute timeout for scraper runs
   private readonly maxRetries = 2;
+  public lastDiagnostics: FoodPipelineDiagnostics = {
+    success: false,
+    stage: "restaurant_search",
+    restaurantsFound: 0,
+    restaurantIdentifiersFound: 0,
+    rawMenuRecordsFound: 0,
+    normalizedDishesFound: 0,
+  };
 
   constructor(private apiKey: string) {}
 
@@ -119,6 +134,11 @@ export class ApifySwiggyMapsProvider {
     query: string;
   }): Promise<NearbyPlace[]> {
     const { latitude, longitude, query } = input;
+
+    console.log("========== FOOD SEARCH START ==========");
+    console.log("User coordinates:", { latitude, longitude });
+    console.log("Apify Actor ID:", this.actorId);
+    console.log("Menu mode enabled:", true);
 
     // Validate coordinates
     if (!isValidLatLng(latitude, longitude)) {
@@ -140,30 +160,67 @@ export class ApifySwiggyMapsProvider {
         const searchResults = searchRun.defaultDatasetId
           ? await this.getDatasetItems(searchRun.defaultDatasetId)
           : [];
+        console.log("========== APIFY SEARCH COMPLETE ==========");
+        console.log("Restaurant count:", searchResults.length);
+        console.log("Sample restaurant records:", JSON.stringify(searchResults.slice(0, 3), null, 2));
+        console.log("Restaurant keys:", Object.keys(searchResults[0] || {}));
         const restaurants = this.normalizeRestaurants(searchResults);
-        console.log("Restaurants found:", searchResults.length);
+        this.lastDiagnostics = {
+          success: false,
+          stage: "identifier_extraction",
+          restaurantsFound: searchResults.length,
+          restaurantIdentifiersFound: 0,
+          rawMenuRecordsFound: 0,
+          normalizedDishesFound: 0,
+        };
 
         const restaurantIds = restaurants
-          .map((restaurant) => restaurant.id)
+          .map((restaurant) => this.extractRestaurantIdentifier(restaurant))
           .filter((id): id is string => Boolean(id))
           .slice(0, 10);
-        console.log("Restaurant IDs extracted:", restaurantIds.length);
-        console.log("Restaurant IDs:", restaurantIds);
+        console.log("Extracted restaurant identifiers:", restaurantIds);
+        console.log("Identifier count:", restaurantIds.length);
+        this.lastDiagnostics.restaurantIdentifiersFound = restaurantIds.length;
         if (restaurantIds.length === 0) {
-          throw new Error("Apify search returned restaurants without restaurant IDs; menu mode cannot run.");
+          throw new FoodPipelineError({
+            ...this.lastDiagnostics,
+            error: "Restaurant search results do not contain usable identifiers for menu extraction.",
+          });
         }
 
+        const menuInput = {
+          mode: "menu",
+          restaurantIds,
+          proxyConfiguration: this.proxyConfiguration(),
+          maxItems: 200,
+        };
+        console.log("========== MENU EXTRACTION START ==========");
+        console.log("Menu extraction input:", JSON.stringify(menuInput, null, 2));
         console.log("Starting menu scraping...");
         const menuResults = await this.getRestaurantMenus(restaurantIds);
         console.log("Raw menu records:", menuResults.length);
+        console.log("========== RAW MENU RESULTS ==========");
+        console.log("Raw menu record count:", menuResults.length);
+        console.log("Raw menu sample:", JSON.stringify(menuResults.slice(0, 10), null, 2));
+        console.log("Menu record keys:", Object.keys(menuResults[0] || {}));
+        this.lastDiagnostics.stage = "dish_normalization";
+        this.lastDiagnostics.rawMenuRecordsFound = menuResults.length;
         const dishes = this.normalizeDishes(menuResults, restaurants);
         console.log("Normalized dishes:", dishes.length);
+        console.log("Valid dishes:", dishes.length);
         console.log("Sample dishes:", dishes.slice(0, 5));
+        this.lastDiagnostics.normalizedDishesFound = dishes.length;
+        if (dishes.length === 0) {
+          this.lastDiagnostics.error = "Menu dataset contained no recognizable dish names.";
+          return [];
+        }
 
         const places = this.transformToNearbyPlaces(restaurants, dishes, latitude, longitude, query);
 
+        this.lastDiagnostics = { ...this.lastDiagnostics, success: true, stage: "complete" };
         return places;
       } catch (e: any) {
+        if (e instanceof FoodPipelineError) this.lastDiagnostics = e.diagnostics;
         lastError = e;
         if (attempt < this.maxRetries) {
           await new Promise((resolve) =>
@@ -174,6 +231,11 @@ export class ApifySwiggyMapsProvider {
     }
 
     throw lastError || new Error("Swiggy scraping failed: unknown error");
+  }
+
+  private extractRestaurantIdentifier(restaurant: ApifyRestaurant): string | null {
+    const candidate = restaurant.id || restaurant.restaurantId || restaurant.restaurantUrl || restaurant.url;
+    return candidate ? String(candidate) : null;
   }
 
   /**
@@ -215,6 +277,7 @@ export class ApifySwiggyMapsProvider {
       proxyConfiguration: this.proxyConfiguration(),
       maxItems: 200,
     });
+    console.log("Menu run ID:", runId);
     const run = await this.waitForActorRun(runId);
     console.log("Menu run status:", run.status, "dataset:", run.defaultDatasetId || "none");
     if (!run.defaultDatasetId) return [];
@@ -227,7 +290,7 @@ export class ApifySwiggyMapsProvider {
     return records
       .map((restaurant) => ({
         ...restaurant,
-        id: restaurant.id || restaurant.restaurantId,
+        id: restaurant.id || restaurant.restaurantId || restaurant.restaurantUrl || restaurant.url || restaurant.LinkrestaurantUrl,
         name: restaurant.name || restaurant.restaurantName || restaurant.Restaurantname,
         rating: restaurant.rating ?? restaurant.avgRating ?? restaurant.Ratingrating ?? 4,
         cuisines: restaurant.cuisines || restaurant.Cuisinescuisines,
@@ -243,26 +306,54 @@ export class ApifySwiggyMapsProvider {
     const restaurantMap = new Map(
       restaurants.map((restaurant) => [restaurant.id!, { name: restaurant.name!, restaurantUrl: restaurant.url }])
     );
-    return records
-      .filter((row) => row.rowType === "menuItem" && row.inStock !== false && row.id && row.name && row.restaurantId)
-      .map((item) => {
-        const restaurant = restaurantMap.get(item.restaurantId!);
+    const normalized: Array<FoodDish | null> = records
+      .map((raw) => {
+        const item = raw as ApifyMenuItem & Record<string, unknown>;
+        const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
+        const restaurantId = this.firstString(item, ["restaurantId", "restaurant_id"]);
+        const restaurantName = this.firstString(item, ["restaurantName", "restaurant"]);
+        const id = this.firstString(item, ["id", "dishId", "itemId"]);
+        const price = this.firstNumber(item, ["priceInr", "price", "cost", "itemPrice"]);
+        const description = this.firstString(item, ["description", "itemDescription", "desc"]);
+        const category = this.firstString(item, ["category", "categoryName", "menuCategory"]);
+        const inStock = item.inStock !== false;
+        if (!name || !inStock) return null;
+        const restaurant = restaurantId ? restaurantMap.get(restaurantId) : undefined;
         return {
-          id: item.id!,
-          restaurantId: item.restaurantId!,
-          restaurantName: restaurant?.name || "Nearby Restaurant",
+          id: id || `${restaurantId || "nearby"}-${name}`,
+          restaurantId: restaurantId || "unknown",
+          restaurantName: restaurant?.name || restaurantName || "Nearby Restaurant",
           restaurantUrl: restaurant?.restaurantUrl,
-          name: item.name!,
-          category: item.category,
-          description: item.description,
-          priceInr: item.priceInr ?? item.price,
-          isVeg: item.isVeg,
-          inStock: item.inStock,
-          imageUrl: item.imageUrl,
+          name,
+          category,
+          description,
+          priceInr: price,
+          isVeg: Boolean(item.isVeg ?? item.veg ?? item.vegetarian),
+          inStock,
+          imageUrl: this.firstString(item, ["imageUrl", "image", "image_url"]),
           calories: this.estimateCalories(item),
           proteinG: this.estimateProtein(item),
         };
-      });
+      })
+      .filter((dish): dish is FoodDish => dish !== null);
+    return normalized;
+  }
+
+  private firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return undefined;
+  }
+
+  private firstNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+    for (const key of keys) {
+      const value = record[key];
+      const parsed = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
   }
 
   /**
@@ -292,7 +383,8 @@ export class ApifySwiggyMapsProvider {
       }
 
       if (run.status === "FAILED") {
-        throw new Error(`Apify actor run failed`);
+        console.error("Menu run failed:", JSON.stringify(run, null, 2));
+        throw new Error("Apify menu actor run failed");
       }
 
       // Still running, wait and retry

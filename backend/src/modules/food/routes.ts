@@ -32,7 +32,16 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   console.log("Apify restaurants:", result.places.length);
   console.log("Verified menu items:", dishes.length);
   if (!dishes.length) {
-    return res.status(424).json({ error: "We found restaurants nearby, but couldn't access enough menu details yet." });
+    const diagnostics = result.diagnostics;
+    return res.status(424).json({
+      success: false,
+      stage: diagnostics?.stage || "dish_normalization",
+      restaurantsFound: diagnostics?.restaurantsFound ?? result.places.length,
+      restaurantIdentifiersFound: diagnostics?.restaurantIdentifiersFound ?? 0,
+      rawMenuRecordsFound: diagnostics?.rawMenuRecordsFound ?? 0,
+      normalizedDishesFound: diagnostics?.normalizedDishesFound ?? 0,
+      error: diagnostics?.error || "We found nearby restaurants, but exact menu items are not available from the current data source.",
+    });
   }
 
   const analyses = await getAiProvider().analyzeHealthyDishes({ dishes });

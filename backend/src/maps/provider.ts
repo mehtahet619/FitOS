@@ -49,12 +49,24 @@ export interface NearbyPlace {
   restaurantUrl?: string;
 }
 
+export interface FoodPipelineDiagnostics {
+  success: boolean;
+  stage: "restaurant_search" | "identifier_extraction" | "menu_extraction" | "dish_normalization" | "complete";
+  restaurantsFound: number;
+  restaurantIdentifiersFound: number;
+  rawMenuRecordsFound: number;
+  normalizedDishesFound: number;
+  error?: string;
+  menuSourceAvailable?: boolean;
+  reason?: string;
+}
+
 export interface MapsProvider {
   findNearbyFood(input: {
     latitude: number;
     longitude: number;
     query: string;
-  }): Promise<{ configured: boolean; places: NearbyPlace[] }>;
+  }): Promise<{ configured: boolean; places: NearbyPlace[]; diagnostics?: FoodPipelineDiagnostics }>;
 }
 
 export class MockMapsProvider implements MapsProvider {
@@ -101,14 +113,14 @@ class ApifySwiggyProvider implements MapsProvider {
     latitude: number;
     longitude: number;
     query: string;
-  }): Promise<{ configured: boolean; places: NearbyPlace[] }> {
+  }): Promise<{ configured: boolean; places: NearbyPlace[]; diagnostics?: FoodPipelineDiagnostics }> {
     try {
       const places = await this.swiggy.findNearbyFood(input);
-      return { configured: true, places };
+      return { configured: true, places, diagnostics: this.swiggy.lastDiagnostics };
     } catch (e: any) {
       console.error("Apify Swiggy provider error:", e.message);
       // Return empty configured result instead of error
-      return { configured: true, places: [] };
+      return { configured: true, places: [], diagnostics: this.swiggy.lastDiagnostics };
     }
   }
 }
