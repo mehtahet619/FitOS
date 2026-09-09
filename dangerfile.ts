@@ -15,8 +15,12 @@ const files = [...danger.git.modified_files, ...danger.git.created_files, ...dan
 const linesChanged = danger.github.pr.additions + danger.github.pr.deletions;
 const matches = (file: string, pattern: string) => {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`^${escaped.replaceAll("\\*\\*", ".*").replaceAll("\\*", "[^/]*")}$`);
-  return regex.test(file);
+  const doubleStar = "__DOUBLE_STAR__";
+  const regexSource = escaped
+    .replaceAll("**", doubleStar)
+    .replaceAll("*", "[^/]*")
+    .replaceAll(doubleStar, ".*");
+  return new RegExp(`^${regexSource}$`).test(file);
 };
 const sensitiveFiles = files.filter((file) => sensitivePatterns.some((pattern) => matches(file, pattern)));
 const logicFiles = files.filter((file) => /\.(ts|tsx|js|jsx)$/.test(file) && !/\.test\.|__tests__/.test(file));
