@@ -306,7 +306,7 @@ export class ApifySwiggyMapsProvider {
     const restaurantMap = new Map(
       restaurants.map((restaurant) => [restaurant.id!, { name: restaurant.name!, restaurantUrl: restaurant.url }])
     );
-    const normalized: Array<FoodDish | null> = records
+    const normalized = records
       .map((raw) => {
         const item = raw as ApifyMenuItem & Record<string, unknown>;
         const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
@@ -335,7 +335,7 @@ export class ApifySwiggyMapsProvider {
           proteinG: this.estimateProtein(item),
         };
       })
-      .filter((dish): dish is FoodDish => dish !== null);
+      .filter((dish) => dish !== null) as FoodDish[];
     return normalized;
   }
 
