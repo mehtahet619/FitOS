@@ -120,9 +120,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   auto-merge:
-    if: github.event_name == 'pull_request' && needs.danger.result == 'success'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.danger.result == 'success'
     needs: [lint, typecheck, test, build, codeql, secretlint, danger]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Check sensitive paths and unresolved threads
@@ -145,6 +149,10 @@ jobs:
   override-review:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/override-review')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Verify maintainer and log override
