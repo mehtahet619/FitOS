@@ -138,7 +138,7 @@ jobs:
           while IFS= read -r file; do
             node scripts/is-sensitive-path.mjs "$file" && sensitive=true
           done <<< "$changed"
-          unresolved=$(gh api graphql -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}' -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number="$PR_NUMBER" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+          unresolved=$(gh api graphql --paginate -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{isResolved}pageInfo{hasNextPage endCursor}}}}}' -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number="$PR_NUMBER" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' | awk '{s+=$1} END{print s+0}')
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
           echo "unresolved=$unresolved" >> "$GITHUB_OUTPUT"
       - name: Enable auto-merge
