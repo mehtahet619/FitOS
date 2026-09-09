@@ -35,6 +35,7 @@ export default [
       "security/detect-unsafe-regex": "error",
       "security/detect-non-literal-fs-filename": "off",
       "@typescript-eslint/no-unused-vars": "off",
+      "no-trailing-spaces": "error",
     },
   },
 ];
