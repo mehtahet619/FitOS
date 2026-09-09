@@ -18,24 +18,29 @@ try {
 const diff = execFileSync("git", ["diff", "--unified=0", "--", "src/**/*.ts"], { encoding: "utf8", shell: true });
 const comments = [];
 let file;
-let newLine;
+let oldLine;
+let inDeletionBlock = false;
 
 for (const line of diff.split("\n")) {
   if (line.startsWith("+++ b/")) {
     file = line.slice(6);
   } else if (line.startsWith("@@")) {
-    const match = line.match(/\+(\d+)/);
-    newLine = match ? Number(match[1]) : undefined;
+    const match = line.match(/-(\d+)/);
+    oldLine = match ? Number(match[1]) : undefined;
+    inDeletionBlock = false;
+  } else if (file && line.startsWith("-") && !line.startsWith("---")) {
+    oldLine += 1;
+    inDeletionBlock = true;
   } else if (file && line.startsWith("+") && !line.startsWith("+++")) {
     comments.push({
       path: file,
-      line: newLine,
+      line: inDeletionBlock ? oldLine - 1 : oldLine,
       side: "RIGHT",
       body: `Automated ESLint fix suggestion:\n\n\`\`\`suggestion\n${line.slice(1)}\n\`\`\``,
     });
-    newLine += 1;
-  } else if (file && !line.startsWith("-") && newLine) {
-    newLine += 1;
+  } else if (file && !line.startsWith("-") && oldLine) {
+    oldLine += 1;
+    inDeletionBlock = false;
   }
 }
 
