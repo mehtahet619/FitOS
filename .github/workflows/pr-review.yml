@@ -131,20 +131,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check sensitive paths and unresolved threads
         id: policy
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}, PR_NUMBER: ${{ github.event.pull_request.number }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           changed=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
           sensitive=false
           while IFS= read -r file; do
             node scripts/is-sensitive-path.mjs "$file" && sensitive=true
           done <<< "$changed"
-          unresolved=$(gh api graphql --paginate -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100, after:$endCursor){nodes{isResolved}pageInfo{hasNextPage endCursor}}}}}' -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number="$PR_NUMBER" --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | .isResolved' | wc -l | tr -d " ")
+
+          unresolved=$(gh api graphql --paginate -f query='query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{isResolved}pageInfo{hasNextPage endCursor}}}}}' -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number="$PR_NUMBER" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' | awk '{s+=$1} END{print s+0}')
+
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
           echo "unresolved=$unresolved" >> "$GITHUB_OUTPUT"
+
       - name: Enable auto-merge
         if: steps.policy.outputs.sensitive == 'false' && steps.policy.outputs.unresolved == '0'
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}, PR_NUMBER: ${{ github.event.pull_request.number }} }
-        run: gh pr merge "$PR_NUMBER" --auto --squash
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
 
   override-review:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/override-review')
@@ -156,7 +164,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify maintainer and log override
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}, COMMENT_AUTHOR: ${{ github.event.comment.user.login }}, PR_NUMBER: ${{ github.event.issue.number }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          PR_NUMBER: ${{ github.event.issue.number }}
         run: |
           node scripts/is-maintainer.mjs "$COMMENT_AUTHOR" || { echo "Not an approved maintainer"; exit 1; }
           echo "Manual review override by $COMMENT_AUTHOR for PR #$PR_NUMBER" >> "$GITHUB_STEP_SUMMARY"
