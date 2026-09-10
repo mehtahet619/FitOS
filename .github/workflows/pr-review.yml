@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci --prefix backend
-      - run: npx --no-install danger ci --dangerfile ../dangerfile.ts
+      - run: npm exec --package=danger@14.0.7 -- danger ci --dangerfile ../dangerfile.ts
         working-directory: backend
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
