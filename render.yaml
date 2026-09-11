@@ -4,7 +4,9 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    startCommand: npm run migrate:postgres && npm run seed && npm start
+    preDeployCommand: npm run migrate:postgres
+    startCommand: npm run seed && npm start
+    autoDeploy: false
     healthCheckPath: /health
     plan: free
     envVars:
@@ -42,6 +44,7 @@ services:
     runtime: static
     buildCommand: echo "No frontend build required"
     staticPublishPath: frontend
+    autoDeploy: false
 
 databases:
   - name: adaptive-fit-db

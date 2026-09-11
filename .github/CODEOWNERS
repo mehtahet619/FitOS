@@ -1,0 +1,8 @@
+# Sensitive paths always require a human review.
+/backend/src/db/ @mehtahet619
+/backend/src/common/auth.ts @mehtahet619
+/**/auth/ @mehtahet619
+/**/payment/ @mehtahet619
+/**/payments/ @mehtahet619
+/render.yaml @mehtahet619
+/.github/workflows/ @mehtahet619
