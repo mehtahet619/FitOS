@@ -24,12 +24,18 @@ void (async () => {
     return new RegExp(`^${regexSource}$`).test(file);
   };
   const sensitiveFiles = files.filter((file) => sensitivePatterns.some((pattern) => matches(file, pattern)));
-  const logicFiles = files.filter((file) => /\.(ts|tsx|js|jsx)$/.test(file) && !/\.test\.|__tests__/.test(file));
+  const logicFiles = files.filter(
+    (file) => /^(backend\/src|frontend)\/.*\.(ts|tsx|js|jsx)$/.test(file) && !/\.test\.|__tests__/.test(file),
+  );
   const testFiles = files.filter((file) => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(file) || file.includes("__tests__"));
   const requiredChecks = ["lint", "typecheck", "test", "build", "codeql", "secretlint", "danger"];
+  const [owner, repo] = (process.env.GITHUB_REPOSITORY || "").split("/");
+  if (!owner || !repo) {
+    fail("GITHUB_REPOSITORY is missing; cannot summarize required checks.");
+  }
   const checkRuns = await danger.github.api.checks.listForRef({
-    owner: danger.github.repository.organization || danger.github.repository.owner,
-    repo: danger.github.repository.name,
+    owner,
+    repo,
     ref: danger.github.pr.head.sha,
   });
   const latestChecks = new Map<string, { conclusion?: string | null; status?: string | null }>(
