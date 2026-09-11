@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - run: npm run lint
 
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - run: npm run typecheck
 
@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - run: npm test
 
@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - run: npm run build
 
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - run: npm run secretlint
 
@@ -95,7 +95,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci
       - name: Post mechanical ESLint suggestions
         env:
@@ -112,9 +112,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22.5.0, cache: npm, cache-dependency-path: backend/package-lock.json }
+        with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
       - run: npm ci --prefix backend --include=dev
-      - run: npm exec --package=danger@14.0.7 -- danger ci --dangerfile ../dangerfile.ts
+      - run: ./node_modules/.bin/danger ci --dangerfile ../dangerfile.ts
         working-directory: backend
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
