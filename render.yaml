@@ -11,7 +11,7 @@ services:
     plan: free
     envVars:
       - key: NODE_VERSION
-        value: 22.5.0
+        value: 22.14.0
       - key: DATABASE_URL
         fromDatabase:
           name: adaptive-fit-db
