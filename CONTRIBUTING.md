@@ -22,6 +22,7 @@ Repository administrators must configure these manually:
 - Require at least one human approval for sensitive paths via `.github/CODEOWNERS`.
 - Keep the GitHub Actions workflow permission for pull requests at least `Read and write` so Danger and auto-merge can operate.
 - Add repository secrets `RENDER_API_DEPLOY_HOOK` and `RENDER_WEB_DEPLOY_HOOK` containing the two Render deploy-hook URLs.
+- These secrets are currently missing in this repository. Create one deploy hook per Render service in the Render dashboard, then add both values under **GitHub Settings > Secrets and variables > Actions** before merging to `main`; the deploy workflow intentionally fails with a clear error until both are configured.
 - Enable GitHub code scanning under **Settings > Code security and analysis** if CodeQL SARIF findings should be uploaded and shown in the Security tab. The workflow still runs CodeQL queries when upload is disabled.
 
 GitHub controls Actions minutes and CodeQL availability by repository visibility and current plan. See the current [GitHub pricing page](https://github.com/pricing) for the live private-repository quota; no fixed quota is duplicated here.

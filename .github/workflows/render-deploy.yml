@@ -79,6 +79,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy API to Render
-        run: curl --fail --silent --show-error -X POST "${{ secrets.RENDER_API_DEPLOY_HOOK }}"
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::RENDER_API_DEPLOY_HOOK is not configured in repository secrets."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
       - name: Deploy frontend to Render
-        run: curl --fail --silent --show-error -X POST "${{ secrets.RENDER_WEB_DEPLOY_HOOK }}"
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_WEB_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error::RENDER_WEB_DEPLOY_HOOK is not configured in repository secrets."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
