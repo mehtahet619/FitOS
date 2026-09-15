@@ -16,7 +16,9 @@
     "start": "node dist/server.js",
     "migrate": "ts-node src/db/migrate.ts",
     "migrate:postgres": "ts-node src/db/migrate-postgres.ts",
+    "migrate:postgres:prod": "node dist/db/migrate-postgres.js",
     "seed": "ts-node src/db/seed.ts",
+    "seed:prod": "node dist/db/seed.js",
     "test": "vitest run"
   },
   "dependencies": {

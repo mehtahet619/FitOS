@@ -4,8 +4,8 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    preDeployCommand: npm run migrate:postgres
-    startCommand: npm run seed && npm start
+    preDeployCommand: npm run migrate:postgres:prod
+    startCommand: npm run seed:prod && npm start
     autoDeploy: false
     healthCheckPath: /health
     plan: free
