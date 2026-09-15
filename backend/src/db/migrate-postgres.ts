@@ -4,7 +4,7 @@ import { PostgresDatabase } from "./postgres";
 
 async function main() {
   const database = new PostgresDatabase();
-  const schemaPath = path.join(__dirname, "schema.sql");
+  const schemaPath = path.resolve(__dirname, "../../src/db/schema.sql");
   const schema = fs
     .readFileSync(schemaPath, "utf8")
     .replace(/^PRAGMA[^;]+;\s*/gim, "")
