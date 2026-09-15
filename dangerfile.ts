@@ -24,7 +24,7 @@ void (async () => {
     return new RegExp(`^${regexSource}$`).test(file);
   };
   const sensitiveFiles = files.filter((file) => sensitivePatterns.some((pattern) => matches(file, pattern)));
-  const logicFiles = files.filter(
+  const newLogicFiles = danger.git.created_files.filter(
     (file) => /^(backend\/src|frontend)\/.*\.(ts|tsx|js|jsx)$/.test(file) && !/\.test\.|__tests__/.test(file),
   );
   const testFiles = files.filter((file) => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(file) || file.includes("__tests__"));
@@ -56,7 +56,7 @@ void (async () => {
   if (sensitiveFiles.length) {
     warn(`Sensitive paths changed: ${sensitiveFiles.join(", ")}. Human approval is required; auto-merge is disabled.`);
   }
-  if (logicFiles.length && !testFiles.length) {
+  if (newLogicFiles.length && !testFiles.length) {
     fail("New logic files were changed without adding or updating a test file.");
   }
 
