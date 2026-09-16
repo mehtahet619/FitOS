@@ -101,11 +101,20 @@ const VisionCoach = {
   video: null,
   canvas: null,
   ctx: null,
+  equipmentCanvas: null,
+  equipmentTimer: null,
+  equipmentRequestInFlight: false,
+  equipmentHistory: [],
+  stableEquipment: [],
+  lastEquipmentRequestAt: 0,
+  equipmentIntervalMs: 1500,
+  equipmentMinConfidence: 0.35,
 
   async init() {
     this.video = document.getElementById("vision-video");
     this.canvas = document.getElementById("vision-canvas");
     this.ctx = this.canvas.getContext("2d");
+    this.equipmentCanvas = document.createElement("canvas");
 
     document.querySelectorAll("#vision-segment button").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -161,6 +170,7 @@ const VisionCoach = {
       startBtn.disabled = false;
 
       this.running = true;
+      this.startEquipmentRecognition();
       this.loop();
     } catch (e) {
       placeholder.textContent =
@@ -172,6 +182,11 @@ const VisionCoach = {
 
   stop() {
     this.running = false;
+    if (this.equipmentTimer) window.clearTimeout(this.equipmentTimer);
+    this.equipmentTimer = null;
+    this.equipmentRequestInFlight = false;
+    this.equipmentHistory = [];
+    this.stableEquipment = [];
     const stream = this.video.srcObject;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     this.video.style.display = "none";
@@ -182,6 +197,7 @@ const VisionCoach = {
     startBtn.textContent = "Start Camera";
     startBtn.onclick = () => this.start();
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.renderEquipmentState("Waiting for a frame…", []);
   },
 
   loop() {
@@ -198,8 +214,105 @@ const VisionCoach = {
         this.drawSkeleton(lm);
         this.processExercise(lm);
       }
+      this.drawEquipmentBoxes(this.stableEquipment);
     }
     requestAnimationFrame(() => this.loop());
+  },
+
+  startEquipmentRecognition() {
+    const card = document.getElementById("equipment-recognition-card");
+    card.style.display = "block";
+    this.renderEquipmentState("Analyzing camera frames…", []);
+    this.scheduleEquipmentRecognition(0);
+  },
+
+  scheduleEquipmentRecognition(delay = this.equipmentIntervalMs) {
+    if (!this.running) return;
+    this.equipmentTimer = window.setTimeout(() => this.analyzeEquipmentFrame(), delay);
+  },
+
+  async analyzeEquipmentFrame() {
+    if (!this.running) return;
+    if (this.equipmentRequestInFlight || this.video.readyState < 2 || !this.video.videoWidth) {
+      this.scheduleEquipmentRecognition();
+      return;
+    }
+
+    this.equipmentRequestInFlight = true;
+    const canvas = this.equipmentCanvas;
+    canvas.width = this.video.videoWidth;
+    canvas.height = this.video.videoHeight;
+    canvas.getContext("2d").drawImage(this.video, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+
+    try {
+      const result = await Api.post("/equipment/detect", { imageBase64 });
+      if (!result.configured) {
+        this.renderEquipmentState("AI vision model is not configured.", []);
+      } else {
+        const detections = (result.detections || []).filter(
+          (d) => Number(d.confidence) >= this.equipmentMinConfidence,
+        );
+        this.updateEquipmentSmoothing(detections);
+        this.renderEquipmentState(
+          this.stableEquipment.length ? "Equipment recognized" : "Equipment not confidently recognized. Please point the camera at the equipment.",
+          this.stableEquipment,
+          result.suggestedExercises || [],
+        );
+      }
+    } catch (_error) {
+      this.renderEquipmentState("Unable to analyze frame. Retrying…", this.stableEquipment);
+    } finally {
+      this.equipmentRequestInFlight = false;
+      this.scheduleEquipmentRecognition();
+    }
+  },
+
+  updateEquipmentSmoothing(detections) {
+    const labels = detections.map((d) => d.equipmentName).sort().join("|");
+    this.equipmentHistory.push({ labels, detections });
+    if (this.equipmentHistory.length > 3) this.equipmentHistory.shift();
+    const matching = this.equipmentHistory.filter((entry) => entry.labels === labels);
+    if (matching.length >= 2) this.stableEquipment = matching[matching.length - 1].detections;
+  },
+
+  drawEquipmentBoxes(detections) {
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    this.ctx.strokeStyle = "#ffd166";
+    this.ctx.fillStyle = "#ffd166";
+    this.ctx.lineWidth = 3;
+    detections.forEach((detection) => {
+      const box = detection.boundingBox;
+      if (!box) return;
+      const normalized = [box.x, box.y, box.width, box.height].every((value) => value >= 0 && value <= 1);
+      const scaleX = normalized ? width : 1;
+      const scaleY = normalized ? height : 1;
+      const x = (box.x - box.width / 2) * scaleX;
+      const y = (box.y - box.height / 2) * scaleY;
+      const w = box.width * scaleX;
+      const h = box.height * scaleY;
+      this.ctx.strokeRect(x, y, w, h);
+      this.ctx.font = "600 16px sans-serif";
+      this.ctx.fillText(`${detection.equipmentName} ${Math.round(detection.confidence * 100)}%`, x + 4, Math.max(18, y - 6));
+    });
+  },
+
+  renderEquipmentState(status, detections, recommendations = []) {
+    const statusEl = document.getElementById("equipment-recognition-status");
+    const resultsEl = document.getElementById("equipment-recognition-results");
+    const recommendationsEl = document.getElementById("equipment-recommendations");
+    if (!statusEl || !resultsEl || !recommendationsEl) return;
+    statusEl.textContent = status;
+    resultsEl.innerHTML = detections
+      .map((detection) => `<span class="pill" style="margin:6px 6px 0 0; display:inline-block;">${detection.equipmentName} · ${Math.round(detection.confidence * 100)}%</span>`)
+      .join("");
+    recommendationsEl.innerHTML = recommendations.length
+      ? `<div class="card-label" style="margin-top:12px;">Recommended with this equipment</div>${recommendations
+          .slice(0, 4)
+          .map((exercise) => `<div class="exercise-meta">${exercise.name} · ${exercise.sets} × ${exercise.repRangeLow}-${exercise.repRangeHigh}</div>`)
+          .join("")}`
+      : "";
   },
 
   drawSkeleton(lm) {

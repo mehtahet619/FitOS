@@ -80,6 +80,21 @@ describe("RoboflowWorkflowProvider", () => {
     expect(result[0].equipmentName).toBe("Dumbbells");
   });
 
+  it("should preserve model bounding boxes for live overlays", async () => {
+    const mockResponse = {
+      predictions: [{ class: "bench", confidence: 0.91, x: 320, y: 240, width: 180, height: 120 }],
+    };
+
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
+    });
+
+    const result = await provider.detectEquipment(testBase64, equipmentLabelMap);
+
+    expect(result[0].boundingBox).toEqual({ x: 320, y: 240, width: 180, height: 120 });
+  });
+
   it("should deduplicate equipment by keeping highest confidence", async () => {
     const mockResponse = {
       predictions: [

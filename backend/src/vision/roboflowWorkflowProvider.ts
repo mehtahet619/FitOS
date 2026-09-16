@@ -171,11 +171,21 @@ export class RoboflowWorkflowProvider {
           equipmentName: mapped,
           confidence: Math.min(1, Math.max(0, confidence)), // Clamp to 0-1
           rawLabel: rawClass,
+          boundingBox: this.boundingBoxFor(pred),
         });
       }
     }
 
     return Array.from(best.values());
+  }
+
+  private boundingBoxFor(prediction: any): EquipmentDetection["boundingBox"] {
+    const x = Number(prediction.x);
+    const y = Number(prediction.y);
+    const width = Number(prediction.width);
+    const height = Number(prediction.height);
+    if (![x, y, width, height].every(Number.isFinite)) return undefined;
+    return { x, y, width, height };
   }
 
   /**
