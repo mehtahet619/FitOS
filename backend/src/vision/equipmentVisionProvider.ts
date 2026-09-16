@@ -29,6 +29,7 @@ export interface EquipmentDetection {
   equipmentName: string; // matches a name in the Equipment table
   confidence: number; // 0-1
   rawLabel: string; // whatever the model called it
+  boundingBox?: { x: number; y: number; width: number; height: number };
 }
 
 export interface EquipmentVisionProvider {
@@ -47,7 +48,16 @@ const EQUIPMENT_LABEL_MAP: Record<string, string> = {
   "resistance band": "Resistance Bands",
   "resistance bands": "Resistance Bands",
   "cable machine": "Cable Machine",
+  cable: "Cable Machine",
+  "seated row": "Cable Machine",
+  "chest press": "Cable Machine",
+  "shoulder press": "Cable Machine",
   "squat rack": "Squat Rack",
+  "leg extension": "Leg Press",
+  "leg curl": "Leg Press",
+  "preacher curl": "Bench",
+  "assisted pull-up": "Pull-up Bar",
+  "assisted pullup": "Pull-up Bar",
   treadmill: "Treadmill",
   "exercise bike": "Exercise Bike",
   "smith machine": "Smith Machine",
@@ -107,7 +117,9 @@ export class RoboflowEquipmentVisionProvider implements EquipmentVisionProvider 
       throw new Error(`Roboflow inference failed (${res.status}): ${text.slice(0, 200)}`);
     }
 
-    const data = (await res.json()) as { predictions?: { class: string; confidence: number }[] };
+    const data = (await res.json()) as {
+      predictions?: { class: string; confidence: number; x?: number; y?: number; width?: number; height?: number }[];
+    };
     const predictions = data.predictions ?? [];
 
     // Dedupe by mapped equipment name, keeping the highest confidence seen.
@@ -117,7 +129,14 @@ export class RoboflowEquipmentVisionProvider implements EquipmentVisionProvider 
       if (!mapped) continue; // unmapped class — ignore rather than guess
       const existing = best.get(mapped);
       if (!existing || p.confidence > existing.confidence) {
-        best.set(mapped, { equipmentName: mapped, confidence: p.confidence, rawLabel: p.class });
+        best.set(mapped, {
+          equipmentName: mapped,
+          confidence: p.confidence,
+          rawLabel: p.class,
+          boundingBox: p.x == null || p.y == null || p.width == null || p.height == null
+            ? undefined
+            : { x: p.x, y: p.y, width: p.width, height: p.height },
+        });
       }
     }
 
