@@ -27,6 +27,7 @@ const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   "Shoulders + Core": ["shoulders", "core"],
   "Full Body": ["chest", "back", "legs", "shoulders", "core"],
 };
+const ALL_MUSCLES = ["chest", "back", "biceps", "triceps", "quads", "hamstrings", "glutes", "calves", "shoulders", "core"];
 
 export function pickFocusForDay(dayIndex: number, daysPerWeek: number): string {
   const rotation = ["Chest + Triceps", "Back + Biceps", "Legs", "Shoulders + Core", "Full Body"];
@@ -39,6 +40,27 @@ async function getAvailableEquipmentIds(database: DatabaseLike, userId: string):
     userId
   );
   return new Set(rows.map((r) => r.equipmentId));
+}
+
+function startOfTrainingWeek(): string {
+  const date = new Date();
+  const day = date.getUTCDay();
+  const daysSinceMonday = (day + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.toISOString();
+}
+
+async function getWeeklyTrainedMuscles(database: DatabaseLike, userId: string): Promise<Set<string>> {
+  const rows = await database.all<{ primaryMuscle: string }>(
+    `SELECT DISTINCT e.primaryMuscle
+     FROM WorkoutHistory h
+     JOIN Exercise e ON e.id = h.exerciseId
+     WHERE h.userId = ? AND h.recordedAt >= ?`,
+    userId,
+    startOfTrainingWeek(),
+  );
+  return new Set(rows.map((row) => row.primaryMuscle));
 }
 
 /**
@@ -90,14 +112,22 @@ export async function generateWorkout(
 ): Promise<{ focus: string; exercises: GeneratedExercise[] }> {
   const muscles = FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"];
   const availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
+  const trainedMuscles = await getWeeklyTrainedMuscles(database, userId);
+  const freshFocusMuscles = muscles.filter((muscle) => !trainedMuscles.has(muscle));
+  const freshMuscles = ALL_MUSCLES.filter((muscle) => !trainedMuscles.has(muscle));
+  const musclesForWorkout = freshFocusMuscles.length > 0
+    ? freshFocusMuscles
+    : freshMuscles.length > 0
+      ? freshMuscles
+      : muscles;
 
   // Roughly 1 exercise per 9 min of session time, capped sensibly.
   const targetExerciseCount = Math.max(3, Math.min(8, Math.round(durationMin / 9)));
-  const perMuscle = Math.max(1, Math.ceil(targetExerciseCount / muscles.length));
+  const perMuscle = Math.max(1, Math.ceil(targetExerciseCount / musclesForWorkout.length));
 
   const generated: GeneratedExercise[] = [];
 
-  for (const muscle of muscles) {
+  for (const muscle of musclesForWorkout) {
     const rows = await database.all<{ id: string }>(`SELECT id FROM Exercise WHERE primaryMuscle = ?`, muscle);
     const poolMappedResults = await Promise.all(rows.map((r) => loadExerciseWithLinks(database, r.id)));
     const poolMapped: ExerciseWithLinks[] = poolMappedResults.filter(
