@@ -56,6 +56,15 @@ const camelCaseColumns: Record<string, string> = {
   userlocationid: "userLocationId",
   recordedat: "recordedAt",
   checkedinat: "checkedInAt",
+  structurekey: "structureKey",
+  cycleid: "cycleId",
+  cyclestatus: "cycleStatus",
+  currentindex: "currentIndex",
+  unitsjson: "unitsJson",
+  activeworkoutid: "activeWorkoutId",
+  lasttrainedat: "lastTrainedAt",
+  startedat: "startedAt",
+  primarymuscle: "primaryMuscle",
 };
 
 export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {
