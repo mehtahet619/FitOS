@@ -21,13 +21,38 @@ export interface GeneratedExercise {
 }
 
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
+  Push: ["chest", "shoulders", "triceps"],
+  Pull: ["back", "biceps"],
+  Chest: ["chest"],
+  Back: ["back"],
+  Biceps: ["biceps"],
+  Triceps: ["triceps"],
+  Shoulders: ["shoulders"],
+  "Legs + Shoulders": ["quads", "hamstrings", "glutes", "calves", "shoulders"],
   "Chest + Triceps": ["chest", "triceps"],
   "Back + Biceps": ["back", "biceps"],
   Legs: ["quads", "hamstrings", "glutes", "calves"],
   "Shoulders + Core": ["shoulders", "core"],
   "Full Body": ["chest", "back", "legs", "shoulders", "core"],
 };
-const ALL_MUSCLES = ["chest", "back", "biceps", "triceps", "quads", "hamstrings", "glutes", "calves", "shoulders", "core"];
+export function musclesForFocus(focus: string): string[] {
+  return FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"];
+}
+
+/**
+ * Equipment and recovery may reorder exercises inside a unit, but they must
+ * never replace the plan's target muscles with a different workout.
+ */
+export function resolveMusclesForLockedUnit(
+  unitMuscles: string[],
+  recentlyTrainedMuscles: Iterable<string>
+): string[] {
+  const recent = new Set(recentlyTrainedMuscles);
+  const fresh = unitMuscles.filter((muscle) => !recent.has(muscle));
+  const recovering = unitMuscles.filter((muscle) => recent.has(muscle));
+  if (fresh.length === 0) return [...unitMuscles];
+  return [...fresh, ...recovering];
+}
 
 export function pickFocusForDay(dayIndex: number, daysPerWeek: number): string {
   const rotation = ["Chest + Triceps", "Back + Biceps", "Legs", "Shoulders + Core", "Full Body"];
@@ -108,18 +133,13 @@ export async function generateWorkout(
   database: DatabaseLike,
   userId: string,
   focus: string,
-  durationMin: number
+  durationMin: number,
+  options?: { lockToMuscles?: string[] }
 ): Promise<{ focus: string; exercises: GeneratedExercise[] }> {
-  const muscles = FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"];
+  const unitMuscles = options?.lockToMuscles?.length ? options.lockToMuscles : musclesForFocus(focus);
   const availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
   const trainedMuscles = await getWeeklyTrainedMuscles(database, userId);
-  const freshFocusMuscles = muscles.filter((muscle) => !trainedMuscles.has(muscle));
-  const freshMuscles = ALL_MUSCLES.filter((muscle) => !trainedMuscles.has(muscle));
-  const musclesForWorkout = freshFocusMuscles.length > 0
-    ? freshFocusMuscles
-    : freshMuscles.length > 0
-      ? freshMuscles
-      : muscles;
+  const musclesForWorkout = resolveMusclesForLockedUnit(unitMuscles, trainedMuscles);
 
   // Roughly 1 exercise per 9 min of session time, capped sensibly.
   const targetExerciseCount = Math.max(3, Math.min(8, Math.round(durationMin / 9)));

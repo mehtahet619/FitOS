@@ -103,6 +103,33 @@ CREATE TABLE IF NOT EXISTS Workout (
 );
 CREATE INDEX IF NOT EXISTS idx_workout_user ON Workout(userId);
 
+CREATE TABLE IF NOT EXISTS WorkoutPlanState (
+  id TEXT PRIMARY KEY,
+  userId TEXT UNIQUE NOT NULL REFERENCES User(id),
+  structureKey TEXT NOT NULL,
+  cycleId TEXT NOT NULL,
+  cycleStatus TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+  currentIndex INTEGER NOT NULL DEFAULT 0,
+  unitsJson TEXT NOT NULL,
+  activeWorkoutId TEXT,
+  createdAt TEXT NOT NULL,
+  completedAt TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_plan_state_user ON WorkoutPlanState(userId);
+CREATE INDEX IF NOT EXISTS idx_plan_state_cycle ON WorkoutPlanState(cycleId);
+
+CREATE TABLE IF NOT EXISTS WorkoutCycleHistory (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id),
+  cycleId TEXT NOT NULL,
+  structureKey TEXT NOT NULL,
+  unitsJson TEXT NOT NULL,
+  startedAt TEXT NOT NULL,
+  completedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cycle_history_user ON WorkoutCycleHistory(userId);
+CREATE INDEX IF NOT EXISTS idx_cycle_history_cycle ON WorkoutCycleHistory(cycleId);
+
 CREATE TABLE IF NOT EXISTS WorkoutExercise (
   id TEXT PRIMARY KEY,
   workoutId TEXT NOT NULL REFERENCES Workout(id),

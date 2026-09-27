@@ -308,5 +308,22 @@ html, body {
 @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
+/* ---------- Cycle progress tracker ---------- */
+.cycle-progress { margin: 10px 0 14px; padding: 14px; border-radius: var(--radius-md); background: #fafaf5; border: 1px solid var(--border); }
+.cycle-track { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.cycle-unit { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; min-width: 72px; padding: 0 4px; }
+.cycle-marker { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--card); color: var(--muted); border: 2px solid var(--border); z-index: 2; transition: all .2s ease; }
+.cycle-unit.cycle-done .cycle-marker { background: var(--mint-strong); border-color: var(--mint-strong); color: #fff; }
+.cycle-unit.cycle-next .cycle-marker { background: #fff; border-color: #2874c9; color: #2874c9; box-shadow: 0 0 0 4px rgba(40,116,201,.12); }
+.cycle-label { margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1.2; }
+.cycle-unit.cycle-done .cycle-label { color: #1f9d6d; }
+.cycle-unit.cycle-next .cycle-label { color: #2874c9; }
+.cycle-connector { position: absolute; top: 13px; left: calc(50% + 16px); width: calc(100% - 24px); height: 2px; background: var(--border); z-index: 1; }
+.cycle-unit.cycle-done + .cycle-unit .cycle-connector,
+.cycle-unit:has(+ .cycle-unit.cycle-done) .cycle-connector { background: var(--mint-strong); }
+
+.pill-success { background: #e8f9f1; color: #1f9d6d; border: 1px solid #c9ecd9; }
+.pill-muted { background: #f2efe6; color: var(--muted); border: 1px solid var(--border); }
+
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.15); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
