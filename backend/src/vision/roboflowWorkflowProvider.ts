@@ -18,7 +18,7 @@ interface WorkflowRequest {
       type: "base64" | "url";
       value: string;
     };
-    classes?: string;
+    prompts?: { type: "text"; text: string }[];
   };
 }
 
@@ -49,8 +49,8 @@ export class RoboflowWorkflowProvider {
   ): Promise<EquipmentDetection[]> {
     const url = `${this.endpoint}/${this.workspaceSlug}/workflows/${this.workflowId}`;
 
-    // Pass all equipment class names to the workflow
-    const classesParam = Object.keys(equipmentLabelMap).join(",");
+    // Pass all equipment class names as text prompts for SAM3
+    const prompts = Object.keys(equipmentLabelMap).map(text => ({ type: "text" as const, text }));
 
     const payload: WorkflowRequest = {
       inputs: {
@@ -58,7 +58,7 @@ export class RoboflowWorkflowProvider {
           type: "base64",
           value: imageBase64,
         },
-        classes: classesParam,
+        prompts,
       },
     };
 

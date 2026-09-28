@@ -18,6 +18,7 @@ export interface GeneratedExercise {
   suggestedWeightKg: number | null;
   wasSubstituted: boolean;
   originalExerciseName?: string;
+  equipmentRequired: string[]; // equipment names required for this exercise
 }
 
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
@@ -185,6 +186,12 @@ export async function generateWorkout(
 
     for (const { exercise, wasSubstituted, originalExerciseName } of chosen) {
       const suggestedWeightKg = await suggestNextWeight(database, userId, exercise.id);
+      // Get equipment names for this exercise
+      const equipRows = await database.all<{ name: string }>(
+        `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+        exercise.id
+      );
+      const equipmentRequired = equipRows.map((r) => r.name);
       generated.push({
         exerciseId: exercise.id,
         name: exercise.name,
@@ -196,6 +203,7 @@ export async function generateWorkout(
         suggestedWeightKg,
         wasSubstituted,
         originalExerciseName,
+        equipmentRequired,
       });
     }
   }
