@@ -140,17 +140,23 @@ export function serializePlanSnapshot(state: PlanState | undefined): {
 }
 
 function parseState(row: any): PlanState {
+  const userId = row?.userId ?? "unknown";
   let units: WorkoutUnit[] = [];
   try {
-    const parsed = JSON.parse(row.unitsJson);
-    if (Array.isArray(parsed)) {
-      units = parsed as WorkoutUnit[];
+    const unitsJson = row?.unitsJson;
+    if (!unitsJson) {
+      console.warn(`unitsJson is null/empty for user ${userId}, defaulting to empty array`);
     } else {
-      console.error(`Invalid unitsJson format for user ${row.userId}: expected array, got ${typeof parsed}`);
+      const parsed = JSON.parse(unitsJson);
+      if (Array.isArray(parsed)) {
+        units = parsed as WorkoutUnit[];
+      } else {
+        console.error(`Invalid unitsJson format for user ${userId}: expected array, got ${typeof parsed}`);
+      }
     }
   } catch (error) {
-    console.error(`Failed to parse unitsJson for user ${row.userId}:`, error);
-    console.error(`Raw unitsJson: ${row.unitsJson}`);
+    console.error(`Failed to parse unitsJson for user ${userId}:`, error);
+    console.error(`Raw unitsJson: ${row?.unitsJson}`);
   }
   return { ...row, units };
 }
