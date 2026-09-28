@@ -140,7 +140,19 @@ export function serializePlanSnapshot(state: PlanState | undefined): {
 }
 
 function parseState(row: any): PlanState {
-  return { ...row, units: JSON.parse(row.unitsJson) as WorkoutUnit[] };
+  let units: WorkoutUnit[] = [];
+  try {
+    const parsed = JSON.parse(row.unitsJson);
+    if (Array.isArray(parsed)) {
+      units = parsed as WorkoutUnit[];
+    } else {
+      console.error(`Invalid unitsJson format for user ${row.userId}: expected array, got ${typeof parsed}`);
+    }
+  } catch (error) {
+    console.error(`Failed to parse unitsJson for user ${row.userId}:`, error);
+    console.error(`Raw unitsJson: ${row.unitsJson}`);
+  }
+  return { ...row, units };
 }
 
 export async function getActiveWorkoutPlan(
