@@ -41,29 +41,30 @@ workoutRouter.get("/plan/structures", async (_req, res) => {
 workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   console.info(`[workouts/plan] userId=${userId} - fetching plan state`);
-  let state;
   try {
-    state = await getPlanState(db, userId);
-    console.info(`[workouts/plan] userId=${userId} - plan state: ${state ? `structureKey=${state.structureKey}, cycleId=${state.cycleId}, cycleStatus=${state.cycleStatus}, unitsCount=${state.units.length}` : 'none'}`);
-  } catch (error) {
-    console.error(`[workouts/plan] userId=${userId} - error fetching plan state:`, error);
-    throw error;
-  }
+    let state;
+    try {
+      state = await getPlanState(db, userId);
+      console.info(`[workouts/plan] userId=${userId} - plan state: ${state ? `structureKey=${state.structureKey}, cycleId=${state.cycleId}, cycleStatus=${state.cycleStatus}, unitsCount=${state.units.length}` : 'none'}`);
+    } catch (error) {
+      console.error(`[workouts/plan] userId=${userId} - error fetching plan state:`, error);
+      throw error;
+    }
 
-  let activePlan, cycle, decision, recentlyTrained, snapshot;
-  try {
-    activePlan = await getActiveWorkoutPlan(db, userId);
-    cycle = await getCurrentCycle(db, userId);
-    decision = await getTodayWorkoutDecision(db, userId);
-    recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
-    snapshot = serializePlanSnapshot(state);
-    console.info(`[workouts/plan] userId=${userId} - activePlan=${activePlan?.structureKey}, cycleStatus=${cycle?.cycleStatus}, nextWorkout=${decision?.nextUnit?.label}, recentlyTrained=${recentlyTrained.map(m => m.muscle).join(',')}`);
-  } catch (error) {
-    console.error(`[workouts/plan] userId=${userId} - error fetching plan data:`, error);
-    throw error;
-  }
+    let activePlan, cycle, decision, recentlyTrained, snapshot;
+    try {
+      activePlan = await getActiveWorkoutPlan(db, userId);
+      cycle = await getCurrentCycle(db, userId);
+      decision = await getTodayWorkoutDecision(db, userId);
+      recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
+      snapshot = serializePlanSnapshot(state);
+      console.info(`[workouts/plan] userId=${userId} - activePlan=${activePlan?.structureKey}, cycleStatus=${cycle?.cycleStatus}, nextWorkout=${decision?.nextUnit?.label}, recentlyTrained=${recentlyTrained.map(m => m.muscle).join(',')}`);
+    } catch (error) {
+      console.error(`[workouts/plan] userId=${userId} - error fetching plan data:`, error);
+      throw error;
+    }
 
-  return res.json({
+    return res.json({
     activePlan: state
       ? {
           structureKey: state.structureKey,
@@ -97,6 +98,14 @@ workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
     recentlyTrainedMuscles: recentlyTrained,
     decision,
   });
+} catch (error: any) {
+  console.error(`[workouts/plan] userId=${userId} - UNHANDLED ERROR:`, error);
+  return res.status(500).json({
+    error: "Internal server error",
+    detail: error?.message || String(error),
+    stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
+  });
+}
 });
 
 workoutRouter.get("/plan/completed-units", async (req: AuthedRequest, res) => {
