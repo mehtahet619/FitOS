@@ -12,6 +12,7 @@ import { workoutRouter } from "./modules/workouts/routes";
 import { nutritionRouter } from "./modules/nutrition/routes";
 import { foodRouter } from "./modules/food/routes";
 import { progressRouter } from "./modules/progress/routes";
+import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
 
 const app = express();
@@ -37,6 +38,7 @@ app.use("/workouts", workoutRouter);
 app.use("/nutrition", nutritionRouter);
 app.use("/food", foodRouter);
 app.use("/progress", progressRouter);
+app.use("/muscles", musclesRouter);
 app.use("/gym", gymRouter);
 
 app.use((req: Request, res: Response) => {

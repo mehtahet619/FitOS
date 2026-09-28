@@ -15,6 +15,17 @@ const EQUIPMENT = [
   "Smith Machine",
   "Leg Press",
   "Lat Pulldown",
+  "Chest Press",
+  "Pec Deck",
+  "Leg Extension",
+  "Leg Curl",
+  "Preacher Curl",
+  "Assisted Pull-up",
+  "Kettlebells",
+  "Medicine Ball",
+  "Exercise Ball",
+  "EZ Curl Bar",
+  "Foam Roller",
 ];
 
 interface ExerciseSeed {

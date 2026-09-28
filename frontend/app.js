@@ -266,6 +266,7 @@ function switchTab(tab) {
   if (tab === "today") loadToday();
   if (tab === "workout") loadWorkout();
   if (tab === "diet") loadDiet();
+  if (tab === "gym-scan") loadGymScan();
   if (tab === "gym") loadGym();
 }
 
@@ -960,6 +961,269 @@ async function confirmQrCheckin() {
     return;
   }
   await loadGym();
+}
+
+/* ================= GYM SCAN ================= */
+async function loadGymScan() {
+  const el = $("gym-scan-content");
+  el.innerHTML = `<div class="empty-state">Loading…</div>`;
+  try {
+    const [equipment, plan] = await Promise.all([
+      Api.get("/equipment"),
+      Api.get("/workouts/plan"),
+    ]);
+    renderGymScan(equipment, plan);
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+function renderGymScan(equipment, plan) {
+  const el = $("gym-scan-content");
+  const hasActivePlan = plan?.activePlan;
+  const nextWorkout = plan?.nextWorkout?.label || null;
+  
+  const equipmentHtml = equipment
+    .filter(eq => eq.name !== "No Equipment")
+    .map(eq => `
+      <label class="chip" style="flex:1; justify-content:center; margin:4px;">
+        <input type="checkbox" name="gym-equipment" value="${eq.name}" style="display:none;">
+        <span style="pointer-events:none;">${eq.name}</span>
+      </label>
+    `).join("");
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-label">📷 Scan Your Gym</div>
+      <p class="card-sub" style="margin-bottom:16px;">Point your camera at the gym equipment to auto-detect what's available.</p>
+      <div class="camera-panel" style="aspect-ratio: 4/3; margin-bottom: 16px; border-radius: 12px; overflow: hidden;">
+        <video id="gym-scan-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>
+        <div class="camera-feedback" id="gym-scan-feedback" style="display:block; position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); color:white; display:flex; align-items:center; justify-content:center; font-size:14px; padding:20px;">
+          Tap "Start Scan" to begin
+        </div>
+      </div>
+      <div class="btn-row" style="margin-bottom:16px;">
+        <button class="btn btn-primary" id="gym-scan-start">📷 Start Scan</button>
+        <button class="btn btn-outline" id="gym-scan-cancel" style="display:none;">Cancel</button>
+      </div>
+      <div id="gym-scan-results" style="display:none; margin-top:16px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="card-label">✏️ Or Select Equipment Manually</div>
+      <p class="card-sub" style="margin-bottom:12px;">Toggle equipment you have access to, then generate a workout.</p>
+      <div class="chip-group" style="flex-wrap:wrap; gap:8px;">${equipmentHtml}</div>
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn btn-primary" id="gym-scan-generate" ${!hasActivePlan ? "disabled" : ""}>
+          ${hasActivePlan ? `Generate ${nextWorkout || "Workout"}` : "Select a plan first in Workout tab"}
+        </button>
+      </div>
+    </div>
+
+    ${hasActivePlan ? `
+      <div class="card" style="margin-top:16px; background:#fff8e1; border-color:#ffe0b2;">
+        <div class="card-label">📋 Active Plan: ${plan.activePlan?.structureLabel || plan.activePlan}</div>
+        <div class="card-sub">Next: ${nextWorkout || "New cycle available"}</div>
+        <div class="card-sub">Cycle: ${plan.cycleStatus}</div>
+      </div>
+    ` : ""}
+  `;
+
+  // Setup event listeners
+  const video = $("gym-scan-video");
+  const feedback = $("gym-scan-feedback");
+  const startBtn = $("gym-scan-start");
+  const cancelBtn = $("gym-scan-cancel");
+  const resultsDiv = $("gym-scan-results");
+  const generateBtn = $("gym-scan-generate");
+  let stream = null;
+  let detecting = false;
+
+  startBtn.addEventListener("click", async () => {
+    if (detecting) return;
+    
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      video.style.display = "block";
+      feedback.textContent = "Scanning... point camera at equipment";
+      feedback.style.display = "flex";
+      startBtn.style.display = "none";
+      cancelBtn.style.display = "inline-flex";
+      detecting = true;
+      resultsDiv.style.display = "none";
+      resultsDiv.innerHTML = "";
+
+      // Start detection loop
+      detectLoop();
+    } catch (e) {
+      feedback.textContent = "Camera permission denied";
+      feedback.style.display = "flex";
+    }
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    detecting = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    video.style.display = "none";
+    feedback.style.display = "none";
+    startBtn.style.display = "inline-flex";
+    cancelBtn.style.display = "none";
+  });
+
+  async function detectLoop() {
+    if (!detecting) return;
+    
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      const base64 = dataUrl.split(",")[1];
+      
+      try {
+        const result = await Api.post("/equipment/detect", { imageBase64: base64 });
+        if (result.configured && result.detections.length > 0) {
+          renderDetectionResults(result.detections, result.suggestedExercises);
+        }
+      } catch (e) {
+        console.error("Detection error:", e);
+      }
+    }
+    
+    if (detecting) requestAnimationFrame(detectLoop);
+  }
+
+  function renderDetectionResults(detections, suggestedExercises) {
+    const uniqueDetections = new Map();
+    detections.forEach(d => {
+      const existing = uniqueDetections.get(d.equipmentName);
+      if (!existing || d.confidence > existing.confidence) {
+        uniqueDetections.set(d.equipmentName, d);
+      }
+    });
+    
+    const detectionHtml = Array.from(uniqueDetections.values()).map(d => `
+      <div class="exercise-row" style="padding:12px; border-radius:12px; background:#f8f9fa; margin-bottom:8px;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${d.equipmentName}</div>
+          <div style="font-size:12px; color:#666;">${Math.round(d.confidence * 100)}% confidence</div>
+        </div>
+        <input type="checkbox" name="detected-equipment" value="${d.equipmentName}" checked 
+          style="width:20px; height:20px; accent-color:#86e3c4;">
+      </div>
+    `).join("");
+    
+    const suggestionsHtml = (suggestedExercises || []).slice(0, 4).map(ex => `
+      <div class="exercise-row" style="padding:8px 12px; border-radius:8px; background:#fff;">
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:13px;">${ex.name}</div>
+          <div style="font-size:11px; color:#666;">${ex.primaryMuscle} · ${ex.sets}×${ex.repRangeLow}-${ex.repRangeHigh}</div>
+        </div>
+      </div>
+    `).join("") || "<p class='card-sub' style='margin-top:8px;'>No exercises matched</p>";
+    
+    resultsDiv.innerHTML = `
+      <div class="card">
+        <div class="card-label">✅ Detected Equipment</div>
+        <p class="card-sub" style="margin-bottom:8px;">Uncheck any incorrect detections, then confirm.</p>
+        <div style="max-height:200px; overflow-y:auto;">${detectionHtml}</div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-primary" id="gym-scan-confirm">Confirm & Add to Gym</button>
+          <button class="btn btn-outline" id="gym-scan-rescan">Rescan</button>
+        </div>
+      </div>
+      ${suggestedExercises && suggestedExercises.length > 0 ? `
+        <div class="card" style="margin-top:12px;">
+          <div class="card-label">💡 Suggested Exercises</div>
+          ${suggestionsHtml}
+        </div>
+      ` : ""}
+    `;
+    
+    resultsDiv.style.display = "block";
+    feedback.style.display = "none";
+    cancelBtn.style.display = "none";
+    
+    // Confirm button
+    const confirmBtn = $("gym-scan-confirm");
+    const rescanBtn = $("gym-scan-rescan");
+    
+    confirmBtn.addEventListener("click", async () => {
+      const checkboxes = resultsDiv.querySelectorAll('input[name="detected-equipment"]:checked');
+      const confirmedNames = Array.from(checkboxes).map(cb => cb.value);
+      
+      if (confirmedNames.length === 0) {
+        alert("Please select at least one equipment");
+        return;
+      }
+      
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `<span class="spinner"></span> Saving...`;
+      
+      try {
+        await Api.post("/equipment/confirm", { 
+          detections: confirmedNames.map(name => ({ equipmentName: name, confidence: 1 })),
+          sessionId: `gym-scan-${Date.now()}`
+        });
+        
+        // Update manual equipment checkboxes
+        confirmedNames.forEach(name => {
+          const cb = el.querySelector(`input[name="gym-equipment"][value="${name}"]`);
+          if (cb) cb.checked = true;
+        });
+        
+        resultsDiv.innerHTML = `<div class="banner banner-success">✅ Added ${confirmedNames.join(", ")} to your gym!</div>`;
+        setTimeout(() => { resultsDiv.style.display = "none"; }, 3000);
+      } catch (e) {
+        resultsDiv.innerHTML = `<div class="banner banner-error">${e.message}</div>`;
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Confirm & Add to Gym";
+        detecting = false;
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        video.style.display = "none";
+        startBtn.style.display = "inline-flex";
+      }
+    });
+    
+    rescanBtn.addEventListener("click", () => {
+      resultsDiv.style.display = "none";
+      detecting = true;
+      feedback.style.display = "flex";
+      feedback.textContent = "Scanning... point camera at equipment";
+      detectLoop();
+    });
+  }
+
+  // Manual equipment generation
+  generateBtn.addEventListener("click", async () => {
+    if (!hasActivePlan) return;
+    
+    const checkboxes = el.querySelectorAll('input[name="gym-equipment"]:checked');
+    const equipmentNames = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (equipmentNames.length === 0) {
+      alert("Please select at least one equipment");
+      return;
+    }
+    
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = `<span class="spinner"></span> Generating...`;
+    
+    try {
+      await Api.post("/equipment/user/equipment", { equipmentNames });
+      // Switch to workout tab and generate
+      await Api.post("/workouts/generate", {});
+      switchTab("workout");
+    } catch (e) {
+      el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = `Generate ${nextWorkout || "Workout"}`;
+    }
+  });
 }
 
 /* ---------------- Kickoff ---------------- */

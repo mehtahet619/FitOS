@@ -34,6 +34,11 @@ const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   Legs: ["quads", "hamstrings", "glutes", "calves"],
   "Shoulders + Core": ["shoulders", "core"],
   "Full Body": ["chest", "back", "legs", "shoulders", "core"],
+  "Upper Body": ["chest", "back", "shoulders", "biceps", "triceps"],
+  "Lower Body": ["quads", "hamstrings", "glutes", "calves"],
+  "Full Body A": ["chest", "back", "legs", "shoulders", "core"],
+  "Full Body B": ["chest", "back", "legs", "shoulders", "core"],
+  "Full Body C": ["chest", "back", "legs", "shoulders", "core"],
 };
 export function musclesForFocus(focus: string): string[] {
   return FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"];
