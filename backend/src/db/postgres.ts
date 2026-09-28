@@ -142,7 +142,7 @@ export class PostgresTransaction {
 
   async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
     const result = await this.client.query<T>(toPostgresSql(sql), params);
-    return result.rows;
+    return result.rows.map(normalizePostgresRow);
   }
 
   async get<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {

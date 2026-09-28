@@ -55,12 +55,23 @@ export const PLAN_DEFINITIONS: Record<string, WorkoutUnit[]> = {
     { key: "back-biceps", label: "Back + Biceps", muscles: ["back", "biceps"], status: "PENDING" },
     { key: "legs-shoulders", label: "Legs + Shoulders", muscles: ["quads", "hamstrings", "glutes", "calves", "shoulders"], status: "PENDING" },
   ],
+  UPPER_LOWER: [
+    { key: "upper", label: "Upper Body", muscles: ["chest", "back", "shoulders", "biceps", "triceps"], status: "PENDING" },
+    { key: "lower", label: "Lower Body", muscles: ["quads", "hamstrings", "glutes", "calves"], status: "PENDING" },
+  ],
+  FULL_BODY: [
+    { key: "full-body-a", label: "Full Body A", muscles: ["chest", "back", "legs", "shoulders", "core"], status: "PENDING" },
+    { key: "full-body-b", label: "Full Body B", muscles: ["chest", "back", "legs", "shoulders", "core"], status: "PENDING" },
+    { key: "full-body-c", label: "Full Body C", muscles: ["chest", "back", "legs", "shoulders", "core"], status: "PENDING" },
+  ],
 };
 
 export const PLAN_LABELS: Record<string, string> = {
   PPL: "Push-Pull-Legs",
   INDIVIDUAL: "Individual Muscle Split",
   BRO: "Bro / Multi-Muscle Split",
+  UPPER_LOWER: "Upper/Lower Split",
+  FULL_BODY: "Full Body",
 };
 
 export type StructureKey = keyof typeof PLAN_DEFINITIONS;
@@ -140,17 +151,23 @@ export function serializePlanSnapshot(state: PlanState | undefined): {
 }
 
 function parseState(row: any): PlanState {
+  const userId = row?.userId ?? "unknown";
   let units: WorkoutUnit[] = [];
   try {
-    const parsed = JSON.parse(row.unitsJson);
-    if (Array.isArray(parsed)) {
-      units = parsed as WorkoutUnit[];
+    const unitsJson = row?.unitsJson;
+    if (!unitsJson) {
+      console.warn(`unitsJson is null/empty for user ${userId}, defaulting to empty array`);
     } else {
-      console.error(`Invalid unitsJson format for user ${row.userId}: expected array, got ${typeof parsed}`);
+      const parsed = JSON.parse(unitsJson);
+      if (Array.isArray(parsed)) {
+        units = parsed as WorkoutUnit[];
+      } else {
+        console.error(`Invalid unitsJson format for user ${userId}: expected array, got ${typeof parsed}`);
+      }
     }
   } catch (error) {
-    console.error(`Failed to parse unitsJson for user ${row.userId}:`, error);
-    console.error(`Raw unitsJson: ${row.unitsJson}`);
+    console.error(`Failed to parse unitsJson for user ${userId}:`, error);
+    console.error(`Raw unitsJson: ${row?.unitsJson}`);
   }
   return { ...row, units };
 }

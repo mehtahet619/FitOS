@@ -29,6 +29,58 @@ exerciseRouter.get("/", async (req, res) => {
   return res.json(result);
 });
 
+exerciseRouter.get("/by-equipment/:equipmentId", async (req, res) => {
+  const { equipmentId } = req.params;
+  const exercises = await db.all<any>(
+    `SELECT e.* FROM Exercise e
+     JOIN ExerciseEquipment ee ON ee.exerciseId = e.id
+     WHERE ee.equipmentId = ?`,
+    equipmentId
+  );
+
+  const result = await Promise.all(exercises.map(async (e) => ({
+    id: e.id,
+    name: e.name,
+    primaryMuscle: e.primaryMuscle,
+    secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
+    movementPattern: e.movementPattern,
+    difficulty: e.difficulty,
+    equipmentRequired: await equipmentNamesFor(e.id),
+  })));
+  return res.json(result);
+});
+
+exerciseRouter.get("/by-muscle/:muscleId", async (req, res) => {
+  const { muscleId } = req.params;
+  const muscle = await db.get<{ name: string }>(`SELECT name FROM Muscle WHERE id = ?`, muscleId);
+  if (!muscle) return res.status(404).json({ error: "Muscle not found" });
+
+  const exercises = await db.all<any>(
+    `SELECT e.* FROM Exercise e
+     JOIN ExerciseMuscle em ON em.exerciseId = e.id
+     WHERE em.muscleId = ?`,
+    muscleId
+  );
+
+  const result = await Promise.all(exercises.map(async (e) => {
+    const em = await db.get<{ role: string }>(
+      `SELECT role FROM ExerciseMuscle WHERE exerciseId = ? AND muscleId = ?`,
+      e.id, muscleId
+    );
+    return {
+      id: e.id,
+      name: e.name,
+      primaryMuscle: e.primaryMuscle,
+      secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
+      movementPattern: e.movementPattern,
+      difficulty: e.difficulty,
+      equipmentRequired: await equipmentNamesFor(e.id),
+      role: em?.role,
+    };
+  }));
+  return res.json({ muscle: muscle.name, exercises: result });
+});
+
 exerciseRouter.get("/:id", async (req, res) => {
   const e = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ error: "Exercise not found" });

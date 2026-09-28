@@ -126,9 +126,9 @@ describe("workout plan progression state machine", () => {
 
     it("exposes labels and structure listing", () => {
       const structures = listAvailableStructures();
-      expect(structures.map((s) => s.key)).toEqual(["PPL", "INDIVIDUAL", "BRO"]);
+      expect(structures.map((s) => s.key)).toEqual(["PPL", "INDIVIDUAL", "BRO", "UPPER_LOWER", "FULL_BODY"]);
       expect(structures.map((s) => s.label)).toEqual([
-        PLAN_LABELS.PPL, PLAN_LABELS.INDIVIDUAL, PLAN_LABELS.BRO,
+        PLAN_LABELS.PPL, PLAN_LABELS.INDIVIDUAL, PLAN_LABELS.BRO, PLAN_LABELS.UPPER_LOWER, PLAN_LABELS.FULL_BODY,
       ]);
     });
   });

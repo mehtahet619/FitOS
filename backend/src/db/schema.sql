@@ -41,7 +41,23 @@ CREATE TABLE IF NOT EXISTS UserProfile (
 CREATE TABLE IF NOT EXISTS Equipment (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
+  normalizedName TEXT,
+  category TEXT,
   isCustom INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS EquipmentAlias (
+  id TEXT PRIMARY KEY,
+  alias TEXT NOT NULL,
+  equipmentId TEXT NOT NULL REFERENCES Equipment(id),
+  UNIQUE(alias, equipmentId)
+);
+CREATE INDEX IF NOT EXISTS idx_equipment_alias_alias ON EquipmentAlias(alias);
+
+CREATE TABLE IF NOT EXISTS Muscle (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  category TEXT
 );
 
 CREATE TABLE IF NOT EXISTS UserEquipment (
@@ -63,10 +79,22 @@ CREATE TABLE IF NOT EXISTS Exercise (
   repRangeLow INTEGER NOT NULL,
   repRangeHigh INTEGER NOT NULL,
   instructions TEXT NOT NULL,
+  imageUrl TEXT,
   createdAt TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_exercise_muscle ON Exercise(primaryMuscle);
 CREATE INDEX IF NOT EXISTS idx_exercise_pattern ON Exercise(movementPattern);
+
+CREATE TABLE IF NOT EXISTS ExerciseMuscle (
+  id TEXT PRIMARY KEY,
+  exerciseId TEXT NOT NULL REFERENCES Exercise(id),
+  muscleId TEXT NOT NULL REFERENCES Muscle(id),
+  role TEXT NOT NULL CHECK(role IN ('PRIMARY', 'SECONDARY')),
+  weight REAL NOT NULL DEFAULT 1.0,
+  UNIQUE(exerciseId, muscleId, role)
+);
+CREATE INDEX IF NOT EXISTS idx_exercisemuscle_exercise ON ExerciseMuscle(exerciseId);
+CREATE INDEX IF NOT EXISTS idx_exercisemuscle_muscle ON ExerciseMuscle(muscleId);
 
 CREATE TABLE IF NOT EXISTS ExerciseEquipment (
   id TEXT PRIMARY KEY,
@@ -164,6 +192,33 @@ CREATE TABLE IF NOT EXISTS WorkoutHistory (
   recordedAt TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_history_user_exercise ON WorkoutHistory(userId, exerciseId);
+
+CREATE TABLE IF NOT EXISTS MuscleHistory (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL,
+  muscleId TEXT NOT NULL REFERENCES Muscle(id),
+  trainedAt TEXT NOT NULL,
+  volume REAL,
+  intensity REAL,
+  role TEXT NOT NULL CHECK(role IN ('PRIMARY', 'SECONDARY')),
+  exerciseId TEXT REFERENCES Exercise(id)
+);
+CREATE INDEX IF NOT EXISTS idx_musclehistory_user ON MuscleHistory(userId);
+CREATE INDEX IF NOT EXISTS idx_musclehistory_muscle ON MuscleHistory(muscleId);
+CREATE INDEX IF NOT EXISTS idx_musclehistory_trainedat ON MuscleHistory(trainedAt);
+
+CREATE TABLE IF NOT EXISTS EquipmentDetection (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id),
+  sessionId TEXT,
+  equipmentId TEXT REFERENCES Equipment(id),
+  confidence REAL NOT NULL,
+  source TEXT NOT NULL,
+  confirmed INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_equipmentdetection_user ON EquipmentDetection(userId);
+CREATE INDEX IF NOT EXISTS idx_equipmentdetection_session ON EquipmentDetection(sessionId);
 
 CREATE TABLE IF NOT EXISTS NutritionProfile (
   id TEXT PRIMARY KEY,

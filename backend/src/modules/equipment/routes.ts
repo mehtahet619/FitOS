@@ -64,6 +64,54 @@ equipmentRouter.get("/user/equipment", requireAuth, async (req: AuthedRequest, r
   return res.json(result);
 });
 
+const confirmSchema = z.object({
+  detections: z.array(z.object({
+    equipmentName: z.string().min(1),
+    confidence: z.number().min(0).max(1),
+    rawLabel: z.string().optional(),
+    boundingBox: z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number(),
+    }).optional(),
+  })),
+  sessionId: z.string().optional(),
+});
+
+// Confirm equipment detections from AI scan - stores confirmed detections
+equipmentRouter.post("/confirm", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = confirmSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+
+  const userId = req.userId!;
+  const { detections, sessionId } = parsed.data;
+
+  const results = [];
+  for (const detection of detections) {
+    const eq = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, detection.equipmentName);
+    if (!eq) continue;
+
+    const id = uuidv4();
+    const ts = new Date().toISOString();
+    await db.run(
+      `INSERT INTO EquipmentDetection (id, userId, sessionId, equipmentId, confidence, source, confirmed, createdAt)
+       VALUES (?, ?, ?, ?, ?, 'roboflow', 1, ?)`,
+      id, userId, sessionId || null, eq.id, detection.confidence, ts
+    );
+
+    // Also add to user's equipment if not already there
+    await db.run(
+      `INSERT INTO UserEquipment (id, userId, equipmentId) VALUES (?, ?, ?) ON CONFLICT(userId, equipmentId) DO NOTHING`,
+      uuidv4(), userId, eq.id
+    );
+
+    results.push({ ...detection, equipmentId: eq.id, confirmed: true });
+  }
+
+  return res.json({ confirmed: results });
+});
+
 const detectSchema = z.object({
   imageBase64: z.string().min(100), // raw base64, no "data:image/..." prefix
 });
