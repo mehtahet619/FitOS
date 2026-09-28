@@ -293,12 +293,13 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
     workout.id
   );
-  return res.json({
-    id: workout.id,
-    focus: workout.focus,
-    status: workout.status,
-    durationMin: workout.durationMin,
-    exercises: exercises.map((exercise) => ({
+  // Fetch equipment for each exercise
+  const exercisesWithEquip = await Promise.all(exercises.map(async (exercise) => {
+    const equipRows = await db.all<{ name: string }>(
+      `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+      exercise.exerciseId
+    );
+    return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
       name: exercise.exerciseName,
@@ -309,7 +310,15 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       repRangeHigh: exercise.repRangeHigh,
       status: exercise.status,
       painReported: !!exercise.painReported,
-    })),
+      equipmentRequired: equipRows.map((r) => r.name),
+    };
+  }));
+  return res.json({
+    id: workout.id,
+    focus: workout.focus,
+    status: workout.status,
+    durationMin: workout.durationMin,
+    exercises: exercisesWithEquip,
   });
 });
 

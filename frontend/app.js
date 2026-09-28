@@ -660,6 +660,11 @@ function renderWorkout(workout, plan) {
     listEl.appendChild(row);
   });
 
+  // Helper: check if exercise requires equipment
+  function exerciseRequiresEquipment(ex: any) {
+    return ex.equipmentRequired && ex.equipmentRequired.length > 0;
+  }
+
   listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -677,6 +682,19 @@ function renderWorkout(workout, plan) {
         btn.textContent = "No equipment?";
       }
     });
+  });
+
+  // Hide "No equipment?" button for bodyweight exercises
+  listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
+    const row = btn.closest('.exercise-row');
+    if (row) {
+      const nameEl = row.querySelector('.exercise-name');
+      const exName = nameEl ? nameEl.textContent : '';
+      const ex = workout.exercises.find((e: any) => e.name === exName);
+      if (ex && !exerciseRequiresEquipment(ex)) {
+        btn.style.display = 'none';
+      }
+    }
   });
 
   const completeBtn = $("complete-workout-btn");

@@ -37,7 +37,7 @@ export interface EquipmentVisionProvider {
   detectEquipment(imageBase64: string): Promise<{ configured: boolean; detections: EquipmentDetection[] }>;
 }
 
-// Fallback mapping for when database is not available
+// Fallback mapping for legacy Roboflow hosted models (class names -> equipment names)
 const FALLBACK_EQUIPMENT_LABEL_MAP: Record<string, string> = {
   dumbbell: "Dumbbells",
   dumbbells: "Dumbbells",
@@ -64,6 +64,86 @@ const FALLBACK_EQUIPMENT_LABEL_MAP: Record<string, string> = {
   "leg press": "Leg Press",
   "lat pulldown": "Lat Pulldown",
   kettlebell: "Dumbbells",
+};
+
+// SAM3 text prompts for equipment detection
+// Keys are the text prompts sent to SAM3, values are the canonical equipment names
+const SAM3_EQUIPMENT_PROMPTS: Record<string, string> = {
+  "chest press machine": "Chest Press",
+  "machine chest press": "Chest Press",
+  "seated chest press": "Chest Press",
+  "pec deck machine": "Pec Deck",
+  "pec deck": "Pec Deck",
+  "butterfly machine": "Pec Deck",
+  "lat pulldown machine": "Lat Pulldown",
+  "lat pulldown": "Lat Pulldown",
+  "pulldown machine": "Lat Pulldown",
+  "seated row machine": "Cable Machine",
+  "cable machine": "Cable Machine",
+  "cable crossover": "Cable Machine",
+  "functional trainer": "Cable Machine",
+  "leg press machine": "Leg Press",
+  "leg press": "Leg Press",
+  "seated leg press": "Leg Press",
+  "leg extension machine": "Leg Extension",
+  "leg extension": "Leg Extension",
+  "seated leg extension": "Leg Extension",
+  "leg curl machine": "Leg Curl",
+  "leg curl": "Leg Curl",
+  "seated leg curl": "Leg Curl",
+  "lying leg curl": "Leg Curl",
+  "standing leg curl": "Leg Curl",
+  "shoulder press machine": "Machine",
+  "smith machine": "Smith Machine",
+  "squat rack": "Squat Rack",
+  "power rack": "Squat Rack",
+  "barbell": "Barbell",
+  "dumbbells": "Dumbbells",
+  "bench": "Bench",
+  "flat bench": "Bench",
+  "adjustable bench": "Bench",
+  "incline bench": "Bench",
+  "decline bench": "Bench",
+  "treadmill": "Treadmill",
+  "running machine": "Treadmill",
+  "exercise bike": "Exercise Bike",
+  "stationary bike": "Exercise Bike",
+  "spin bike": "Exercise Bike",
+  "cycling machine": "Exercise Bike",
+  "elliptical": "Exercise Bike",
+  "kettlebell": "Kettlebells",
+  "kettlebells": "Kettlebells",
+  "medicine ball": "Medicine Ball",
+  "med ball": "Medicine Ball",
+  "wall ball": "Medicine Ball",
+  "exercise ball": "Exercise Ball",
+  "stability ball": "Exercise Ball",
+  "swiss ball": "Exercise Ball",
+  "yoga ball": "Exercise Ball",
+  "ez curl bar": "EZ Curl Bar",
+  "ez bar": "EZ Curl Bar",
+  "curl bar": "EZ Curl Bar",
+  "foam roller": "Foam Roller",
+  "foam roll": "Foam Roller",
+  "roller": "Foam Roller",
+  "pull-up bar": "Pull-up Bar",
+  "pullup bar": "Pull-up Bar",
+  "chin-up bar": "Pull-up Bar",
+  "chinup bar": "Pull-up Bar",
+  "pull up station": "Pull-up Bar",
+  "resistance bands": "Resistance Bands",
+  "resistance band": "Resistance Bands",
+  "exercise bands": "Resistance Bands",
+  "loop bands": "Resistance Bands",
+  "tube bands": "Resistance Bands",
+  "assisted pull-up": "Assisted Pull-up",
+  "assisted pullup": "Assisted Pull-up",
+  "assisted chin-up": "Assisted Pull-up",
+  "assisted chinup": "Assisted Pull-up",
+  "pull-up assist machine": "Assisted Pull-up",
+  "preacher curl": "Preacher Curl",
+  "preacher curl bench": "Preacher Curl",
+  "preacher bench": "Preacher Curl",
 };
 
 let equipmentAliasCache: Map<string, string> | null = null;
@@ -141,7 +221,7 @@ export class RoboflowEquipmentWorkflowProvider implements EquipmentVisionProvide
     try {
       const rawDetections = await this.workflowProvider.detectEquipment(
         imageBase64,
-        FALLBACK_EQUIPMENT_LABEL_MAP
+        SAM3_EQUIPMENT_PROMPTS
       );
       const detections: EquipmentDetection[] = [];
       for (const d of rawDetections) {
