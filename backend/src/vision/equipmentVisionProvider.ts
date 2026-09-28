@@ -23,6 +23,7 @@
  * detection.
  */
 
+import { db } from "../db/client";
 import { RoboflowWorkflowProvider } from "./roboflowWorkflowProvider";
 
 export interface EquipmentDetection {
@@ -36,9 +37,8 @@ export interface EquipmentVisionProvider {
   detectEquipment(imageBase64: string): Promise<{ configured: boolean; detections: EquipmentDetection[] }>;
 }
 
-// Model class names -> our Equipment table names. Extend this if you swap
-// in a model with more/different classes.
-const EQUIPMENT_LABEL_MAP: Record<string, string> = {
+// Fallback mapping for when database is not available
+const FALLBACK_EQUIPMENT_LABEL_MAP: Record<string, string> = {
   dumbbell: "Dumbbells",
   dumbbells: "Dumbbells",
   barbell: "Barbell",
@@ -63,8 +63,62 @@ const EQUIPMENT_LABEL_MAP: Record<string, string> = {
   "smith machine": "Smith Machine",
   "leg press": "Leg Press",
   "lat pulldown": "Lat Pulldown",
-  kettlebell: "Dumbbells", // closest existing category in our seed data
+  kettlebell: "Dumbbells",
 };
+
+let equipmentAliasCache: Map<string, string> | null = null;
+
+async function loadEquipmentAliases(): Promise<Map<string, string>> {
+  if (equipmentAliasCache) return equipmentAliasCache;
+
+  const map = new Map<string, string>();
+  try {
+    const rows = await db.all<{ alias: string; equipmentId: string }>(
+      `SELECT alias, equipmentId FROM EquipmentAlias`
+    );
+    const equipmentNames = new Map<string, string>();
+    const equipmentRows = await db.all<{ id: string; name: string }>(
+      `SELECT id, name FROM Equipment`
+    );
+    for (const eq of equipmentRows) {
+      equipmentNames.set(eq.id, eq.name);
+    }
+    for (const row of rows) {
+      const equipmentName = equipmentNames.get(row.equipmentId);
+      if (equipmentName) {
+        map.set(row.alias.toLowerCase().trim(), equipmentName);
+      }
+    }
+    equipmentAliasCache = map;
+  } catch (e) {
+    console.warn("Failed to load equipment aliases from database, using fallback:", e);
+  }
+  return map;
+}
+
+function normalizeLabel(label: string): string {
+  return label.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, " ");
+}
+
+async function mapDetectionLabel(label: string): Promise<string | null> {
+  const normalized = normalizeLabel(label);
+  const aliases = await loadEquipmentAliases();
+
+  // Try exact match first
+  if (aliases.has(normalized)) {
+    return aliases.get(normalized)!;
+  }
+
+  // Try fuzzy match - check if any alias is contained in the label or vice versa
+  for (const [alias, equipmentName] of aliases.entries()) {
+    if (normalized.includes(alias) || alias.includes(normalized)) {
+      return equipmentName;
+    }
+  }
+
+  // Fallback to hardcoded map
+  return FALLBACK_EQUIPMENT_LABEL_MAP[normalized] || null;
+}
 
 export class MockEquipmentVisionProvider implements EquipmentVisionProvider {
   async detectEquipment(): Promise<{ configured: boolean; detections: EquipmentDetection[] }> {
@@ -85,10 +139,17 @@ export class RoboflowEquipmentWorkflowProvider implements EquipmentVisionProvide
 
   async detectEquipment(imageBase64: string): Promise<{ configured: boolean; detections: EquipmentDetection[] }> {
     try {
-      const detections = await this.workflowProvider.detectEquipment(
+      const rawDetections = await this.workflowProvider.detectEquipment(
         imageBase64,
-        EQUIPMENT_LABEL_MAP
+        FALLBACK_EQUIPMENT_LABEL_MAP
       );
+      const detections: EquipmentDetection[] = [];
+      for (const d of rawDetections) {
+        const mapped = await mapDetectionLabel(d.rawLabel);
+        if (mapped) {
+          detections.push({ ...d, equipmentName: mapped });
+        }
+      }
       return { configured: true, detections };
     } catch (e: any) {
       throw new Error(`Roboflow workflow failed: ${e.message}`);
@@ -125,7 +186,7 @@ export class RoboflowEquipmentVisionProvider implements EquipmentVisionProvider 
     // Dedupe by mapped equipment name, keeping the highest confidence seen.
     const best = new Map<string, EquipmentDetection>();
     for (const p of predictions) {
-      const mapped = EQUIPMENT_LABEL_MAP[p.class.toLowerCase().trim()];
+      const mapped = await mapDetectionLabel(p.class);
       if (!mapped) continue; // unmapped class — ignore rather than guess
       const existing = best.get(mapped);
       if (!existing || p.confidence > existing.confidence) {

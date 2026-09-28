@@ -19,6 +19,8 @@
     "migrate:postgres:prod": "node dist/db/migrate-postgres.js",
     "seed": "ts-node src/db/seed.ts",
     "seed:prod": "node dist/db/seed.js",
+    "import:exercises": "ts-node scripts/import-exercises.ts",
+    "seed:equipment-aliases": "ts-node scripts/seed-equipment-aliases.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -30,6 +32,7 @@
     "express-async-errors": "^3.1.1",
     "express-rate-limit": "^7.4.0",
     "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
     "pg": "^8.23.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
