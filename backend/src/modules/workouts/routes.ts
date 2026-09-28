@@ -299,6 +299,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
       exercise.exerciseId
     );
+    const equipmentRequired = equipRows.map((r) => r.name);
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
@@ -310,7 +311,8 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       repRangeHigh: exercise.repRangeHigh,
       status: exercise.status,
       painReported: !!exercise.painReported,
-      equipmentRequired: equipRows.map((r) => r.name),
+      equipmentRequired,
+      requiresEquipment: equipmentRequired.length > 0,
     };
   }));
   return res.json({
@@ -401,6 +403,14 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     `SELECT equipmentId FROM UserEquipment WHERE userId = ?`, req.userId!);
   const base = await loadExerciseWithLinks(db, exerciseRow.exerciseId);
   if (!base) return res.status(404).json({ error: "Exercise not found" });
+
+  // Bodyweight exercises (no equipment required) cannot be substituted for equipment reasons
+  if (reason === "no_equipment" && base.requiredEquipmentIds.length === 0) {
+    return res.status(422).json({
+      error: `"${base.name}" is a bodyweight exercise and does not require equipment. It cannot be substituted for equipment reasons.`,
+    });
+  }
+
   const candidates = await loadSubstituteCandidates(db, base.id);
   const usedRows = await db.all<{ exerciseId: string }>(
     `SELECT exerciseId FROM WorkoutExercise WHERE workoutId = ?`, req.params.id);

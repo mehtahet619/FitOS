@@ -19,6 +19,7 @@ export interface GeneratedExercise {
   wasSubstituted: boolean;
   originalExerciseName?: string;
   equipmentRequired: string[]; // equipment names required for this exercise
+  requiresEquipment: boolean; // true if exercise needs gym equipment, false for bodyweight
 }
 
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
@@ -192,6 +193,7 @@ export async function generateWorkout(
         exercise.id
       );
       const equipmentRequired = equipRows.map((r) => r.name);
+      const requiresEquipment = equipmentRequired.length > 0;
       generated.push({
         exerciseId: exercise.id,
         name: exercise.name,
@@ -204,6 +206,7 @@ export async function generateWorkout(
         wasSubstituted,
         originalExerciseName,
         equipmentRequired,
+        requiresEquipment,
       });
     }
   }
