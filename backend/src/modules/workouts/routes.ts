@@ -300,10 +300,11 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       exercise.exerciseId
     );
     const equipmentRequired = equipRows.map((r) => r.name);
+    const requiresEquipment = equipmentRequired.length > 0;
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
-      name: exercise.exerciseName,
+      name: exercise.exerciseName, // consistent name property
       primaryMuscle: exercise.primaryMuscle,
       instructions: exercise.instructions,
       targetSets: exercise.targetSets,
@@ -312,7 +313,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       status: exercise.status,
       painReported: !!exercise.painReported,
       equipmentRequired,
-      requiresEquipment: equipmentRequired.length > 0,
+      requiresEquipment,
     };
   }));
   return res.json({
@@ -404,11 +405,25 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const base = await loadExerciseWithLinks(db, exerciseRow.exerciseId);
   if (!base) return res.status(404).json({ error: "Exercise not found" });
 
-  // Bodyweight exercises (no equipment required) cannot be substituted for equipment reasons
-  if (reason === "no_equipment" && base.requiredEquipmentIds.length === 0) {
+  const isBodyweight = base.requiredEquipmentIds.length === 0;
+
+  // Bodyweight exercises cannot be substituted for equipment reasons
+  if (reason === "no_equipment" && isBodyweight) {
     return res.status(422).json({
       error: `"${base.name}" is a bodyweight exercise and does not require equipment. It cannot be substituted for equipment reasons.`,
+      requiresEquipment: false,
     });
+  }
+
+  // For equipment exercises, check if user has the required equipment
+  if (reason === "no_equipment" && !isBodyweight) {
+    const hasEquipment = base.requiredEquipmentIds.every((id) => equipmentRows.some((row) => row.equipmentId === id));
+    if (hasEquipment) {
+      return res.status(422).json({
+        error: `"${base.name}" requires equipment you already have. Use "pain" or "preference" reason to swap.`,
+        requiresEquipment: true,
+      });
+    }
   }
 
   const candidates = await loadSubstituteCandidates(db, base.id);
@@ -421,6 +436,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   if (!substitute)
     return res.status(422).json({
       error: `No performable substitute found for "${base.name}" with your current equipment. Consider adding equipment or skipping this exercise.`,
+      requiresEquipment: !isBodyweight,
     });
   await db.run(
     `UPDATE WorkoutExercise SET exerciseId = ?, replacedFromId = ?, status = 'replaced', targetSets = ?, repRangeLow = ?, repRangeHigh = ? WHERE id = ?`,
