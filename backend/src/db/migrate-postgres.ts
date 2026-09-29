@@ -18,6 +18,7 @@ async function main() {
   await database.exec(`ALTER TABLE Equipment ADD COLUMN IF NOT EXISTS category TEXT`);
   await database.exec(`ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT`);
   await database.exec(`ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER`);
   await database.exec(`
     CREATE TABLE IF NOT EXISTS WorkoutCycleHistory (
       id TEXT PRIMARY KEY,

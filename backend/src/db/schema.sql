@@ -128,9 +128,11 @@ CREATE TABLE IF NOT EXISTS Workout (
   status TEXT NOT NULL DEFAULT 'pending',
   durationMin INTEGER NOT NULL,
   createdAt TEXT NOT NULL,
-  completedAt TEXT
+  completedAt TEXT,
+  planStepIndex INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_workout_user ON Workout(userId);
+CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex);
 
 CREATE TABLE IF NOT EXISTS WorkoutPlanState (
   id TEXT PRIMARY KEY,

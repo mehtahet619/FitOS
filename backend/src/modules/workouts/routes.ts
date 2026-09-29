@@ -197,7 +197,6 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const state = await getPlanState(db, userId);
   const requiredUnit = state ? nextUnit(state) : undefined;
 
-  if (state?.activeWorkoutId) return res.status(409).json({ error: "Complete the active workout before generating another one." });
   if (!state) return res.status(409).json({ error: "Select a workout structure before generating a workout." });
   if (state.cycleStatus === "COMPLETED" || !requiredUnit) {
     return res.status(409).json({
@@ -212,6 +211,63 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   if (requestedFocus && requestedFocus !== focus) {
     return res.status(409).json({
       error: `Your active plan requires ${focus} next. Remaining: ${remainingUnits(state).map((unit) => unit.label).join(", ")}.`,
+    });
+  }
+
+  // Check if there's already a workout for the current plan step
+  const currentPlanStepIndex = state.currentIndex;
+  const existingWorkout = await db.get<any>(
+    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
+    userId, currentPlanStepIndex
+  );
+
+  if (existingWorkout) {
+    // Return the existing workout with its exercises
+    const existingExercises = await db.all<any>(
+      `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
+       FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
+       WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
+      existingWorkout.id
+    );
+    const exercisesWithEquip = await Promise.all(existingExercises.map(async (ex) => {
+      const equipRows = await db.all<{ name: string }>(
+        `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+        ex.exerciseId
+      );
+      const equipmentRequired = equipRows.map((r) => r.name);
+      return {
+        workoutExerciseId: ex.id,
+        exerciseId: ex.exerciseId,
+        name: ex.name,
+        primaryMuscle: ex.primaryMuscle,
+        instructions: ex.instructions,
+        targetSets: ex.targetSets,
+        repRangeLow: ex.repRangeLow,
+        repRangeHigh: ex.repRangeHigh,
+        status: ex.status,
+        painReported: !!ex.painReported,
+        equipmentRequired,
+        requiresEquipment: equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight",
+      };
+    }));
+
+    return res.json({
+      workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
+      exercises: existingExercises.map((exercise, idx) => ({
+        workoutExerciseId: exercise.id,
+        exerciseId: exercise.exerciseId,
+        name: exercise.name,
+        primaryMuscle: exercise.primaryMuscle,
+        instructions: exercise.instructions,
+        sets: exercise.defaultSets,
+        repRangeLow: exercise.repRangeLow,
+        repRangeHigh: exercise.repRangeHigh,
+        suggestedWeightKg: null,
+        wasSubstituted: false,
+        equipmentRequired: exercise.equipmentRequired,
+        requiresEquipment: exercise.requiresEquipment,
+      })),
+      summary: null, // No summary for existing workout
     });
   }
 
@@ -239,8 +295,8 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const ts = nowIso();
   const workoutExerciseIds: string[] = [];
   await db.run(
-    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL)`,
-    workoutId, userId, focus, profile.sessionMinutes, ts
+    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?)`,
+    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex
   );
   if (state)
     await db.run(`UPDATE WorkoutPlanState SET activeWorkoutId = ? WHERE userId = ?`, workoutId, userId);
@@ -293,12 +349,28 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
 });
 
 workoutRouter.get("/today", async (req: AuthedRequest, res) => {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const workout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,
-    req.userId!, startOfDay.toISOString()
+  const userId = req.userId!;
+  
+  // Get current plan state to find the current plan step
+  const state = await getPlanState(db, userId);
+  const currentPlanStepIndex = state?.currentIndex ?? 0;
+  
+  // First try to find a pending workout for the current plan step
+  let workout = await db.get<any>(
+    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
+    userId, currentPlanStepIndex
   );
+  
+  // Fallback: if no pending workout for current step, check for any workout today
+  if (!workout) {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    workout = await db.get<any>(
+      `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,
+      userId, startOfDay.toISOString()
+    );
+  }
+  
   if (!workout) return res.status(404).json({ error: "No workout generated today yet. POST /workouts/generate" });
   const exercises = await db.all<any>(
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,

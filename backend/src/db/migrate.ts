@@ -36,6 +36,11 @@ db.exec(schema).then(async () => {
   }
 
   try {
+    await db.exec(`ALTER TABLE Workout ADD COLUMN planStepIndex INTEGER`);
+  } catch {
+  }
+
+  try {
     await db.exec(`CREATE TABLE IF NOT EXISTS WorkoutCycleHistory (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL REFERENCES User(id),
