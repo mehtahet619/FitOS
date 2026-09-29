@@ -165,13 +165,23 @@ $("auth-submit").addEventListener("click", async () => {
     banner(bannerEl, "error", "Enter an email and password.");
     return;
   }
+  const btn = $("auth-submit");
+  btn.disabled = true;
+  btn.textContent = "Loading…";
   try {
     const path = State.isRegisterMode ? "/auth/register" : "/auth/login";
+    console.log("API_BASE:", window.API_BASE);
+    console.log("Attempting", path, "with email:", email);
     const data = await Api.post(path, { email, password });
+    console.log("Auth response:", data);
     Api.setTokens(data.accessToken, data.refreshToken);
     await boot();
   } catch (e) {
+    console.error("Auth error:", e);
     banner(bannerEl, "error", e.message || "Something went wrong.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = State.isRegisterMode ? "Sign up" : "Log in";
   }
 });
 
