@@ -165,13 +165,23 @@ $("auth-submit").addEventListener("click", async () => {
     banner(bannerEl, "error", "Enter an email and password.");
     return;
   }
+  const btn = $("auth-submit");
+  btn.disabled = true;
+  btn.textContent = "Loading…";
   try {
     const path = State.isRegisterMode ? "/auth/register" : "/auth/login";
+    console.log("API_BASE:", window.API_BASE);
+    console.log("Attempting", path, "with email:", email);
     const data = await Api.post(path, { email, password });
+    console.log("Auth response:", data);
     Api.setTokens(data.accessToken, data.refreshToken);
     await boot();
   } catch (e) {
+    console.error("Auth error:", e);
     banner(bannerEl, "error", e.message || "Something went wrong.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = State.isRegisterMode ? "Sign up" : "Log in";
   }
 });
 
@@ -647,23 +657,19 @@ function renderWorkout(workout, plan) {
   workout.exercises.forEach((ex) => {
     const row = document.createElement("div");
     row.className = "exercise-row";
+    const isBodyweight = !ex.requiresEquipment;
     row.innerHTML = `
       <div>
         <div class="exercise-name">${ex.name}</div>
         <div class="exercise-meta">${ex.primaryMuscle} · ${ex.targetSets} sets × ${ex.repRangeLow}-${ex.repRangeHigh} reps</div>
-        <div class="exercise-meta">${ex.status}${ex.painReported ? " · ⚠️ pain reported" : ""}</div>
+        <div class="exercise-meta">${ex.status}${ex.painReported ? " · ⚠️ pain reported" : ""}${isBodyweight ? " · 🏋️ Bodyweight" : ""}</div>
       </div>
       <div class="btn-row" style="width:auto;">
-        <button class="btn btn-outline" style="width:auto; padding:8px 12px;" data-action="swap" data-id="${ex.workoutExerciseId}">No equipment?</button>
+        ${!isBodyweight ? `<button class="btn btn-outline" style="width:auto; padding:8px 12px;" data-action="swap" data-id="${ex.workoutExerciseId}">No equipment?</button>` : ''}
       </div>
     `;
     listEl.appendChild(row);
   });
-
-  // Helper: check if exercise requires equipment
-  function exerciseRequiresEquipment(ex: any) {
-    return ex.equipmentRequired && ex.equipmentRequired.length > 0;
-  }
 
   listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -682,19 +688,6 @@ function renderWorkout(workout, plan) {
         btn.textContent = "No equipment?";
       }
     });
-  });
-
-  // Hide "No equipment?" button for bodyweight exercises
-  listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
-    const row = btn.closest('.exercise-row');
-    if (row) {
-      const nameEl = row.querySelector('.exercise-name');
-      const exName = nameEl ? nameEl.textContent : '';
-      const ex = workout.exercises.find((e: any) => e.name === exName);
-      if (ex && !exerciseRequiresEquipment(ex)) {
-        btn.style.display = 'none';
-      }
-    }
   });
 
   const completeBtn = $("complete-workout-btn");

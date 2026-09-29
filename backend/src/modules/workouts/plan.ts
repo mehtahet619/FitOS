@@ -612,7 +612,7 @@ export async function getExercisesForWorkout(
   database: DatabaseLike,
   userId: string,
   workoutUnit: WorkoutUnit
-): Promise<Array<{ exerciseId: string; name: string; primaryMuscle: string; equipmentRequired: string[] }>> {
+): Promise<Array<{ exerciseId: string; name: string; primaryMuscle: string; equipmentRequired: string[]; requiresEquipment: boolean }>> {
   const muscles = workoutUnit.muscles;
   if (muscles.length === 0) return [];
 
@@ -652,6 +652,7 @@ export async function getExercisesForWorkout(
         name: row.name as string,
         primaryMuscle: row.primaryMuscle as string,
         equipmentRequired: names,
+        requiresEquipment: names.length > 0 && names[0] !== "Bodyweight",
         isPerformable,
       };
     })
