@@ -184,9 +184,10 @@ async function main() {
   const ts = nowIso();
   for (const ex of EXERCISES) {
     const id = uuidv4();
+    const requiresEquipment = ex.equipment.length > 0 ? 1 : 0;
     await db.run(
-      `INSERT INTO Exercise (id, name, primaryMuscle, secondaryMuscles, movementPattern, difficulty, defaultSets, repRangeLow, repRangeHigh, instructions, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO NOTHING`,
+      `INSERT INTO Exercise (id, name, primaryMuscle, secondaryMuscles, movementPattern, difficulty, defaultSets, repRangeLow, repRangeHigh, instructions, requiresEquipment, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO NOTHING`,
       id,
       ex.name,
       ex.primaryMuscle,
@@ -197,6 +198,7 @@ async function main() {
       ex.repRangeLow,
       ex.repRangeHigh,
       ex.instructions,
+      requiresEquipment,
       ts
     );
     const row = await db.get<{ id: string }>(`SELECT id FROM Exercise WHERE name = ?`, ex.name);

@@ -673,6 +673,11 @@ function renderWorkout(workout, plan) {
 
   listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
+      const ex = workout.exercises.find((e) => e.workoutExerciseId === btn.dataset.id);
+      if (ex && !ex.requiresEquipment) {
+        el.innerHTML = `<div class="banner banner-error">This exercise is bodyweight and does not require equipment.</div>` + el.innerHTML;
+        return;
+      }
       btn.disabled = true;
       btn.textContent = "Swapping…";
       try {
@@ -684,6 +689,7 @@ function renderWorkout(workout, plan) {
         await loadWorkout();
       } catch (e) {
         el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
+      } finally {
         btn.disabled = false;
         btn.textContent = "No equipment?";
       }

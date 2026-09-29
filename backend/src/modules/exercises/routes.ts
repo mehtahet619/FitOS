@@ -17,16 +17,31 @@ exerciseRouter.get("/", async (req, res) => {
     ? await db.all<any>(`SELECT * FROM Exercise WHERE primaryMuscle = ?`, String(muscle))
     : await db.all<any>(`SELECT * FROM Exercise`);
 
-  const result = await Promise.all(exercises.map(async (e) => ({
+  const results: Array<{
+    id: string;
+    name: string;
+    primaryMuscle: string;
+    secondaryMuscles: string[];
+    movementPattern: string;
+    difficulty: string;
+    equipmentRequired: string[];
+    requiresEquipment: boolean;
+  }> = [];
+
+  for (const e of exercises) {
+    const equipmentRequired = await equipmentNamesFor(e.id);
+    results.push({
       id: e.id,
       name: e.name,
       primaryMuscle: e.primaryMuscle,
       secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
       movementPattern: e.movementPattern,
       difficulty: e.difficulty,
-      equipmentRequired: await equipmentNamesFor(e.id),
-  })));
-  return res.json(result);
+      equipmentRequired,
+      requiresEquipment: equipmentRequired.length > 0,
+    });
+  }
+  return res.json(results);
 });
 
 exerciseRouter.get("/by-equipment/:equipmentId", async (req, res) => {
@@ -38,16 +53,31 @@ exerciseRouter.get("/by-equipment/:equipmentId", async (req, res) => {
     equipmentId
   );
 
-  const result = await Promise.all(exercises.map(async (e) => ({
-    id: e.id,
-    name: e.name,
-    primaryMuscle: e.primaryMuscle,
-    secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
-    movementPattern: e.movementPattern,
-    difficulty: e.difficulty,
-    equipmentRequired: await equipmentNamesFor(e.id),
-  })));
-  return res.json(result);
+  const results: Array<{
+    id: string;
+    name: string;
+    primaryMuscle: string;
+    secondaryMuscles: string[];
+    movementPattern: string;
+    difficulty: string;
+    equipmentRequired: string[];
+    requiresEquipment: boolean;
+  }> = [];
+
+  for (const e of exercises) {
+    const equipmentRequired = await equipmentNamesFor(e.id);
+    results.push({
+      id: e.id,
+      name: e.name,
+      primaryMuscle: e.primaryMuscle,
+      secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
+      movementPattern: e.movementPattern,
+      difficulty: e.difficulty,
+      equipmentRequired,
+      requiresEquipment: equipmentRequired.length > 0,
+    });
+  }
+  return res.json(results);
 });
 
 exerciseRouter.get("/by-muscle/:muscleId", async (req, res) => {
@@ -62,28 +92,43 @@ exerciseRouter.get("/by-muscle/:muscleId", async (req, res) => {
     muscleId
   );
 
-  const result = await Promise.all(exercises.map(async (e) => {
+  const results: Array<{
+    id: string;
+    name: string;
+    primaryMuscle: string;
+    secondaryMuscles: string[];
+    movementPattern: string;
+    difficulty: string;
+    equipmentRequired: string[];
+    requiresEquipment: boolean;
+    role: string | undefined;
+  }> = [];
+
+  for (const e of exercises) {
     const em = await db.get<{ role: string }>(
       `SELECT role FROM ExerciseMuscle WHERE exerciseId = ? AND muscleId = ?`,
       e.id, muscleId
     );
-    return {
+    const equipmentRequired = await equipmentNamesFor(e.id);
+    results.push({
       id: e.id,
       name: e.name,
       primaryMuscle: e.primaryMuscle,
       secondaryMuscles: (e.secondaryMuscles || "").split(",").filter(Boolean),
       movementPattern: e.movementPattern,
       difficulty: e.difficulty,
-      equipmentRequired: await equipmentNamesFor(e.id),
+      equipmentRequired,
+      requiresEquipment: equipmentRequired.length > 0,
       role: em?.role,
-    };
-  }));
-  return res.json({ muscle: muscle.name, exercises: result });
+    });
+  }
+  return res.json({ muscle: muscle.name, exercises: results });
 });
 
 exerciseRouter.get("/:id", async (req, res) => {
   const e = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, req.params.id);
   if (!e) return res.status(404).json({ error: "Exercise not found" });
+  const equipmentRequired = await equipmentNamesFor(e.id);
   return res.json({
     id: e.id,
     name: e.name,
@@ -95,7 +140,8 @@ exerciseRouter.get("/:id", async (req, res) => {
     defaultSets: e.defaultSets,
     repRangeLow: e.repRangeLow,
     repRangeHigh: e.repRangeHigh,
-    equipmentRequired: await equipmentNamesFor(e.id),
+    equipmentRequired,
+    requiresEquipment: equipmentRequired.length > 0,
   });
 });
 
@@ -105,14 +151,25 @@ exerciseRouter.get("/:id/substitutions", async (req, res) => {
     req.params.id
   );
 
-  const result = await Promise.all(edges.map(async (edge) => {
-      const sub = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, edge.substituteId);
-      return {
-        exerciseId: sub.id,
-        name: sub.name,
-        priority: edge.priority,
-        equipmentRequired: await equipmentNamesFor(sub.id),
-      };
-    }));
-  return res.json(result);
+  const results: Array<{
+    exerciseId: string;
+    name: string;
+    priority: number;
+    equipmentRequired: string[];
+    requiresEquipment: boolean;
+  }> = [];
+
+  for (const edge of edges) {
+    const sub = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, edge.substituteId);
+    if (!sub) continue;
+    const equipmentRequired = await equipmentNamesFor(sub.id);
+    results.push({
+      exerciseId: sub.id,
+      name: sub.name,
+      priority: edge.priority,
+      equipmentRequired,
+      requiresEquipment: equipmentRequired.length > 0,
+    });
+  }
+  return res.json(results);
 });
