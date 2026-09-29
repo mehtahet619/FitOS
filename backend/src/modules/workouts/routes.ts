@@ -259,7 +259,10 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   });
   return res.status(201).json({
     workout: { id: workoutId, focus, durationMin: profile.sessionMinutes, status: "pending" },
-    exercises: exercises.map((exercise, idx) => ({ workoutExerciseId: workoutExerciseIds[idx], ...exercise })),
+    exercises: exercises.map((exercise, idx) => ({
+      workoutExerciseId: workoutExerciseIds[idx],
+      ...exercise,
+    })),
     summary,
   });
 });
@@ -274,10 +277,18 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
     return res.status(409).json({ error: next.error });
   }
   const exercises = await getExercisesForWorkout(db, userId, next as WorkoutUnit);
+  // Ensure consistent exercise format
+  const normalizedExercises = exercises.map((ex) => ({
+    exerciseId: ex.exerciseId,
+    name: ex.name,
+    primaryMuscle: ex.primaryMuscle,
+    equipmentRequired: ex.equipmentRequired,
+    requiresEquipment: ex.requiresEquipment,
+  }));
   return res.json({
     workoutUnit: next,
     targetMuscles: (next as WorkoutUnit).muscles,
-    exercises,
+    exercises: normalizedExercises,
   });
 });
 
@@ -293,18 +304,12 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
     workout.id
   );
-  // Fetch equipment for each exercise
-  const exercisesWithEquip = await Promise.all(exercises.map(async (exercise) => {
-    const equipRows = await db.all<{ name: string }>(
-      `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
-      exercise.exerciseId
-    );
-    const equipmentRequired = equipRows.map((r) => r.name);
-    const requiresEquipment = equipmentRequired.length > 0;
+  // Helper function to serialize exercise consistently
+  function serializeExercise(exercise: any, equipmentRequired: string[], requiresEquipment: boolean) {
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
-      name: exercise.exerciseName, // consistent name property
+      name: exercise.name, // use consistent 'name' property
       primaryMuscle: exercise.primaryMuscle,
       instructions: exercise.instructions,
       targetSets: exercise.targetSets,
@@ -315,6 +320,19 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       equipmentRequired,
       requiresEquipment,
     };
+  }
+
+  // Fetch equipment for each exercise
+  const exercisesWithEquip = await Promise.all(exercises.map(async (exercise) => {
+    const equipRows = await db.all<{ name: string }>(
+      `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+      exercise.exerciseId
+    );
+    const equipmentRequired = equipRows.map((r) => r.name);
+    const requiresEquipment = equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight";
+    // Use exercise.name (from the Exercise table via JOIN) or fallback to exerciseName alias
+    const exerciseName = exercise.name || exercise.exerciseName;
+    return serializeExercise({ ...exercise, name: exerciseName }, equipmentRequired, requiresEquipment);
   }));
   return res.json({
     id: workout.id,
@@ -406,9 +424,10 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   if (!base) return res.status(404).json({ error: "Exercise not found" });
 
   const isBodyweight = base.requiredEquipmentIds.length === 0;
+  const baseRequiresEquipment = base.requiredEquipmentIds.length > 0;
 
   // Bodyweight exercises cannot be substituted for equipment reasons
-  if (reason === "no_equipment" && isBodyweight) {
+  if (reason === "no_equipment" && !baseRequiresEquipment) {
     return res.status(422).json({
       error: `"${base.name}" is a bodyweight exercise and does not require equipment. It cannot be substituted for equipment reasons.`,
       requiresEquipment: false,
@@ -416,7 +435,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   }
 
   // For equipment exercises, check if user has the required equipment
-  if (reason === "no_equipment" && !isBodyweight) {
+  if (reason === "no_equipment" && baseRequiresEquipment) {
     const hasEquipment = base.requiredEquipmentIds.every((id) => equipmentRows.some((row) => row.equipmentId === id));
     if (hasEquipment) {
       return res.status(422).json({
@@ -436,7 +455,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   if (!substitute)
     return res.status(422).json({
       error: `No performable substitute found for "${base.name}" with your current equipment. Consider adding equipment or skipping this exercise.`,
-      requiresEquipment: !isBodyweight,
+      requiresEquipment: baseRequiresEquipment,
     });
   await db.run(
     `UPDATE WorkoutExercise SET exerciseId = ?, replacedFromId = ?, status = 'replaced', targetSets = ?, repRangeLow = ?, repRangeHigh = ? WHERE id = ?`,

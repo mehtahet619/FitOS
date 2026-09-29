@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS Exercise (
   repRangeHigh INTEGER NOT NULL,
   instructions TEXT NOT NULL,
   imageUrl TEXT,
+  requiresEquipment INTEGER NOT NULL DEFAULT 1,
   createdAt TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_exercise_muscle ON Exercise(primaryMuscle);
