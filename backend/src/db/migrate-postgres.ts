@@ -11,6 +11,9 @@ async function main() {
     .replace(/^PRAGMA[^;]+;\s*/gim, "")
     .replace(/\bUser\b/g, '"User"');
 
+  // Add planStepIndex column BEFORE executing schema (needed for index creation in schema)
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER`);
+
   await database.exec(schema);
   await database.exec(`ALTER TABLE NutritionRecommendation ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'general-nutrition'`);
   await database.exec(`ALTER TABLE WorkoutPlanState ADD COLUMN IF NOT EXISTS cycleId TEXT`);
@@ -18,7 +21,6 @@ async function main() {
   await database.exec(`ALTER TABLE Equipment ADD COLUMN IF NOT EXISTS category TEXT`);
   await database.exec(`ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT`);
   await database.exec(`ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
-  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER`);
   await database.exec(`
     CREATE TABLE IF NOT EXISTS WorkoutCycleHistory (
       id TEXT PRIMARY KEY,
