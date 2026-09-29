@@ -16,6 +16,9 @@ async function main() {
     .replace(/^PRAGMA[^;]+;\s*/gim, "")
     .replace(/\bUser\b/g, '"User"');
 
+  // Add planStepIndex column BEFORE executing schema (needed for index creation in schema)
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER`);
+
   await database.exec(schema);
 
   // Nutrition recommendation source
