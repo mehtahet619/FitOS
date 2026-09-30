@@ -21,6 +21,45 @@ async function main() {
 
   await database.exec(schema);
 
+  await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS name TEXT`);
+  await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS emailVerified INTEGER NOT NULL DEFAULT 1`);
+  await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS emailVerifiedAt TEXT`);
+  const unverifiedLegacy = await database.all<{ id: string }>(`SELECT id FROM "User" WHERE emailVerified=0 AND passwordHash IS NOT NULL`);
+  for (const user of unverifiedLegacy) {
+    await database.run(`UPDATE "User" SET emailVerified=1,emailVerifiedAt=COALESCE(emailVerifiedAt,createdAt) WHERE id=?`, user.id);
+  }
+  const missingVerifiedAt = await database.all<{ id: string }>(`SELECT id FROM "User" WHERE emailVerified=1 AND emailVerifiedAt IS NULL`);
+  for (const user of missingVerifiedAt) await database.run(`UPDATE "User" SET emailVerifiedAt=createdAt WHERE id=?`, user.id);
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_user_email_lower ON "User"(LOWER(email))`);
+  const duplicateEmails = await database.all<{ normalized: string; count: number }>(`SELECT LOWER(email) AS normalized,COUNT(*) AS count FROM "User" GROUP BY LOWER(email) HAVING COUNT(*)>1`);
+  if (duplicateEmails.length) throw new Error("Cannot add normalized email uniqueness: duplicate accounts differing only by email case must be resolved first");
+  await database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_email_normalized_unique ON "User"(LOWER(email))`);
+  await database.exec(`
+    CREATE TABLE IF NOT EXISTS PendingRegistration (
+      id TEXT PRIMARY KEY, userId TEXT REFERENCES "User"(id) ON DELETE CASCADE,
+      email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, passwordHash TEXT NOT NULL,
+      otpHash TEXT, otpExpiresAt TEXT, otpAttempts INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+    )
+  `);
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_pending_registration_expiry ON PendingRegistration(otpExpiresAt)`);
+  await database.exec(`
+    CREATE TABLE IF NOT EXISTS AuthSession (
+      id TEXT PRIMARY KEY, userId TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+      refreshTokenHash TEXT NOT NULL, expiresAt TEXT NOT NULL, revokedAt TEXT,
+      createdAt TEXT NOT NULL, lastUsedAt TEXT NOT NULL
+    )
+  `);
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_auth_session_user ON AuthSession(userId)`);
+  await database.exec(`
+    CREATE TABLE IF NOT EXISTS PasswordResetChallenge (
+      id TEXT PRIMARY KEY, userId TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+      otpHash TEXT, otpExpiresAt TEXT, otpAttempts INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+    )
+  `);
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON PasswordResetChallenge(otpExpiresAt)`);
+
   // Nutrition recommendation source
   await database.exec(`
     ALTER TABLE NutritionRecommendation

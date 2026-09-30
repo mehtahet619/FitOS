@@ -65,6 +65,14 @@ const camelCaseColumns: Record<string, string> = {
   lasttrainedat: "lastTrainedAt",
   startedat: "startedAt",
   primarymuscle: "primaryMuscle",
+  emailverified: "emailVerified",
+  emailverifiedat: "emailVerifiedAt",
+  otphash: "otpHash",
+  otpexpiresat: "otpExpiresAt",
+  otpattempts: "otpAttempts",
+  refreshtokenhash: "refreshTokenHash",
+  revokedat: "revokedAt",
+  lastusedat: "lastUsedAt",
 };
 
 export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {
@@ -116,7 +124,7 @@ export class PostgresDatabase implements DatabaseLike {
     await this.pool.query(sql);
   }
 
-  async transaction<T>(work: (client: PostgresTransaction) => Promise<T>): Promise<T> {
+  async transaction<T>(work: (client: DatabaseLike) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     const transaction = new PostgresTransaction(client);
     try {
@@ -137,7 +145,7 @@ export class PostgresDatabase implements DatabaseLike {
   }
 }
 
-export class PostgresTransaction {
+export class PostgresTransaction implements DatabaseLike {
   constructor(private readonly client: PoolClient) {}
 
   async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
@@ -153,6 +161,14 @@ export class PostgresTransaction {
   async run(sql: string, ...params: unknown[]): Promise<{ changes: number }> {
     const result = await this.client.query(toPostgresSql(sql), params);
     return { changes: result.rowCount ?? 0 };
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.client.query(sql);
+  }
+
+  async transaction<T>(work: (tx: DatabaseLike) => Promise<T>): Promise<T> {
+    return work(this);
   }
 }
 

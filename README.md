@@ -72,8 +72,10 @@ npm test
 
 The root `render.yaml` deploys the backend to Render as an always-on web
 service with a managed PostgreSQL database. Set `FRONTEND_ORIGIN` in Render to
-the frontend URL. The API is PostgreSQL-ready; use a shared Redis-backed rate
-limiter before running multiple API instances.
+the frontend URL. PostgreSQL migrations run as a pre-deploy step; normal server
+starts do not run seed scripts. Configure SMTP and Upstash Redis secrets in
+Render for OTP registration. The checked-in production database adapter is
+PostgreSQL (and SQLite locally); no TiDB driver/migration exists in this repo.
 
 ### 2. Frontend
 
