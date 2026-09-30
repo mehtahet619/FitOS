@@ -22,6 +22,8 @@ export interface GeneratedExercise {
   requiresEquipment: boolean; // true if exercise needs gym equipment, false for bodyweight
 }
 
+export type EquipmentMode = "USER_EQUIPMENT" | "SCANNED" | "FULL_GYM";
+
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   Push: ["chest", "shoulders", "triceps"],
   Pull: ["back", "biceps"],
@@ -74,27 +76,6 @@ async function getAvailableEquipmentIds(database: DatabaseLike, userId: string):
   return new Set(rows.map((r) => r.equipmentId));
 }
 
-function startOfTrainingWeek(): string {
-  const date = new Date();
-  const day = date.getUTCDay();
-  const daysSinceMonday = (day + 6) % 7;
-  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
-  date.setUTCHours(0, 0, 0, 0);
-  return date.toISOString();
-}
-
-async function getWeeklyTrainedMuscles(database: DatabaseLike, userId: string): Promise<Set<string>> {
-  const rows = await database.all<{ primaryMuscle: string }>(
-    `SELECT DISTINCT e.primaryMuscle
-     FROM WorkoutHistory h
-     JOIN Exercise e ON e.id = h.exerciseId
-     WHERE h.userId = ? AND h.recordedAt >= ?`,
-    userId,
-    startOfTrainingWeek(),
-  );
-  return new Set(rows.map((row) => row.primaryMuscle));
-}
-
 /**
  * Conservative progressive overload: look at the most recent completed sets
  * for this exercise. If the user hit the top of their rep range across all
@@ -141,12 +122,25 @@ export async function generateWorkout(
   userId: string,
   focus: string,
   durationMin: number,
-  options?: { lockToMuscles?: string[] }
+  options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[] }
 ): Promise<{ focus: string; exercises: GeneratedExercise[] }> {
   const unitMuscles = options?.lockToMuscles?.length ? options.lockToMuscles : musclesForFocus(focus);
-  const availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
-  const trainedMuscles = await getWeeklyTrainedMuscles(database, userId);
-  const musclesForWorkout = resolveMusclesForLockedUnit(unitMuscles, trainedMuscles);
+  const equipmentMode = options?.equipmentMode ?? "USER_EQUIPMENT";
+
+  let availableEquipmentIds: Set<string>;
+  if (equipmentMode === "FULL_GYM") {
+    // In FULL_GYM mode, all equipment is available
+    const allEquipment = await database.all<{ id: string }>(`SELECT id FROM Equipment`);
+    availableEquipmentIds = new Set(allEquipment.map((e) => e.id));
+  } else if (equipmentMode === "SCANNED") {
+    availableEquipmentIds = new Set(options?.scannedEquipmentIds ?? []);
+  } else {
+    availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
+  }
+
+  // History may influence freshness/order inside a split, but it must never
+  // widen a plan step to a different primary target.
+  const musclesForWorkout = [...unitMuscles];
 
   // Roughly 1 exercise per 9 min of session time, capped sensibly.
   const targetExerciseCount = Math.max(3, Math.min(8, Math.round(durationMin / 9)));
@@ -155,7 +149,7 @@ export async function generateWorkout(
   const generated: GeneratedExercise[] = [];
 
   for (const muscle of musclesForWorkout) {
-    const rows = await database.all<{ id: string }>(`SELECT id FROM Exercise WHERE primaryMuscle = ?`, muscle);
+    const rows = await database.all<{ id: string }>(`SELECT id FROM Exercise WHERE lower(primaryMuscle) = lower(?)`, muscle);
     const poolMappedResults = await Promise.all(rows.map((r) => loadExerciseWithLinks(database, r.id)));
     const poolMapped: ExerciseWithLinks[] = poolMappedResults.filter(
       (e): e is ExerciseWithLinks => e !== null
@@ -177,7 +171,9 @@ export async function generateWorkout(
 
       for (const base of notPerformable) {
         if (chosen.length >= perMuscle) break;
-        const candidates = await loadSubstituteCandidates(database, base.id);
+        const candidates = (await loadSubstituteCandidates(database, base.id)).filter((candidate) =>
+          unitMuscles.includes(candidate.primaryMuscle)
+        );
         const substitute = pickSubstitute(base, candidates, availableEquipmentIds);
         if (substitute && !chosen.some((c) => c.exercise.id === substitute.id)) {
           chosen.push({ exercise: substitute, wasSubstituted: true, originalExerciseName: base.name });
@@ -193,7 +189,7 @@ export async function generateWorkout(
         exercise.id
       );
       const equipmentRequired = equipRows.map((r) => r.name);
-      const requiresEquipment = equipmentRequired.length > 0;
+      const requiresEquipment = exercise.requiredEquipmentIds.length > 0;
       generated.push({
         exerciseId: exercise.id,
         name: exercise.name,

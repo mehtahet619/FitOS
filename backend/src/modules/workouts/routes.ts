@@ -30,6 +30,7 @@ import {
   PLAN_LABELS,
 } from "./plan";
 import type { WorkoutUnit } from "./plan";
+import { getEquipmentModeConfig, getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -186,7 +187,11 @@ workoutRouter.post("/plan/start-cycle", async (req: AuthedRequest, res) => {
 const generateSchema = z.object({
   focus: z.string().optional(),
   dayIndex: z.number().int().min(0).optional(),
+  equipmentMode: z.enum(["SCANNED", "FULL_GYM"]).optional(),
+  imageBase64: z.string().min(100).optional(),
+  detectedEquipmentNames: z.array(z.string().min(1)).optional(),
 });
+const scannedEquipmentByUser = new Map<string, string[]>();
 
 workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
@@ -194,6 +199,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   if (!profile) return res.status(400).json({ error: "Complete onboarding (PUT /user/profile) first" });
 
   const parsed = generateSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "Invalid workout generation options." });
   const state = await getPlanState(db, userId);
   const requiredUnit = state ? nextUnit(state) : undefined;
 
@@ -214,61 +220,89 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     });
   }
 
+  const requestedMode = parsed.success ? parsed.data.equipmentMode : undefined;
+  const equipmentMode = requestedMode ?? getEquipmentModeConfig().mode;
+  let scannedEquipmentIds: string[] = [];
+  if (equipmentMode === "SCANNED") {
+    let names = parsed.data.detectedEquipmentNames;
+    if (parsed.data.imageBase64) {
+      let detection;
+      try {
+        detection = await getEquipmentVisionProvider().detectEquipment(parsed.data.imageBase64);
+      } catch (e: any) {
+        console.error(`[workouts/generate] equipment detection failed: ${e?.message || String(e)}`);
+        return res.status(503).json({ error: "EQUIPMENT_DETECTION_FAILED", message: "Equipment detection is temporarily unavailable." });
+      }
+      if (!detection.configured) return res.status(503).json({ error: "EQUIPMENT_DETECTION_FAILED", message: "Equipment detection is temporarily unavailable." });
+      names = detection.detections.map((d) => d.equipmentName);
+    }
+    if (!names?.length) {
+      return res.status(400).json({ error: "SCANNED_EQUIPMENT_REQUIRED", message: "Provide a photo or detected equipment names for SCANNED mode." });
+    }
+    const rows = await db.all<{ id: string; name: string }>(`SELECT id, name FROM Equipment WHERE name != 'No Equipment'`);
+    const normalized = new Set(names.map((name) => name.trim().toLowerCase()));
+    scannedEquipmentIds = rows.filter((row) => normalized.has(row.name.toLowerCase())).map((row) => row.id);
+    scannedEquipmentByUser.set(userId, scannedEquipmentIds);
+  }
+
   // Check if there's already a workout for the current plan step
   const currentPlanStepIndex = state.currentIndex;
   const existingWorkout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
+    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, createdAt DESC LIMIT 1`,
     userId, currentPlanStepIndex
   );
-
   if (existingWorkout) {
-    // Return the existing workout with its exercises
-    const existingExercises = await db.all<any>(
-      `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
-       FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
-       WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
-      existingWorkout.id
+// Return the existing workout with its exercises
+  const existingExercises = await db.all<any>(
+    `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
+     FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
+     WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
+    existingWorkout.id
+  );
+  const exercisesWithEquip = await Promise.all(existingExercises.map(async (ex) => {
+    const equipRows = await db.all<{ name: string }>(
+      `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+      ex.exerciseId
     );
-    const exercisesWithEquip = await Promise.all(existingExercises.map(async (ex) => {
-      const equipRows = await db.all<{ name: string }>(
-        `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
-        ex.exerciseId
-      );
-      const equipmentRequired = equipRows.map((r) => r.name);
-      return {
-        workoutExerciseId: ex.id,
-        exerciseId: ex.exerciseId,
-        name: ex.name,
-        primaryMuscle: ex.primaryMuscle,
-        instructions: ex.instructions,
-        targetSets: ex.targetSets,
-        repRangeLow: ex.repRangeLow,
-        repRangeHigh: ex.repRangeHigh,
-        status: ex.status,
-        painReported: !!ex.painReported,
-        equipmentRequired,
-        requiresEquipment: equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight",
-      };
-    }));
+    const equipmentRequired = equipRows.map((r) => r.name);
+    return {
+      workoutExerciseId: ex.id,
+      exerciseId: ex.exerciseId,
+      name: ex.name,
+      exerciseName: ex.name,
+      primaryMuscle: ex.primaryMuscle,
+      instructions: ex.instructions,
+      targetSets: ex.targetSets,
+      repRangeLow: ex.repRangeLow,
+      repRangeHigh: ex.repRangeHigh,
+      status: ex.status,
+      painReported: !!ex.painReported,
+      equipmentRequired,
+      equipmentName: equipmentRequired[0] ?? "Bodyweight",
+      requiresEquipment: equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight",
+    };
+  }));
 
-    return res.json({
-      workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
-      exercises: existingExercises.map((exercise, idx) => ({
-        workoutExerciseId: exercise.id,
-        exerciseId: exercise.exerciseId,
-        name: exercise.name,
-        primaryMuscle: exercise.primaryMuscle,
-        instructions: exercise.instructions,
-        sets: exercise.defaultSets,
-        repRangeLow: exercise.repRangeLow,
-        repRangeHigh: exercise.repRangeHigh,
-        suggestedWeightKg: null,
-        wasSubstituted: false,
-        equipmentRequired: exercise.equipmentRequired,
-        requiresEquipment: exercise.requiresEquipment,
-      })),
-      summary: null, // No summary for existing workout
-    });
+  return res.json({
+    workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
+    exercises: exercisesWithEquip.map((exercise, idx) => ({
+      workoutExerciseId: exercise.workoutExerciseId,
+      exerciseId: exercise.exerciseId,
+      name: exercise.name,
+      exerciseName: exercise.name,
+      primaryMuscle: exercise.primaryMuscle,
+      instructions: exercise.instructions,
+      targetSets: exercise.targetSets,
+      repRangeLow: exercise.repRangeLow,
+      repRangeHigh: exercise.repRangeHigh,
+      suggestedWeightKg: null,
+      wasSubstituted: false,
+      equipmentRequired: exercise.equipmentRequired,
+      equipmentName: exercise.equipmentRequired[0] ?? "Bodyweight",
+      requiresEquipment: exercise.requiresEquipment,
+    })),
+    summary: null, // No summary for existing workout
+  });
   }
 
   const recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
@@ -283,11 +317,12 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
 
   const { exercises } = await generateWorkout(db, userId, focus, profile.sessionMinutes, {
     lockToMuscles: requiredUnit.muscles,
+    equipmentMode,
+    scannedEquipmentIds,
   });
   if (exercises.length === 0) {
     return res.status(422).json({
-      error:
-        "No exercises could be resolved for your current equipment for this focus. Try adding at least bodyweight-friendly equipment or a different focus.",
+      error: "No exercises could be resolved for the current plan target and equipment mode.",
     });
   }
 
@@ -317,7 +352,20 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     workout: { id: workoutId, focus, durationMin: profile.sessionMinutes, status: "pending" },
     exercises: exercises.map((exercise, idx) => ({
       workoutExerciseId: workoutExerciseIds[idx],
-      ...exercise,
+      exerciseId: exercise.exerciseId,
+      name: exercise.name,
+      exerciseName: exercise.name,
+      primaryMuscle: exercise.primaryMuscle,
+      instructions: exercise.instructions,
+      targetSets: exercise.sets,
+      repRangeLow: exercise.repRangeLow,
+      repRangeHigh: exercise.repRangeHigh,
+      suggestedWeightKg: exercise.suggestedWeightKg,
+      wasSubstituted: exercise.wasSubstituted,
+      originalExerciseName: exercise.originalExerciseName,
+      equipmentRequired: exercise.equipmentRequired,
+      equipmentName: exercise.equipmentRequired[0] ?? "Bodyweight",
+      requiresEquipment: exercise.requiresEquipment,
     })),
     summary,
   });
@@ -332,13 +380,17 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
   if ("error" in next) {
     return res.status(409).json({ error: next.error });
   }
-  const exercises = await getExercisesForWorkout(db, userId, next as WorkoutUnit);
+  const mode = getEquipmentModeConfig().mode;
+  const equipmentIds = mode === "SCANNED" ? scannedEquipmentByUser.get(userId) ?? [] : [];
+  const exercises = await getExercisesForWorkout(db, userId, next as WorkoutUnit, mode, equipmentIds);
   // Ensure consistent exercise format
   const normalizedExercises = exercises.map((ex) => ({
     exerciseId: ex.exerciseId,
     name: ex.name,
+    exerciseName: ex.name,
     primaryMuscle: ex.primaryMuscle,
     equipmentRequired: ex.equipmentRequired,
+    equipmentName: ex.equipmentRequired[0] ?? "Bodyweight",
     requiresEquipment: ex.requiresEquipment,
   }));
   return res.json({
@@ -381,7 +433,8 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
-      name: exercise.name, // use consistent 'name' property
+      name: exercise.name,
+      exerciseName: exercise.name,
       primaryMuscle: exercise.primaryMuscle,
       instructions: exercise.instructions,
       targetSets: exercise.targetSets,
@@ -390,6 +443,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       status: exercise.status,
       painReported: !!exercise.painReported,
       equipmentRequired,
+      equipmentName: equipmentRequired[0] ?? "Bodyweight",
       requiresEquipment,
     };
   }

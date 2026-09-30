@@ -170,14 +170,11 @@ $("auth-submit").addEventListener("click", async () => {
   btn.textContent = "Loading…";
   try {
     const path = State.isRegisterMode ? "/auth/register" : "/auth/login";
-    console.log("API_BASE:", window.API_BASE);
-    console.log("Attempting", path, "with email:", email);
     const data = await Api.post(path, { email, password });
-    console.log("Auth response:", data);
     Api.setTokens(data.accessToken, data.refreshToken);
     await boot();
   } catch (e) {
-    console.error("Auth error:", e);
+    console.error("Auth request failed:", e.message, e.cause || "");
     banner(bannerEl, "error", e.message || "Something went wrong.");
   } finally {
     btn.disabled = false;
@@ -376,12 +373,10 @@ function renderWorkoutScanButton() {
   $("workout-scan-btn").addEventListener("click", () => {
     scanArea.innerHTML = "";
     startEquipmentScan("workout-scan-area", async (detectedNames) => {
-      scanArea.innerHTML = `<div class="empty-state"><span class="spinner"></span> Updating your equipment…</div>`;
+      scanArea.innerHTML = `<div class="empty-state"><span class="spinner"></span> Generating with scanned equipment…</div>`;
       try {
-        const current = await Api.get("/equipment/user/equipment");
-        const merged = Array.from(new Set([...current.map((c) => c.name), ...detectedNames]));
-        await Api.post("/equipment/user/equipment", { equipmentNames: merged });
-        scanArea.innerHTML = `<div class="banner banner-success">Added ${detectedNames.join(", ")} to your equipment.</div>`;
+        await Api.post("/workouts/generate", { equipmentMode: "SCANNED", detectedEquipmentNames: detectedNames });
+        await loadWorkout();
       } catch (e) {
         scanArea.innerHTML = `<div class="banner banner-error">${e.message}</div>`;
       }
@@ -593,7 +588,7 @@ function wirePlanActions(plan) {
       genBtn.innerHTML = `<span class="spinner"></span> Generating…`;
       const el = $("workout-content");
       try {
-        await Api.post("/workouts/generate", {});
+        await Api.post("/workouts/generate", { equipmentMode: "FULL_GYM" });
         await loadWorkout();
       } catch (e) {
         el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
@@ -1232,7 +1227,7 @@ function renderGymScan(equipment, plan) {
     try {
       await Api.post("/equipment/user/equipment", { equipmentNames });
       // Switch to workout tab and generate
-      await Api.post("/workouts/generate", {});
+      await Api.post("/workouts/generate", { equipmentMode: "SCANNED", detectedEquipmentNames: equipmentNames });
       switchTab("workout");
     } catch (e) {
       el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;

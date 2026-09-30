@@ -17,9 +17,40 @@ import { gymRouter } from "./modules/gym/routes";
 
 const app = express();
 app.set("trust proxy", 1);
+const allowedFrontendOrigins = new Set(
+  (process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean)
+);
+const allowedRenderServiceId = process.env.RENDER_SERVICE_ID;
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN || true,
+    origin(origin, callback) {
+      if (!origin || allowedFrontendOrigins.size === 0 || allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
+        callback(null, true);
+        return;
+      }
+      // Render preview deploys use unique subdomains. Trust only the configured
+      // static-site service, not every arbitrary *.onrender.com origin.
+      if (allowedRenderServiceId) {
+        try {
+          const parsedOrigin = new URL(origin);
+          const previewHostPrefix = `${allowedRenderServiceId.toLowerCase()}-`;
+          if (
+            parsedOrigin.protocol === "https:" &&
+            parsedOrigin.hostname.toLowerCase().startsWith(previewHostPrefix) &&
+            parsedOrigin.hostname.toLowerCase().endsWith(".onrender.com")
+          ) {
+            callback(null, true);
+            return;
+          }
+        } catch {
+          // Invalid Origin headers are rejected below.
+        }
+      }
+      callback(null, false);
+    },
   })
 );
 app.use(express.json());
