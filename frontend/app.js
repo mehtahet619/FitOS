@@ -214,6 +214,7 @@ async function boot() {
   } catch (e) {
     if (generation !== authBootGeneration) return;
     Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; navigate("/login", true);
+    banner($("auth-banner"), "error", e.message || "Couldn't check your session. Please try again.");
   }
 }
 
