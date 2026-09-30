@@ -173,7 +173,6 @@ CREATE TABLE IF NOT EXISTS Workout (
   planStepIndex INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_workout_user ON Workout(userId);
-CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex);
 
 CREATE TABLE IF NOT EXISTS WorkoutPlanState (
   id TEXT PRIMARY KEY,

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { AuthedRequest, clearSessionCookies, getRefreshCookie, hashRefreshSecret, isMobileClient, makeRefreshSecret, readIdentity, requireAuth, secureEqualHex, setSessionCookies, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../common/auth";
-import { emailService } from "./emailService";
+import { emailService, getLocalVerificationCode } from "./emailService";
 import { validateRegistrationEmail } from "./emailValidation";
 import { getOtpLimiter } from "./tokenBucket";
 
@@ -23,6 +23,16 @@ const requestSchema = z.object({ email: z.string(), password: z.string().min(8).
 const resendSchema = z.object({ email: z.string() });
 const verifySchema = z.object({ email: z.string(), otp: z.string().regex(/^\d{6}$/) });
 const resetSchema = z.object({ email: z.string(), otp: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(128) });
+
+authRouter.get("/dev/email-preview", (req, res) => {
+  const remoteAddress = req.socket.remoteAddress || "";
+  const isLoopback = remoteAddress === "127.0.0.1" || remoteAddress === "::1" || remoteAddress === "::ffff:127.0.0.1";
+  if (process.env.NODE_ENV === "production" || process.env.ENABLE_LOCAL_EMAIL_PREVIEW !== "true" || !isLoopback) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+  return res.json(getLocalVerificationCode(email) || { code: null });
+});
 
 async function allowOtpRequest(req: Request, res: Response, email: string): Promise<boolean> {
   let result;
@@ -63,6 +73,9 @@ async function createSession(userId: string, res: Response, req: Request) {
   if (isMobileClient(req)) return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   setSessionCookies(res, tokens.accessToken, tokens.refreshToken);
   return undefined;
+}
+async function hasCompletedProfile(userId: string): Promise<boolean> {
+  return Boolean(await db.get<{ id: string }>(`SELECT id FROM UserProfile WHERE userId=?`, userId));
 }
 
 // Legacy direct-registration endpoint cannot create an unverified account or session.
@@ -156,7 +169,7 @@ authRouter.post("/register/verify-otp", async (req, res) => {
   }
   const mobileTokens = await createSession(userId, res, req);
   const user = await db.get<{ id: string; name: string; email: string }>(`SELECT id,name,email FROM "User" WHERE id=?`, userId);
-  return res.status(201).json({ authenticated: true, user: { ...user, emailVerified: true }, ...(mobileTokens || {}) });
+  return res.status(201).json({ authenticated: true, user: { ...user, emailVerified: true, profileComplete: await hasCompletedProfile(userId) }, ...(mobileTokens || {}) });
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });
@@ -176,7 +189,8 @@ authRouter.post("/login", async (req, res) => {
   if (!user.emailVerified) return codeError(res, 403, "EMAIL_NOT_VERIFIED", "Please verify your email before signing in.");
   const mobileTokens = await createSession(user.id, res, req);
   stage("session created");
-  const response = res.json({ authenticated: true, user: { id: user.id, name: user.name, email: user.email, emailVerified: true }, ...(mobileTokens || {}) });
+  const profileComplete = await hasCompletedProfile(user.id);
+  const response = res.json({ authenticated: true, user: { id: user.id, name: user.name, email: user.email, emailVerified: true, profileComplete }, ...(mobileTokens || {}) });
   stage("login response sent");
   return response;
 });
@@ -188,7 +202,7 @@ authRouter.get("/me", async (req, res) => {
   const user = await db.get<{ id: string; name: string | null; email: string }>(`SELECT id,name,email FROM "User" WHERE id=?`, identity.userId);
   if (!user) return res.json({ authenticated: false });
   if (process.env.NODE_ENV !== "production") console.info("[AUTH] frontend session restored");
-  return res.json({ authenticated: true, user: { ...user, emailVerified: true } });
+  return res.json({ authenticated: true, user: { ...user, emailVerified: true, profileComplete: await hasCompletedProfile(identity.userId) } });
 });
 
 authRouter.post("/refresh", async (req, res) => {

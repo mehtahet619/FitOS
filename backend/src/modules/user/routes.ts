@@ -93,6 +93,8 @@ userRouter.put("/profile", async (req: AuthedRequest, res) => {
     );
   }
 
+  await db.run(`UPDATE "User" SET name=?, updatedAt=? WHERE id=?`, data.name, ts, userId);
+
   const targets = computeMacroTargets({
     weightKg: data.weightKg,
     heightCm: data.heightCm,
