@@ -22,29 +22,38 @@ services:
         generateValue: true
       - key: FRONTEND_ORIGIN
         value: https://adaptive-fit-web.onrender.com
+      - key: RENDER_SERVICE_ID
+        value: adaptive-fit-web
       - key: AI_PROVIDER
         value: openai
       - key: OPENAI_MODEL
         value: gpt-4o-mini
       - key: OPENAI_API_KEY
         sync: false
+      - key: EQUIPMENT_MODE
+        value: FULL_GYM
+      - key: EQUIPMENT_VISION_API_URL
+        value: https://serverless.roboflow.com
+      - key: EQUIPMENT_VISION_MODEL_ID
+        value: all-gym-equipment/2
+      - key: EQUIPMENT_VISION_API_KEY
+        sync: false
+      - key: EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD
+        value: "0.50"
       - key: MAPS_PROVIDER
         value: apify_swiggy
       - key: APIFY_API_KEY
         sync: false
-      - key: ROBOFLOW_WORKFLOW_MODE
-        value: "true"
-      - key: ROBOFLOW_API_KEY
-        sync: false
-      - key: ROBOFLOW_MODEL
-        value: lifttrack/4
 
   - type: web
     name: adaptive-fit-web
     runtime: static
-    buildCommand: echo "No frontend build required"
+    buildCommand: node scripts/inject-frontend-api-url.js
     staticPublishPath: frontend
     autoDeploy: false
+    envVars:
+      - key: API_BASE_URL
+        value: https://adaptive-fit-api.onrender.com
 
 databases:
   - name: adaptive-fit-db

@@ -73,10 +73,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-  Future<void> _generate() async {
+  Future<void> _generate({List<String>? scannedEquipment}) async {
     setState(() => _generating = true);
     try {
-      await ApiClient.instance.post("/workouts/generate", {});
+      await ApiClient.instance.post("/workouts/generate", scannedEquipment == null
+          ? {"equipmentMode": "FULL_GYM"}
+          : {"equipmentMode": "SCANNED", "detectedEquipmentNames": scannedEquipment});
       await _load();
     } on ApiException catch (e) {
       setState(() {
@@ -123,8 +125,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _openScan() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EquipmentScanScreen(mergeIntoProfile: true)));
-    if (mounted) setState(() {});
+    final names = await Navigator.of(context).push<List<String>>(MaterialPageRoute(
+      builder: (_) => const EquipmentScanScreen(returnDetections: true),
+    ));
+    if (names != null && mounted) await _generate(scannedEquipment: names);
   }
 
   Future<void> _completeWorkout() async {
@@ -195,10 +199,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                               ],
                             ),
                           ),
-                          TextButton(
-                            onPressed: () => _swap(ex["workoutExerciseId"]),
-                            child: const Text("No equipment?"),
-                          ),
+                          if (ex["requiresEquipment"] == true)
+                            TextButton(
+                              onPressed: () => _swap(ex["workoutExerciseId"]),
+                              child: const Text("No equipment?"),
+                            )
+                          else
+                            const Text("Bodyweight", style: TextStyle(color: AppColors.muted, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -274,7 +281,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             setState(() => _choosingNewPlan = true);
           } : null),
         ] else
-          MintButton(label: "Generate $_nextLabel workout", loading: _generating, onPressed: _generate),
+          MintButton(label: "Generate $_nextLabel with full gym", loading: _generating, onPressed: () => _generate()),
       ],
     );
   }

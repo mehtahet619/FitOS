@@ -1,595 +1,127 @@
-/**
- * Equipment-vision provider abstraction.
- *
- * Point the camera at your gym corner, snap a photo, and get back
- * which known Equipment rows are actually visible.
- *
- * Supports two modes:
- *
- * 1. Roboflow Workflow (RECOMMENDED)
- *    Uses serverless inference endpoint.
- *    Set ROBOFLOW_WORKFLOW_MODE=true in .env and provide ROBOFLOW_API_KEY.
- *
- * 2. Roboflow Hosted Models (LEGACY)
- *    For backward compatibility.
- *    Set ROBOFLOW_MODEL=<model_id/version> and ROBOFLOW_API_KEY.
- *
- * No key configured -> returns an honest "not configured" result.
- * Never invents a detection.
- */
-
 import { db } from "../db/client";
-import { RoboflowWorkflowProvider } from "./roboflowWorkflowProvider";
 
 export interface EquipmentDetection {
   equipmentName: string;
   confidence: number;
   rawLabel: string;
-  boundingBox?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  boundingBox?: { x: number; y: number; width: number; height: number };
 }
 
 export interface EquipmentVisionProvider {
-  detectEquipment(
-    imageBase64: string
-  ): Promise<{
+  detectEquipment(imageBase64: string): Promise<{
     configured: boolean;
     detections: EquipmentDetection[];
+    provider: string;
+    error?: string;
+    latencyMs?: number;
+    rawDetectionCount?: number;
   }>;
+  getProviderName(): string;
 }
 
-/**
- * Fallback mapping for legacy Roboflow hosted models
- * and labels that cannot be resolved through EquipmentAlias.
- */
-const FALLBACK_EQUIPMENT_LABEL_MAP: Record<string, string> = {
-  dumbbell: "Dumbbells",
-  dumbbells: "Dumbbells",
+export type EquipmentMode = "SCANNED" | "FULL_GYM";
 
-  barbell: "Barbell",
+export function getEquipmentModeConfig(): { mode: EquipmentMode; confidenceThreshold: number } {
+  const rawMode = process.env.EQUIPMENT_MODE?.toUpperCase();
+  const mode: EquipmentMode = rawMode === "SCANNED" ? "SCANNED" : "FULL_GYM";
+  const parsed = Number.parseFloat(process.env.EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD ?? "0.50");
+  return { mode, confidenceThreshold: Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5 };
+}
 
-  bench: "Bench",
-
-  "pull-up bar": "Pull-up Bar",
-  "pullup bar": "Pull-up Bar",
-
-  "resistance band": "Resistance Bands",
-  "resistance bands": "Resistance Bands",
-
-  "cable machine": "Cable Machine",
-  cable: "Cable Machine",
-
-  "seated row": "Cable Machine",
-
-  "chest press": "Chest Press",
-
-  "shoulder press": "Machine",
-
-  "squat rack": "Squat Rack",
-
-  "leg extension": "Leg Extension",
-
-  "leg curl": "Leg Curl",
-
-  "preacher curl": "Preacher Curl",
-
-  "assisted pull-up": "Assisted Pull-up",
-  "assisted pullup": "Assisted Pull-up",
-
-  treadmill: "Treadmill",
-
-  "exercise bike": "Exercise Bike",
-
-  "smith machine": "Smith Machine",
-
-  "leg press": "Leg Press",
-
-  "lat pulldown": "Lat Pulldown",
-
-  kettlebell: "Kettlebells",
+const LABELS: Record<string, string> = {
+  dumbbell: "Dumbbells", dumbbells: "Dumbbells", "lat pull down machine": "Lat Pulldown",
+  "lat pulldown machine": "Lat Pulldown", "lat pulldown": "Lat Pulldown", "leg press machine": "Leg Press",
+  "leg press": "Leg Press", "chest press machine": "Chest Press", "machine chest press": "Chest Press",
+  "chest press": "Chest Press", "cable crossover": "Cable Machine", "cable station": "Cable Machine",
+  "functional trainer": "Cable Machine", "cable machine": "Cable Machine", "chest fly machine": "Pec Deck",
+  "seated row machine": "Cable Machine", "shoulder press machine": "Machine", "lateral raises machine": "Machine",
+  "leg curl machine": "Leg Curl", "leg extension machine": "Leg Extension", "smith machine": "Smith Machine",
+  "ab crunch machine": "Machine", "abdominal bench": "Bench", "back extension machine": "Machine",
+  "hack squat machine": "Leg Press", "seated dip machine": "Machine", "leg raise tower": "Pull-up Bar",
+  "stability ball": "Exercise Ball", "stationary bike": "Exercise Bike", bench: "Bench", barbell: "Barbell",
+  kettlebells: "Kettlebells", treadmill: "Treadmill", elliptical: "Exercise Bike", stepmill: "Treadmill",
+  "preacher curl": "Preacher Curl", "ghd machine": "Machine", "ab roller": "Foam Roller",
 };
 
-/**
- * SAM3 text prompts for equipment detection.
- *
- * Keys are the text prompts sent to SAM3.
- * Values are the canonical equipment names used by FitOS.
- */
-const SAM3_EQUIPMENT_PROMPTS: Record<string, string> = {
-  // Chest
-  "chest press machine": "Chest Press",
-  "machine chest press": "Chest Press",
-  "seated chest press": "Chest Press",
-
-  // Pec Deck
-  "pec deck machine": "Pec Deck",
-  "pec deck": "Pec Deck",
-  "butterfly machine": "Pec Deck",
-
-  // Back
-  "lat pulldown machine": "Lat Pulldown",
-  "lat pulldown": "Lat Pulldown",
-  "pulldown machine": "Lat Pulldown",
-
-  "seated row machine": "Cable Machine",
-
-  // Cable
-  "cable machine": "Cable Machine",
-  "cable crossover": "Cable Machine",
-  "functional trainer": "Cable Machine",
-
-  // Legs
-  "leg press machine": "Leg Press",
-  "leg press": "Leg Press",
-  "seated leg press": "Leg Press",
-
-  "leg extension machine": "Leg Extension",
-  "leg extension": "Leg Extension",
-  "seated leg extension": "Leg Extension",
-
-  "leg curl machine": "Leg Curl",
-  "leg curl": "Leg Curl",
-  "seated leg curl": "Leg Curl",
-  "lying leg curl": "Leg Curl",
-  "standing leg curl": "Leg Curl",
-
-  // Shoulders
-  "shoulder press machine": "Machine",
-
-  // Smith / rack
-  "smith machine": "Smith Machine",
-  "squat rack": "Squat Rack",
-  "power rack": "Squat Rack",
-
-  // Free weights
-  barbell: "Barbell",
-
-  dumbbells: "Dumbbells",
-
-  bench: "Bench",
-  "flat bench": "Bench",
-  "adjustable bench": "Bench",
-  "incline bench": "Bench",
-  "decline bench": "Bench",
-
-  // Cardio
-  treadmill: "Treadmill",
-  "running machine": "Treadmill",
-
-  "exercise bike": "Exercise Bike",
-  "stationary bike": "Exercise Bike",
-  "spin bike": "Exercise Bike",
-  "cycling machine": "Exercise Bike",
-
-  elliptical: "Exercise Bike",
-
-  // Kettlebells
-  kettlebell: "Kettlebells",
-  kettlebells: "Kettlebells",
-
-  // Medicine balls
-  "medicine ball": "Medicine Ball",
-  "med ball": "Medicine Ball",
-  "wall ball": "Medicine Ball",
-
-  // Exercise balls
-  "exercise ball": "Exercise Ball",
-  "stability ball": "Exercise Ball",
-  "swiss ball": "Exercise Ball",
-  "yoga ball": "Exercise Ball",
-
-  // EZ bar
-  "ez curl bar": "EZ Curl Bar",
-  "ez bar": "EZ Curl Bar",
-  "curl bar": "EZ Curl Bar",
-
-  // Foam roller
-  "foam roller": "Foam Roller",
-  "foam roll": "Foam Roller",
-  roller: "Foam Roller",
-
-  // Pull-up
-  "pull-up bar": "Pull-up Bar",
-  "pullup bar": "Pull-up Bar",
-  "chin-up bar": "Pull-up Bar",
-  "chinup bar": "Pull-up Bar",
-  "pull up station": "Pull-up Bar",
-
-  // Resistance bands
-  "resistance bands": "Resistance Bands",
-  "resistance band": "Resistance Bands",
-  "exercise bands": "Resistance Bands",
-  "loop bands": "Resistance Bands",
-  "tube bands": "Resistance Bands",
-
-  // Assisted pull-up
-  "assisted pull-up": "Assisted Pull-up",
-  "assisted pullup": "Assisted Pull-up",
-  "assisted chin-up": "Assisted Pull-up",
-  "assisted chinup": "Assisted Pull-up",
-  "pull-up assist machine": "Assisted Pull-up",
-
-  // Preacher
-  "preacher curl": "Preacher Curl",
-  "preacher curl bench": "Preacher Curl",
-  "preacher bench": "Preacher Curl",
-};
-
-let equipmentAliasCache: Map<string, string> | null = null;
-
-/**
- * Load dynamic aliases from the database.
- *
- * EquipmentAlias:
- *   alias
- *   equipmentId
- *
- * Equipment:
- *   id
- *   name
- */
-async function loadEquipmentAliases(): Promise<Map<string, string>> {
-  if (equipmentAliasCache) {
-    return equipmentAliasCache;
-  }
-
-  const map = new Map<string, string>();
-
-  try {
-    const rows = await db.all<{
-      alias: string;
-      equipmentId: string;
-    }>(
-      `SELECT alias, equipmentId FROM EquipmentAlias`
-    );
-
-    const equipmentNames = new Map<string, string>();
-
-    const equipmentRows = await db.all<{
-      id: string;
-      name: string;
-    }>(
-      `SELECT id, name FROM Equipment`
-    );
-
-    for (const eq of equipmentRows) {
-      equipmentNames.set(eq.id, eq.name);
-    }
-
-    for (const row of rows) {
-      const equipmentName = equipmentNames.get(row.equipmentId);
-
-      if (equipmentName) {
-        map.set(
-          row.alias.toLowerCase().trim(),
-          equipmentName
-        );
-      }
-    }
-
-    equipmentAliasCache = map;
-  } catch (e) {
-    console.warn(
-      "Failed to load equipment aliases from database, using fallback:",
-      e
-    );
-  }
-
-  return map;
+function normalize(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
-/**
- * Normalize arbitrary model labels.
- */
-function normalizeLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, " ");
+async function canonicalEquipmentName(label: string): Promise<string | null> {
+  const normalized = normalize(label);
+  const aliasRows = await db.all<{ alias: string; name: string }>(
+    `SELECT ea.alias, e.name FROM EquipmentAlias ea JOIN Equipment e ON e.id = ea.equipmentId`
+  ).catch(() => []);
+  const exactAlias = aliasRows.find((row) => normalize(row.alias) === normalized);
+  const exactMap = LABELS[normalized];
+  const resolved = exactAlias?.name ?? exactMap;
+  if (!resolved) return null;
+  const exactEquipment = await db.get<{ name: string }>(`SELECT name FROM Equipment WHERE lower(name) = lower(?)`, resolved);
+  return exactEquipment?.name ?? null;
 }
 
-/**
- * Convert a model label into a canonical FitOS equipment name.
- *
- * Resolution order:
- *
- * 1. Database EquipmentAlias exact match
- * 2. Database EquipmentAlias fuzzy match
- * 3. SAM3 prompt mapping
- * 4. Legacy hardcoded fallback
- */
-async function mapDetectionLabel(
-  label: string
-): Promise<string | null> {
-  const normalized = normalizeLabel(label);
+export class BestEquipmentVisionProvider implements EquipmentVisionProvider {
+  readonly modelId = process.env.EQUIPMENT_VISION_MODEL_ID || "all-gym-equipment/2";
+  private readonly apiUrl = process.env.EQUIPMENT_VISION_API_URL || "https://serverless.roboflow.com";
+  constructor(private readonly apiKey = process.env.EQUIPMENT_VISION_API_KEY || "") {}
 
-  /**
-   * First use database aliases.
-   */
-  const aliases = await loadEquipmentAliases();
+  getProviderName(): string { return `roboflow-universe:${this.modelId}`; }
 
-  if (aliases.has(normalized)) {
-    return aliases.get(normalized)!;
-  }
-
-  /**
-   * Fuzzy database alias matching.
-   *
-   * Example:
-   * "large lat pulldown machine"
-   *
-   * can match:
-   * "lat pulldown machine"
-   */
-  for (const [alias, equipmentName] of aliases.entries()) {
-    if (
-      normalized.includes(alias) ||
-      alias.includes(normalized)
-    ) {
-      return equipmentName;
-    }
-  }
-
-  /**
-   * SAM3 prompt mapping.
-   */
-  if (SAM3_EQUIPMENT_PROMPTS[normalized]) {
-    return SAM3_EQUIPMENT_PROMPTS[normalized];
-  }
-
-  /**
-   * Fallback for legacy Roboflow models.
-   */
-  return FALLBACK_EQUIPMENT_LABEL_MAP[normalized] || null;
-}
-
-/**
- * Mock provider used when no vision provider is configured.
- */
-export class MockEquipmentVisionProvider
-  implements EquipmentVisionProvider
-{
-  async detectEquipment(): Promise<{
-    configured: boolean;
-    detections: EquipmentDetection[];
-  }> {
-    return {
-      configured: false,
-      detections: [],
-    };
-  }
-}
-
-/**
- * Roboflow Workflow provider.
- *
- * Uses the existing RoboflowWorkflowProvider and sends
- * SAM3 equipment prompts instead of the legacy class map.
- */
-export class RoboflowEquipmentWorkflowProvider
-  implements EquipmentVisionProvider
-{
-  private workflowProvider: RoboflowWorkflowProvider;
-
-  constructor(apiKey: string) {
-    this.workflowProvider =
-      new RoboflowWorkflowProvider(apiKey);
-  }
-
-  async detectEquipment(
-    imageBase64: string
-  ): Promise<{
-    configured: boolean;
-    detections: EquipmentDetection[];
-  }> {
-    try {
-      const rawDetections =
-        await this.workflowProvider.detectEquipment(
-          imageBase64,
-          SAM3_EQUIPMENT_PROMPTS
-        );
-
-      const detections: EquipmentDetection[] = [];
-
-      for (const d of rawDetections) {
-        const mapped = await mapDetectionLabel(
-          d.rawLabel
-        );
-
-        if (mapped) {
-          detections.push({
-            ...d,
-            equipmentName: mapped,
-          });
-        }
-      }
-
-      /**
-       * Dedupe detections by canonical equipment name.
-       * Keep the highest confidence detection.
-       */
-      const best =
-        new Map<string, EquipmentDetection>();
-
-      for (const detection of detections) {
-        const existing = best.get(
-          detection.equipmentName
-        );
-
-        if (
-          !existing ||
-          detection.confidence >
-            existing.confidence
-        ) {
-          best.set(
-            detection.equipmentName,
-            detection
-          );
-        }
-      }
-
-      return {
-        configured: true,
-        detections: Array.from(best.values()),
-      };
-    } catch (e: any) {
-      throw new Error(
-        `Roboflow workflow failed: ${
-          e?.message || String(e)
-        }`
-      );
-    }
-  }
-}
-
-/**
- * Legacy Roboflow hosted-model provider.
- *
- * Kept for backward compatibility.
- */
-export class RoboflowEquipmentVisionProvider
-  implements EquipmentVisionProvider
-{
-  constructor(
-    private apiKey: string,
-    private modelId: string
-  ) {}
-
-  async detectEquipment(
-    imageBase64: string
-  ): Promise<{
-    configured: boolean;
-    detections: EquipmentDetection[];
-  }> {
-    const url =
-      `https://detect.roboflow.com/${this.modelId}` +
-      `?api_key=${encodeURIComponent(this.apiKey)}` +
-      `&confidence=35`;
-
-    const res = await fetch(url, {
+  async detectEquipment(imageBase64: string) {
+    if (!this.apiKey) return { configured: false, detections: [], provider: this.getProviderName(), error: "EQUIPMENT_VISION_API_KEY is not configured" };
+    const started = Date.now();
+    const modelId = this.modelId.replace(/^\/+|\/+$/g, "");
+    const response = await fetch(`${this.apiUrl.replace(/\/$/, "")}/${modelId}`, {
       method: "POST",
-      headers: {
-        "Content-Type":
-          "application/x-www-form-urlencoded",
-      },
-      body: imageBase64,
+      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: imageBase64.replace(/^data:image\/[^;]+;base64,/, ""),
+      signal: AbortSignal.timeout(30_000),
     });
-
-    if (!res.ok) {
-      const text = await res
-        .text()
-        .catch(() => "");
-
-      throw new Error(
-        `Roboflow inference failed (${res.status}): ${text.slice(
-          0,
-          200
-        )}`
-      );
+    if (!response.ok) throw new Error(`Vision API returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
+    const data = await response.json() as { predictions?: Array<{ class?: string; confidence?: number; x?: number; y?: number; width?: number; height?: number }> };
+    const raw = Array.isArray(data.predictions) ? data.predictions : [];
+    const threshold = getEquipmentModeConfig().confidenceThreshold;
+    const parsed: EquipmentDetection[] = [];
+    for (const prediction of raw) {
+      const confidence = Number(prediction.confidence);
+      if (!prediction.class || !Number.isFinite(confidence) || confidence < threshold) continue;
+      const equipmentName = await canonicalEquipmentName(prediction.class);
+      if (!equipmentName) continue;
+      const box = [prediction.x, prediction.y, prediction.width, prediction.height];
+      parsed.push({
+        equipmentName, confidence, rawLabel: prediction.class,
+        boundingBox: box.every((v) => Number.isFinite(v)) ? { x: prediction.x!, y: prediction.y!, width: prediction.width!, height: prediction.height! } : undefined,
+      });
     }
-
-    const data = (await res.json()) as {
-      predictions?: Array<{
-        class: string;
-        confidence: number;
-        x?: number;
-        y?: number;
-        width?: number;
-        height?: number;
-      }>;
-    };
-
-    const predictions =
-      data.predictions ?? [];
-
-    /**
-     * Dedupe by canonical equipment name.
-     */
-    const best =
-      new Map<string, EquipmentDetection>();
-
-    for (const p of predictions) {
-      const mapped =
-        await mapDetectionLabel(p.class);
-
-      if (!mapped) {
-        continue;
-      }
-
-      const existing = best.get(mapped);
-
-      if (
-        !existing ||
-        p.confidence > existing.confidence
-      ) {
-        best.set(mapped, {
-          equipmentName: mapped,
-          confidence: p.confidence,
-          rawLabel: p.class,
-          boundingBox:
-            p.x == null ||
-            p.y == null ||
-            p.width == null ||
-            p.height == null
-              ? undefined
-              : {
-                  x: p.x,
-                  y: p.y,
-                  width: p.width,
-                  height: p.height,
-                },
-        });
-      }
+    // Detector-side NMS handles overlapping boxes. Collapse repeated class detections
+    // for the equipment-availability set, retaining the strongest observation.
+    const unique = new Map<string, EquipmentDetection>();
+    for (const detection of parsed) {
+      const existing = unique.get(detection.equipmentName);
+      if (!existing || detection.confidence > existing.confidence) unique.set(detection.equipmentName, detection);
     }
-
-    return {
-      configured: true,
-      detections: Array.from(best.values()),
-    };
+    console.info(JSON.stringify({ event: "equipment_detection", provider: this.getProviderName(), rawDetections: raw.length, normalizedEquipment: [...new Set(parsed.map((d) => d.equipmentName))], filteredDetections: unique.size, latencyMs: Date.now() - started }));
+    return { configured: true, detections: [...unique.values()], provider: this.getProviderName(), latencyMs: Date.now() - started, rawDetectionCount: raw.length };
   }
 }
 
-/**
- * Select the configured equipment vision provider.
- */
-export function getEquipmentVisionProvider():
-  EquipmentVisionProvider {
-  const apiKey =
-    process.env.ROBOFLOW_API_KEY;
+export class MockEquipmentVisionProvider implements EquipmentVisionProvider {
+  async detectEquipment() { return { configured: false, detections: [], provider: "unconfigured", error: "EQUIPMENT_VISION_API_KEY is not configured" }; }
+  getProviderName() { return "unconfigured"; }
+}
 
-  /**
-   * Workflow mode.
-   */
-  if (
-    process.env.ROBOFLOW_WORKFLOW_MODE ===
-      "true" &&
-    apiKey
-  ) {
-    return new RoboflowEquipmentWorkflowProvider(
-      apiKey
-    );
+export class FullGymEquipmentProvider implements EquipmentVisionProvider {
+  async detectEquipment() {
+    const rows = await db.all<{ name: string }>(`SELECT name FROM Equipment WHERE name != 'No Equipment'`);
+    return { configured: true, detections: rows.map((row) => ({ equipmentName: row.name, confidence: 1, rawLabel: "full_gym_mode" })), provider: "full_gym" };
   }
+  getProviderName() { return "full_gym"; }
+}
 
-  /**
-   * Legacy hosted-model mode.
-   */
-  const modelId =
-    process.env.ROBOFLOW_MODEL;
-
-  if (apiKey && modelId) {
-    return new RoboflowEquipmentVisionProvider(
-      apiKey,
-      modelId
-    );
-  }
-
-  /**
-   * No provider configured.
-   */
-  return new MockEquipmentVisionProvider();
+export function getEquipmentVisionProvider(): EquipmentVisionProvider {
+  return getEquipmentModeConfig().mode === "FULL_GYM"
+    ? new FullGymEquipmentProvider()
+    : process.env.EQUIPMENT_VISION_API_KEY
+      ? new BestEquipmentVisionProvider()
+      : new MockEquipmentVisionProvider();
 }

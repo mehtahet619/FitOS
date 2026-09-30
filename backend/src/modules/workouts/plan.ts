@@ -611,22 +611,24 @@ export async function getCycleHistory(
 export async function getExercisesForWorkout(
   database: DatabaseLike,
   userId: string,
-  workoutUnit: WorkoutUnit
+  workoutUnit: WorkoutUnit,
+  equipmentMode: "FULL_GYM" | "SCANNED" | "USER_EQUIPMENT" = "FULL_GYM",
+  scannedEquipmentIds: string[] = [],
 ): Promise<Array<{ exerciseId: string; name: string; primaryMuscle: string; equipmentRequired: string[]; requiresEquipment: boolean }>> {
   const muscles = workoutUnit.muscles;
   if (muscles.length === 0) return [];
 
   const placeholders = muscles.map(() => "?").join(",");
-  const equipmentRows = await database.all<{ equipmentId: string }>(
-    `SELECT equipmentId FROM UserEquipment WHERE userId = ?`,
-    userId
-  );
-  const userEquipmentIds = new Set(equipmentRows.map((r) => r.equipmentId));
+  const availableEquipmentIds = equipmentMode === "FULL_GYM"
+    ? new Set((await database.all<{ id: string }>(`SELECT id FROM Equipment`)).map((r) => r.id))
+    : equipmentMode === "SCANNED"
+      ? new Set(scannedEquipmentIds)
+      : new Set((await database.all<{ equipmentId: string }>(`SELECT equipmentId FROM UserEquipment WHERE userId = ?`, userId)).map((r) => r.equipmentId));
 
   const rows = await database.all<any>(
     `SELECT DISTINCT e.id, e.name, e.primaryMuscle
      FROM Exercise e
-     WHERE e.primaryMuscle IN (${placeholders})
+     WHERE lower(e.primaryMuscle) IN (${placeholders})
      ORDER BY e.primaryMuscle, e.id`,
     ...muscles
   );
@@ -639,7 +641,7 @@ export async function getExercisesForWorkout(
       );
       const requiredIds = new Set(equipRows.map((r) => r.equipmentId));
       const hasBodyweight = requiredIds.size === 0;
-      const hasAllEquipment = Array.from(requiredIds).every((id) => userEquipmentIds.has(id));
+      const hasAllEquipment = Array.from(requiredIds).every((id) => availableEquipmentIds.has(id));
       const isPerformable = hasBodyweight || hasAllEquipment;
       const names = equipRows.length
         ? (await database.all<{ name: string }>(

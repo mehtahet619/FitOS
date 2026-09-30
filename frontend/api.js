@@ -18,10 +18,12 @@ const Api = (() => {
         return await fetch(url, options);
       } catch (error) {
         lastError = error;
-        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 3000));
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
       }
     }
-    throw lastError;
+    const error = new Error("Cannot reach the FitOS API. Check that the API service is running and its URL is configured correctly.");
+    error.cause = lastError;
+    throw error;
   }
 
   async function request(path, opts = {}) {

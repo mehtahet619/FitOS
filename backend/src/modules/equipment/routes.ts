@@ -128,18 +128,20 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
   if (!parsed.success) return res.status(400).json({ error: "imageBase64 (raw base64, no data: prefix) is required" });
 
   const provider = getEquipmentVisionProvider();
+  const started = Date.now();
   let result;
   try {
     result = await provider.detectEquipment(parsed.data.imageBase64);
   } catch (e: any) {
-    return res.status(502).json({ error: `Equipment detection failed: ${e.message}` });
+    console.error(JSON.stringify({ event: "equipment_detection_error", provider: provider.getProviderName(), latencyMs: Date.now() - started, error: e?.message || String(e) }));
+    return res.status(503).json({ error: "EQUIPMENT_DETECTION_FAILED", message: "Equipment detection is temporarily unavailable." });
   }
 
   if (!result.configured) {
     return res.json({
       configured: false,
       message:
-        "No equipment-vision model is connected, so nothing was auto-detected. Set ROBOFLOW_API_KEY in the Render service environment to enable camera-based detection.",
+        "No equipment-vision model is connected, so nothing was auto-detected. Set EQUIPMENT_VISION_API_KEY to enable camera-based detection.",
       detections: [],
       suggestedExercises: [],
     });

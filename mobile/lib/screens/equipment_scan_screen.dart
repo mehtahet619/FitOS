@@ -6,7 +6,8 @@ import '../theme/app_theme.dart';
 
 class EquipmentScanScreen extends StatefulWidget {
   final bool mergeIntoProfile;
-  const EquipmentScanScreen({super.key, this.mergeIntoProfile = false});
+  final bool returnDetections;
+  const EquipmentScanScreen({super.key, this.mergeIntoProfile = false, this.returnDetections = false});
 
   @override
   State<EquipmentScanScreen> createState() => _EquipmentScanScreenState();
@@ -69,6 +70,10 @@ class _EquipmentScanScreenState extends State<EquipmentScanScreen> {
   }
 
   Future<void> _useDetection(List<String> names) async {
+    if (widget.returnDetections) {
+      Navigator.of(context).pop(names);
+      return;
+    }
     if (widget.mergeIntoProfile) {
       setState(() => _busy = true);
       try {
