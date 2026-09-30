@@ -100,6 +100,77 @@ const State = {
   isRegisterMode: false,
 };
 
+const AuthState = {
+  status: "AUTH_LOADING",
+  user: null,
+  generation: 0,
+  authenticated(user) { this.status = "AUTHENTICATED"; this.user = user; this.generation += 1; },
+  unauthenticated() {
+    if (this.status === "UNAUTHENTICATED") return;
+    this.status = "UNAUTHENTICATED"; this.user = null; this.generation += 1;
+    Api.clearTokens(); clearProtectedContent();
+    if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
+  },
+};
+let authBootGeneration = 0;
+window.AuthState = AuthState;
+
+const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/history": "history", "/profile": "profile", "/settings": "settings" };
+function normalizePath(path) { return path.length > 1 ? path.replace(/\/$/, "") : path; }
+function navigate(path, replace = false) {
+  if (replace) history.replaceState({}, "", path); else if (location.pathname !== path) history.pushState({}, "", path);
+  void routeCurrent();
+}
+function clearProtectedContent() {
+  ["today-content", "workout-content", "diet-content", "gym-content", "gym-scan-content"].forEach((id) => { const el = $(id); if (el) el.replaceChildren(); });
+  $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
+}
+function maskEmail(email) { const [name, domain] = (email || "").split("@"); return `${(name || "").slice(0, 1)}***@${domain || ""}`; }
+let verifyEmail = sessionStorage.getItem("pendingVerifyEmail") || "";
+let resendTimer;
+function showVerify(email) {
+  verifyEmail = (email || "").trim().toLowerCase();
+  if (verifyEmail) sessionStorage.setItem("pendingVerifyEmail", verifyEmail);
+  $("verify-email-masked").textContent = maskEmail(verifyEmail);
+  showScreen("screen-verify-email"); startResendCountdown(60);
+}
+function startResendCountdown(seconds) {
+  clearInterval(resendTimer); let remaining = seconds;
+  const button = $("verify-resend"); button.disabled = true;
+  const paint = () => { $("verify-countdown").textContent = remaining > 0 ? `Resend available in ${remaining}s` : "You can request a new code."; button.disabled = remaining > 0; };
+  paint(); resendTimer = setInterval(() => { remaining -= 1; paint(); if (remaining <= 0) clearInterval(resendTimer); }, 1000);
+}
+async function routeCurrent() {
+  const path = normalizePath(location.pathname);
+  const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
+  if (AuthState.status === "AUTH_LOADING") { showScreen("screen-auth-loading"); return; }
+  if (path === "/" || path === "/login" || path === "/register") {
+    if (AuthState.status === "AUTHENTICATED") { if (path !== "/homepage") navigate("/homepage", true); return; }
+    State.isRegisterMode = path === "/register";
+    updateAuthMode(); showScreen("screen-auth"); return;
+  }
+  if (path === "/verify-email" || path === "/forgot-password" || path === "/reset-password") { showScreen(publicRoutes[path]); return; }
+  if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
+  if (!routeTabs[path]) { navigate("/homepage", true); return; }
+  $("main-app").style.display = "flex"; $("bottom-nav").style.display = "flex";
+  if (path === "/profile" || path === "/settings") {
+    showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none"; return;
+  }
+  if (path === "/history") { showHistory(); return; }
+  switchTab(routeTabs[path], false);
+}
+window.addEventListener("popstate", () => { if (AuthState.status === "AUTHENTICATED") { void routeCurrent(); } else { void boot(); } });
+window.addEventListener("pageshow", (event) => { if (event.persisted) { AuthState.status = "AUTH_LOADING"; showScreen("screen-auth-loading"); void boot(); } });
+
+function updateAuthMode() {
+  const register = State.isRegisterMode;
+  $("auth-title").textContent = register ? "Create your account" : "Welcome back";
+  $("auth-submit").textContent = register ? "Sign up" : "Log in";
+  $("auth-toggle").textContent = register ? "Already have an account? Log in" : "New here? Create an account";
+  $("auth-name-label").hidden = !register; $("auth-name").hidden = !register;
+  $("forgot-link").hidden = register;
+}
+
 const EQUIPMENT_ICONS = {
   "No Equipment": "🧍",
   "Dumbbells": "🏋️",
@@ -123,41 +194,38 @@ function banner(el, type, msg) {
 }
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  if (id === "screen-auth" || id.startsWith("screen-verify") || id.startsWith("screen-forgot") || id.startsWith("screen-reset")) {
+    $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
+  }
   $(id).classList.add("active");
 }
 
 /* ---------------- Boot ---------------- */
 async function boot() {
-  if (!Api.token()) {
-    showScreen("screen-auth");
-    return;
-  }
+  const generation = ++authBootGeneration;
+  AuthState.status = "AUTH_LOADING"; showScreen("screen-auth-loading");
   try {
-    await Api.get("/user/profile");
-    enterMainApp();
+    const data = await Api.get("/auth/me");
+    if (generation !== authBootGeneration) return;
+    if (!data.authenticated) { Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; navigate("/login", true); return; }
+    AuthState.authenticated(data.user);
+    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
+    if (["/", "/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
-    if (e.status === 404) {
-      await loadEquipmentChips();
-      showScreen("screen-onboarding");
-    } else {
-      Api.clearTokens();
-      showScreen("screen-auth");
-    }
+    if (generation !== authBootGeneration) return;
+    Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; navigate("/login", true);
   }
 }
 
 /* ---------------- Auth screen ---------------- */
 $("auth-toggle").addEventListener("click", () => {
   State.isRegisterMode = !State.isRegisterMode;
-  $("auth-title").textContent = State.isRegisterMode ? "Create your account" : "Welcome back";
-  $("auth-submit").textContent = State.isRegisterMode ? "Sign up" : "Log in";
-  $("auth-toggle").textContent = State.isRegisterMode
-    ? "Already have an account? Log in"
-    : "New here? Create an account";
+  updateAuthMode();
+  history.replaceState({}, "", State.isRegisterMode ? "/register" : "/login");
 });
 
 $("auth-submit").addEventListener("click", async () => {
-  const email = $("auth-email").value.trim();
+  const email = $("auth-email").value.trim().toLowerCase();
   const password = $("auth-password").value;
   const bannerEl = $("auth-banner");
   banner(bannerEl, "info", "");
@@ -169,17 +237,48 @@ $("auth-submit").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Loading…";
   try {
-    const path = State.isRegisterMode ? "/auth/register" : "/auth/login";
-    const data = await Api.post(path, { email, password });
-    Api.setTokens(data.accessToken, data.refreshToken);
-    await boot();
+    if (State.isRegisterMode) {
+      const name = $("auth-name").value.trim();
+      if (!name) throw new Error("Enter your name.");
+      await Api.post("/auth/register/request-otp", { name, email, password });
+      showVerify(email);
+      return;
+    }
+    const data = await Api.post("/auth/login", { email, password });
+    if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
+    AuthState.authenticated(data.user);
+    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] login complete; redirecting to homepage");
+    navigate("/homepage", true);
   } catch (e) {
-    console.error("Auth request failed:", e.message, e.cause || "");
+    if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
     banner(bannerEl, "error", e.message || "Something went wrong.");
   } finally {
     btn.disabled = false;
     btn.textContent = State.isRegisterMode ? "Sign up" : "Log in";
   }
+});
+
+$("verify-submit").addEventListener("click", async () => {
+  const bannerEl = $("verify-banner"); banner(bannerEl, "info", "");
+  try {
+    const data = await Api.post("/auth/register/verify-otp", { email: verifyEmail, otp: $("verify-otp").value.trim() });
+    if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
+    sessionStorage.removeItem("pendingVerifyEmail"); AuthState.authenticated(data.user); navigate("/homepage", true);
+  } catch (e) { banner(bannerEl, "error", e.message || "Could not verify your email."); }
+});
+$("verify-resend").addEventListener("click", async () => {
+  try { await Api.post("/auth/register/resend-otp", { email: verifyEmail }); startResendCountdown(60); banner($("verify-banner"), "success", "If verification is pending, a new code has been sent."); }
+  catch (e) { if (e.status === 429) { startResendCountdown((e.body?.retryAfter || 2)); } banner($("verify-banner"), "error", e.message); }
+});
+$("forgot-link").addEventListener("click", () => navigate("/forgot-password"));
+$("forgot-back").addEventListener("click", () => navigate("/login"));
+$("forgot-submit").addEventListener("click", async () => {
+  try { const email = $("forgot-email").value.trim().toLowerCase(); await Api.post("/auth/password/request-otp", { email }); sessionStorage.setItem("resetEmail", email); navigate("/reset-password"); }
+  catch (e) { banner($("forgot-banner"), "error", e.message); }
+});
+$("reset-submit").addEventListener("click", async () => {
+  try { await Api.post("/auth/password/reset", { email: sessionStorage.getItem("resetEmail"), otp: $("reset-otp").value.trim(), password: $("reset-password").value }); sessionStorage.removeItem("resetEmail"); navigate("/login", true); banner($("auth-banner"), "success", "Password reset. Please sign in."); }
+  catch (e) { banner($("reset-banner"), "error", e.message); }
 });
 
 /* ---------------- Onboarding screen ---------------- */
@@ -254,18 +353,29 @@ $("onboarding-submit").addEventListener("click", async () => {
 
 /* ---------------- Main app / tab nav ---------------- */
 function enterMainApp() {
+  if (AuthState.status !== "AUTHENTICATED") return;
   $("screen-auth").classList.remove("active");
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
   $("bottom-nav").style.display = "flex";
-  switchTab("today");
+  navigate("/homepage", true);
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+document.addEventListener("click", async (event) => {
+  const target = event.target.closest("[data-logout]");
+  if (!target) return;
+  try { await Api.post("/auth/logout", {}); } catch { /* local sign-out still completes */ }
+  AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; Api.clearTokens(); clearProtectedContent(); navigate("/login", true);
+});
 
-function switchTab(tab) {
+function switchTab(tab, updateUrl = true) {
+  if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
+  const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", gym: "/today", vision: "/today" };
+  if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
+  if (tab === "history") { void showHistory(); return; }
   document.querySelectorAll("#main-app .screen").forEach((s) => s.classList.remove("active"));
   $("screen-" + tab).classList.add("active");
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
@@ -275,6 +385,17 @@ function switchTab(tab) {
   if (tab === "diet") loadDiet();
   if (tab === "gym-scan") loadGymScan();
   if (tab === "gym") loadGym();
+}
+
+async function showHistory() {
+  document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
+  const screen = $("screen-history"); if (!screen) { navigate("/homepage", true); return; }
+  screen.classList.add("active"); screen.innerHTML = '<div class="header"><h1>Workout history</h1></div><div id="history-content"><div class="empty-state">Loading...</div></div>';
+  try {
+    const result = await Api.get("/workouts/history");
+    const items = Array.isArray(result) ? result : (result.workouts || result.history || []);
+    $("history-content").innerHTML = items.length ? items.map((item) => `<div class="card"><div class="card-label">${item.name || item.focus || "Workout"}</div><div class="card-sub">${new Date(item.completedAt || item.createdAt).toLocaleDateString()}</div></div>`).join("") : '<div class="empty-state">No completed workouts yet.</div>';
+  } catch (error) { $("history-content").textContent = error.message; }
 }
 
 /* ================= TODAY ================= */
@@ -441,8 +562,6 @@ function renderCircularProgress(plan) {
     </div>
   `;
 }
-
-function renderCycleProgress(plan) {
 
 const BRO_DEFAULT_UNITS = [
   { label: "Chest + Triceps", muscles: ["chest", "triceps"] },
@@ -1275,4 +1394,4 @@ function renderGymScan(equipment, plan) {
 }
 
 /* ---------------- Kickoff ---------------- */
-boot();
+void boot();

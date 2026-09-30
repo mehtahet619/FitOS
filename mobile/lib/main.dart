@@ -43,15 +43,16 @@ class _BootScreenState extends State<BootScreen> {
       return;
     }
     try {
-      await ApiClient.instance.get("/user/profile");
-      _goTo(const HomeShell());
-    } on ApiException catch (e) {
-      if (e.status == 404) {
-        _goTo(const OnboardingScreen());
-      } else {
+      final session = await ApiClient.instance.restoreSession();
+      if (session["authenticated"] != true) {
         await ApiClient.instance.clearTokens();
         _goTo(const AuthScreen());
+        return;
       }
+      _goTo(const HomeShell());
+    } on ApiException {
+      await ApiClient.instance.clearTokens();
+      _goTo(const AuthScreen());
     } catch (_) {
       _goTo(const AuthScreen());
     }

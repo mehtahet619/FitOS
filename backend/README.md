@@ -19,15 +19,15 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 ## Render deployment
 
 The repository includes a `render.yaml` blueprint for a paid, always-on
-Render web service and a managed PostgreSQL database. In the Render dashboard,
-create a new Blueprint from this repository and set `FRONTEND_ORIGIN` to the
-deployed frontend URL. The service runs PostgreSQL migrations and seed data on
-start.
+Render web service and a managed PostgreSQL database. Set `FRONTEND_ORIGIN` to
+the deployed frontend URL. PostgreSQL migrations run as a pre-deploy step;
+normal server starts do not run seed scripts. Configure SMTP and Upstash Redis
+secrets in Render before enabling OTP registration.
 
 The API now selects PostgreSQL automatically when `DATABASE_URL` starts with
 `postgres://` or `postgresql://`. SQLite remains available for local
-development. The in-memory rate limiter still needs a shared Redis store
-before increasing the Render instance count.
+development. OTP request limits use an atomic shared Upstash Redis token
+bucket in production.
 
 The PostgreSQL pool adapter is available in `src/db/postgres.ts` and can be
 initialized independently with:
@@ -43,6 +43,12 @@ DATABASE_URL="postgresql://..." npm run migrate:postgres
 |---|---|
 | `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
+| `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` | Transactional SMTP settings. |
+| `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` | Transactional SMTP settings. |
 | `AI_PROVIDER` | `template` (default, no key needed) — see `src/ai/provider.ts` to add a real one. |
 | `MAPS_PROVIDER` | `mock` (default, returns honest empty results) or `apify_swiggy` — see **Food Discovery** below. |
 | `ROBOFLOW_WORKFLOW_MODE` | `true` for serverless workflows (recommended), `false` or unset for legacy hosted models — see **Equipment Vision** below. |
@@ -52,9 +58,14 @@ DATABASE_URL="postgresql://..." npm run migrate:postgres
 ## Endpoints
 
 ### Auth
-- `POST /auth/register` `{ email, password }`
+- `POST /auth/register/request-otp` `{ name, email, password }`
+- `POST /auth/register/resend-otp` `{ email }`
+- `POST /auth/register/verify-otp` `{ email, otp }`
 - `POST /auth/login` `{ email, password }`
-- `POST /auth/refresh` `{ refreshToken }`
+- `GET /auth/me` session restoration
+- `POST /auth/refresh` rotating refresh session
+- `POST /auth/logout` (auth)
+- `POST /auth/password/request-otp` and `POST /auth/password/reset`
 - `POST /auth/google` — stub, returns 501 with wiring notes
 
 ### User

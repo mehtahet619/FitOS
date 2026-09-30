@@ -14,9 +14,50 @@ CREATE TABLE IF NOT EXISTS User (
   email TEXT UNIQUE NOT NULL,
   passwordHash TEXT,
   googleId TEXT UNIQUE,
+  name TEXT,
+  emailVerified INTEGER NOT NULL DEFAULT 1,
+  emailVerifiedAt TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_user_email_lower ON User(LOWER(email));
+
+CREATE TABLE IF NOT EXISTS PendingRegistration (
+  id TEXT PRIMARY KEY,
+  userId TEXT REFERENCES User(id) ON DELETE CASCADE,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  passwordHash TEXT NOT NULL,
+  otpHash TEXT,
+  otpExpiresAt TEXT,
+  otpAttempts INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pending_registration_expiry ON PendingRegistration(otpExpiresAt);
+
+CREATE TABLE IF NOT EXISTS AuthSession (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  refreshTokenHash TEXT NOT NULL,
+  expiresAt TEXT NOT NULL,
+  revokedAt TEXT,
+  createdAt TEXT NOT NULL,
+  lastUsedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_session_user ON AuthSession(userId);
+
+CREATE TABLE IF NOT EXISTS PasswordResetChallenge (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  otpHash TEXT,
+  otpExpiresAt TEXT,
+  otpAttempts INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON PasswordResetChallenge(otpExpiresAt);
 
 CREATE TABLE IF NOT EXISTS UserProfile (
   id TEXT PRIMARY KEY,

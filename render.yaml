@@ -5,7 +5,7 @@ services:
     rootDir: backend
     buildCommand: npm ci && npm run build
     preDeployCommand: npm run migrate:postgres:prod
-    startCommand: npm run seed:prod && npm start
+    startCommand: npm start
     autoDeploy: false
     healthCheckPath: /health
     plan: free
@@ -20,6 +20,24 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      - key: OTP_HASH_SECRET
+        generateValue: true
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_REQUIRE_MX
+        value: "false"
       - key: FRONTEND_ORIGIN
         value: https://adaptive-fit-web.onrender.com
       - key: RENDER_SERVICE_ID
@@ -51,6 +69,10 @@ services:
     buildCommand: node scripts/inject-frontend-api-url.js
     staticPublishPath: frontend
     autoDeploy: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: API_BASE_URL
         value: https://adaptive-fit-api.onrender.com

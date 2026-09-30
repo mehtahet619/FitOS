@@ -25,14 +25,17 @@
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",
+    "@upstash/redis": "^1.39.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "disposable-email-domains-js": "^1.26.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-async-errors": "^3.1.1",
     "express-rate-limit": "^7.4.0",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.7.0",
+    "nodemailer": "^10.0.13",
     "pg": "^8.23.0",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"

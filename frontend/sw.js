@@ -1,4 +1,4 @@
-const CACHE_NAME = "adaptive-fit-shell-v2";
+const CACHE_NAME = "adaptive-fit-shell-v3";
 
 const SHELL_ASSETS = [
   "./",
@@ -32,6 +32,7 @@ self.addEventListener("activate", (event) => {
 // (the backend API, the MediaPipe CDN model, jsQR) goes straight to the
 // network untouched — the app needs those to be live, not cached.
 self.addEventListener("fetch", (event) => {
+  if (new URL(event.request.url).pathname.includes("/api/") || new URL(event.request.url).pathname.startsWith("/auth/")) return;
   const url = new URL(event.request.url);
   const isOwnOrigin = url.origin === self.location.origin;
   const isShellFile = SHELL_ASSETS.some((asset) => url.pathname.endsWith(asset.replace("./", "/")));

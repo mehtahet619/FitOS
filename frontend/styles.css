@@ -42,6 +42,7 @@ html, body {
   overflow-y: auto;
 }
 .screen.active { display: block; }
+.auth-loading { min-height: 100vh; display: grid; place-items: center; padding: 24px; color: var(--muted); }
 
 /* ---------- Header ---------- */
 .header { margin-bottom: 18px; }

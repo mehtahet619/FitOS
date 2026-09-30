@@ -21,6 +21,18 @@ class SqliteDatabase implements DatabaseLike {
   async exec(sql: string): Promise<void> {
     this.database.exec(sql);
   }
+
+  async transaction<T>(work: (tx: DatabaseLike) => Promise<T>): Promise<T> {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = await work(this);
+      this.database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 function createDatabase(): DatabaseLike {

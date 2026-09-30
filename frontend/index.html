@@ -15,14 +15,20 @@
 <body>
 <div id="app">
 
+  <div id="screen-auth-loading" class="screen active auth-loading">Checking your session...</div>
+
   <!-- ============ AUTH SCREEN ============ -->
-  <div id="screen-auth" class="screen active">
+  <div id="screen-auth" class="screen">
     <div class="auth-wrap">
       <div class="header">
         <h1 id="auth-title">Welcome back</h1>
         <p>Adaptive workouts, nutrition, and gym check-in — built around what you actually have.</p>
       </div>
       <div id="auth-banner"></div>
+      <div class="field">
+        <label id="auth-name-label" hidden>Name</label>
+        <input id="auth-name" type="text" autocomplete="name" placeholder="Your name" hidden />
+      </div>
       <div class="field">
         <label>Email</label>
         <input id="auth-email" type="email" placeholder="you@example.com" />
@@ -33,8 +39,19 @@
       </div>
       <button class="btn btn-primary" id="auth-submit">Log in</button>
       <button class="link-btn" id="auth-toggle">New here? Create an account</button>
+      <button class="link-btn" id="forgot-link" type="button">Forgot your password?</button>
     </div>
   </div>
+
+  <div id="screen-verify-email" class="screen">
+    <div class="auth-wrap"><div class="header"><h1>Verify your email</h1><p>We sent a 6-digit verification code to <span id="verify-email-masked"></span></p></div>
+      <div id="verify-banner"></div><div class="field"><label>Verification code</label><input id="verify-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
+      <button class="btn btn-primary" id="verify-submit">Verify Email</button><button class="link-btn" id="verify-resend" type="button">Resend code</button><p id="verify-countdown" class="muted"></p><p class="muted">Check your spam folder.</p>
+    </div>
+  </div>
+
+  <div id="screen-forgot-password" class="screen"><div class="auth-wrap"><div class="header"><h1>Reset your password</h1><p>We’ll email you a one-time reset code.</p></div><div id="forgot-banner"></div><div class="field"><label>Email</label><input id="forgot-email" type="email" autocomplete="email" /></div><button class="btn btn-primary" id="forgot-submit">Send reset code</button><button class="link-btn" id="forgot-back">Back to login</button></div></div>
+  <div id="screen-reset-password" class="screen"><div class="auth-wrap"><div class="header"><h1>Choose a new password</h1></div><div id="reset-banner"></div><div class="field"><label>6-digit reset code</label><input id="reset-otp" inputmode="numeric" maxlength="6" /></div><div class="field"><label>New password</label><input id="reset-password" type="password" autocomplete="new-password" /></div><button class="btn btn-primary" id="reset-submit">Reset password</button></div></div>
 
   <!-- ============ ONBOARDING SCREEN ============ -->
   <div id="screen-onboarding" class="screen">
@@ -43,6 +60,7 @@
       <p>This tunes your workouts, nutrition targets, and equipment matching.</p>
     </div>
     <div id="onboarding-banner"></div>
+    <button class="btn btn-outline" data-logout type="button">Log out</button>
     <div class="card">
       <div class="field"><label>Name</label><input id="ob-name" placeholder="Het" /></div>
       <div class="card-grid-2">
@@ -88,14 +106,14 @@
       <div id="onboarding-scan-area"></div>
       <div class="chip-group" id="equipment-chips"></div>
     </div>
-    <button class="btn btn-primary" id="onboarding-submit">Save & continue</button>
+      <button class="btn btn-primary" id="onboarding-submit">Save & continue</button>
   </div>
 
   <!-- ============ MAIN APP (tabs) ============ -->
-  <div id="main-app" style="display:none; flex:1; display:flex; flex-direction:column;">
+  <div id="main-app" style="display:none; flex:1; flex-direction:column;">
 
     <!-- TODAY -->
-    <div id="screen-today" class="screen active">
+    <div id="screen-today" class="screen">
       <div class="header">
         <h1 id="today-greeting">Today</h1>
         <p>Your day at a glance.</p>
@@ -182,6 +200,8 @@
       </div>
       <div id="gym-scan-content"><div class="empty-state">Loading…</div></div>
     </div>
+
+    <div id="screen-history" class="screen"><div class="header"><h1>Workout history</h1></div><div id="history-content"></div></div>
 
   </div>
 

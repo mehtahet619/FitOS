@@ -1,37 +1,86 @@
 import jwt from "jsonwebtoken";
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { Request, Response, NextFunction } from "express";
+import { db } from "../db/client";
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || "dev_access_secret_change_me";
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "dev_refresh_secret_change_me";
+const accessSecret = () => {
+  const secret = process.env.JWT_ACCESS_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") throw new Error("JWT_ACCESS_SECRET is required in production");
+  return secret || "local_only_access_secret_change_me";
+};
+const refreshSecret = () => {
+  const secret = process.env.JWT_REFRESH_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") throw new Error("JWT_REFRESH_SECRET is required in production");
+  return secret || "local_only_refresh_secret_change_me";
+};
+export const SESSION_COOKIE_ACCESS = "fitos_access";
+export const SESSION_COOKIE_REFRESH = "fitos_refresh";
 
-export function signAccessToken(userId: string): string {
-  return jwt.sign({ sub: userId }, ACCESS_SECRET, { expiresIn: "15m" });
+export function signAccessToken(userId: string, sessionId: string): string {
+  return jwt.sign({ sub: userId, sid: sessionId }, accessSecret(), { expiresIn: "15m" });
 }
-
-export function signRefreshToken(userId: string): string {
-  return jwt.sign({ sub: userId }, REFRESH_SECRET, { expiresIn: "30d" });
+export function signRefreshToken(userId: string, sessionId: string, secretPart: string): string {
+  return jwt.sign({ sub: userId, sid: sessionId, secretPart }, refreshSecret(), { expiresIn: "30d" });
 }
-
-export function verifyRefreshToken(token: string): string {
-  const decoded = jwt.verify(token, REFRESH_SECRET) as { sub: string };
-  return decoded.sub;
+export function verifyRefreshToken(token: string): { userId: string; sessionId: string; secretPart: string } {
+  const decoded = jwt.verify(token, refreshSecret()) as { sub: string; sid: string; secretPart: string };
+  if (!decoded.sid || !decoded.secretPart) throw new Error("Invalid refresh token");
+  return { userId: decoded.sub, sessionId: decoded.sid, secretPart: decoded.secretPart };
 }
-
-export interface AuthedRequest extends Request {
-  userId?: string;
+export function hashRefreshSecret(secretPart: string): string {
+  const secret = process.env.JWT_REFRESH_SECRET || "local_only_refresh_secret_change_me";
+  return createHash("sha256").update(`${secret}:${secretPart}`).digest("hex");
 }
+export function secureEqualHex(a: string, b: string): boolean {
+  if (!/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b) || a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+export function makeRefreshSecret(): string { return randomBytes(32).toString("base64url"); }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export interface AuthedRequest extends Request { userId?: string; sessionId?: string; }
+function cookieValue(req: Request, name: string): string | undefined {
+  const cookie = req.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : undefined;
+}
+export function getAccessToken(req: Request): string | undefined {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or malformed Authorization header" });
-  }
-  const token = header.slice("Bearer ".length);
+  return header?.startsWith("Bearer ") ? header.slice(7) : cookieValue(req, SESSION_COOKIE_ACCESS);
+}
+export function getRefreshCookie(req: Request): string | undefined {
+  return cookieValue(req, SESSION_COOKIE_REFRESH);
+}
+export function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
+  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+  res.cookie(SESSION_COOKIE_ACCESS, accessToken, { ...options, maxAge: 15 * 60 * 1000 });
+  res.cookie(SESSION_COOKIE_REFRESH, refreshToken, { ...options, maxAge: 30 * 24 * 60 * 60 * 1000 });
+}
+export function clearSessionCookies(res: Response): void {
+  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+  res.clearCookie(SESSION_COOKIE_ACCESS, options); res.clearCookie(SESSION_COOKIE_REFRESH, options);
+}
+export function isMobileClient(req: Request): boolean { return req.header("X-FitOS-Client") === "mobile"; }
+
+async function resolveIdentity(req: Request): Promise<{ userId: string; sessionId: string } | undefined> {
+  const token = getAccessToken(req);
+  if (!token) return undefined;
+  const decoded = jwt.verify(token, accessSecret()) as { sub: string; sid: string };
+  if (!decoded.sub || !decoded.sid) return undefined;
+  const session = await db.get<{ id: string; userId: string }>(
+    `SELECT s.id, s.userId FROM AuthSession s JOIN "User" u ON u.id=s.userId WHERE s.id=? AND s.userId=? AND s.revokedAt IS NULL AND s.expiresAt>? AND u.emailVerified=1`,
+    decoded.sid, decoded.sub, new Date().toISOString()
+  );
+  return session ? { userId: session.userId, sessionId: session.id } : undefined;
+}
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
-    const decoded = jwt.verify(token, ACCESS_SECRET) as { sub: string };
-    req.userId = decoded.sub;
+    const identity = await resolveIdentity(req);
+    if (!identity) return res.status(401).json({ error: "Unauthorized" });
+    req.userId = identity.userId; req.sessionId = identity.sessionId;
     next();
   } catch {
-    return res.status(401).json({ error: "Invalid or expired access token" });
+    return res.status(401).json({ error: "Unauthorized" });
   }
+}
+export async function readIdentity(req: Request) {
+  try { return await resolveIdentity(req); } catch { return undefined; }
 }

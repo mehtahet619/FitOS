@@ -34,26 +34,34 @@ const Api = (() => {
       method: opts.method || "GET",
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: "include",
     });
 
     // one silent refresh attempt on 401
-    if (res.status === 401 && localStorage.getItem("refreshToken") && path !== "/auth/refresh") {
+    if (res.status === 401 && path !== "/auth/refresh" && path !== "/auth/me" && !path.startsWith("/auth/")) {
       const refreshed = await fetchWithRetry(window.API_BASE + "/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken: localStorage.getItem("refreshToken") }),
+        credentials: "include",
       });
       if (refreshed.ok) {
         const data = await refreshed.json();
-        setTokens(data.accessToken, null);
-        headers["Authorization"] = "Bearer " + data.accessToken;
+        if (data.accessToken) {
+          setTokens(data.accessToken, null);
+          headers["Authorization"] = "Bearer " + data.accessToken;
+        } else {
+          delete headers.Authorization;
+        }
         res = await fetchWithRetry(window.API_BASE + path, {
           method: opts.method || "GET",
           headers,
           body: opts.body ? JSON.stringify(opts.body) : undefined,
+          credentials: "include",
         });
       } else {
         clearTokens();
+        if (window.AuthState && window.AuthState.status === "AUTHENTICATED" && path !== "/auth/me") window.AuthState.unauthenticated();
       }
     }
 
@@ -65,9 +73,10 @@ const Api = (() => {
       json = null;
     }
     if (!res.ok) {
-      const err = new Error((json && json.error) || res.statusText);
+      const err = new Error((json && (json.message || json.error)) || res.statusText);
       err.status = res.status;
       err.body = json;
+      if (res.status === 401 && window.AuthState && path !== "/auth/me") window.AuthState.unauthenticated();
       throw err;
     }
     return json;
@@ -80,5 +89,6 @@ const Api = (() => {
     get: (path) => request(path),
     post: (path, body) => request(path, { method: "POST", body }),
     put: (path, body) => request(path, { method: "PUT", body }),
+    del: (path) => request(path, { method: "DELETE" }),
   };
 })();

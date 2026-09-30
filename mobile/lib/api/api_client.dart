@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 // - Running on web (flutter run -d chrome): auto-uses localhost, since the
 //   Flutter web app runs as JS in your browser on the same machine as the
@@ -42,7 +42,17 @@ class ApiClient {
     _refreshToken = prefs.getString("refreshToken");
   }
 
+  Future<Map<String, dynamic>> restoreSession() async {
+    final result = await _request("GET", "/auth/me", retry: false);
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   bool get isLoggedIn => _accessToken != null;
+
+  Future<void> logout() async {
+    try { await post("/auth/logout"); } catch (_) { /* clear local session even when offline */ }
+    await clearTokens();
+  }
 
   Future<void> setTokens({String? access, String? refresh}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -68,6 +78,7 @@ class ApiClient {
     final uri = Uri.parse("${ApiConfig.baseUrl}$path");
     final headers = {
       "Content-Type": "application/json",
+      "X-FitOS-Client": "mobile",
       if (_accessToken != null) "Authorization": "Bearer $_accessToken",
     };
 
@@ -89,7 +100,7 @@ class ApiClient {
     if (res.statusCode == 401 && retry && _refreshToken != null && path != "/auth/refresh") {
       final refreshed = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/auth/refresh"),
-        headers: {"Content-Type": "application/json"},
+        headers: {"Content-Type": "application/json", "X-FitOS-Client": "mobile"},
         body: jsonEncode({"refreshToken": _refreshToken}),
       );
       if (refreshed.statusCode == 200) {
@@ -101,9 +112,11 @@ class ApiClient {
       }
     }
 
+    if (res.statusCode == 401 && path != "/auth/me" && path != "/auth/login" && path != "/auth/register/request-otp" && path != "/auth/register/verify-otp") await clearTokens();
+
     final decoded = res.body.isNotEmpty ? jsonDecode(res.body) : null;
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      final msg = (decoded is Map && decoded["error"] != null) ? decoded["error"].toString() : res.reasonPhrase ?? "Request failed";
+      final msg = (decoded is Map && (decoded["message"] != null || decoded["error"] != null)) ? (decoded["message"] ?? decoded["error"]).toString() : res.reasonPhrase ?? "Request failed";
       throw ApiException(res.statusCode, msg);
     }
     return decoded;

@@ -26,8 +26,9 @@ const allowedFrontendOrigins = new Set(
 const allowedRenderServiceId = process.env.RENDER_SERVICE_ID;
 app.use(
   cors({
+    credentials: true,
     origin(origin, callback) {
-      if (!origin || allowedFrontendOrigins.size === 0 || allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
+      if (!origin || allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
         callback(null, true);
         return;
       }
@@ -54,6 +55,15 @@ app.use(
   })
 );
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  const origin = req.header("Origin");
+  const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+  if (origin && mutating && req.headers.cookie && !allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
+    return res.status(403).json({ code: "CSRF_ORIGIN_REJECTED", error: "Request origin is not allowed" });
+  }
+  next();
+});
 
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
 app.use(limiter);
@@ -61,6 +71,7 @@ app.use(limiter);
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/auth", authRouter);
+app.use("/api/auth", authRouter);
 app.use("/user", userRouter);
 app.use("/equipment", equipmentRouter);
 app.use("/", equipmentRouter); // exposes /user/equipment alongside /equipment
