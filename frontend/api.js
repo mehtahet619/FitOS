@@ -11,17 +11,23 @@ const Api = (() => {
     localStorage.removeItem("refreshToken");
   }
 
-  async function fetchWithRetry(url, options) {
+  async function fetchWithRetry(url, options, settings = {}) {
     let lastError;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = settings.maxAttempts || 3;
+    const timeoutMs = settings.timeoutMs || 10000;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        return await fetch(url, options);
+        return await fetch(url, { ...options, signal: controller.signal });
       } catch (error) {
         lastError = error;
-        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        if (attempt + 1 < maxAttempts) await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+      } finally {
+        clearTimeout(timeout);
       }
     }
-    const error = new Error("Cannot reach the FitOS API. Check that the API service is running and its URL is configured correctly.");
+    const error = new Error(lastError?.name === "AbortError" ? "The FitOS API took too long to respond. Please try again." : "Cannot reach the FitOS API. Check your connection and try again.");
     error.cause = lastError;
     throw error;
   }
@@ -30,12 +36,13 @@ const Api = (() => {
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
     if (token()) headers["Authorization"] = "Bearer " + token();
 
+    const isSessionCheck = path === "/auth/me";
     let res = await fetchWithRetry(window.API_BASE + path, {
       method: opts.method || "GET",
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       credentials: "include",
-    });
+    }, isSessionCheck ? { maxAttempts: 1, timeoutMs: 7000 } : undefined);
 
     // one silent refresh attempt on 401
     if (res.status === 401 && path !== "/auth/refresh" && path !== "/auth/me" && !path.startsWith("/auth/")) {

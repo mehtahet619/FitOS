@@ -64,18 +64,7 @@ function renderScanResult(area, result, onResult) {
     .map((d) => `<span class="pill" style="margin-right:6px; margin-bottom:6px;">${d.equipmentName} · ${Math.round(d.confidence * 100)}%</span>`)
     .join("");
 
-  const suggestionsHtml = result.suggestedExercises
-    .map(
-      (ex) => `
-      <div class="exercise-row">
-        <div>
-          <div class="exercise-name">${ex.name}</div>
-          <div class="exercise-meta">${ex.primaryMuscle} · ${ex.sets} sets × ${ex.repRangeLow}-${ex.repRangeHigh} reps</div>
-          <div class="exercise-meta">${ex.howTo}</div>
-        </div>
-      </div>`
-    )
-    .join("");
+  const suggestionsHtml = "";
 
   area.innerHTML = `
     <div class="card">
@@ -84,7 +73,7 @@ function renderScanResult(area, result, onResult) {
       <button class="btn btn-mint" id="eq-scan-use-btn">Use this equipment</button>
     </div>
     ${
-      result.suggestedExercises.length
+      suggestionsHtml.length
         ? `<div class="card"><div class="card-label">Suggested exercises with this equipment</div>${suggestionsHtml}</div>`
         : ""
     }
@@ -123,7 +112,8 @@ function navigate(path, replace = false) {
 }
 function clearProtectedContent() {
   ["today-content", "workout-content", "diet-content", "gym-content", "gym-scan-content"].forEach((id) => { const el = $(id); if (el) el.replaceChildren(); });
-  $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
+  $("main-app").hidden = true; $("main-app").style.display = "none";
+  $("bottom-nav").hidden = true; $("bottom-nav").style.display = "none";
 }
 function maskEmail(email) { const [name, domain] = (email || "").split("@"); return `${(name || "").slice(0, 1)}***@${domain || ""}`; }
 let verifyEmail = sessionStorage.getItem("pendingVerifyEmail") || "";
@@ -154,7 +144,9 @@ async function routeCurrent() {
   if (!routeTabs[path]) { navigate("/homepage", true); return; }
   $("main-app").style.display = "flex"; $("bottom-nav").style.display = "flex";
   if (path === "/profile" || path === "/settings") {
-    showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none"; return;
+    showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
+    void loadEquipmentChips().catch((error) => banner($("onboarding-banner"), "error", error.message || "Could not load equipment."));
+    return;
   }
   if (path === "/history") { showHistory(); return; }
   switchTab(routeTabs[path], false);
@@ -194,10 +186,19 @@ function banner(el, type, msg) {
 }
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-  if (id === "screen-auth" || id.startsWith("screen-verify") || id.startsWith("screen-forgot") || id.startsWith("screen-reset")) {
-    $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
-  }
-  $(id).classList.add("active");
+  const screen = $(id);
+  if (!screen) return;
+  screen.classList.add("active");
+
+  // Keep public/loading screens separate from the protected app shell.
+  const isProtectedScreen = $("main-app").contains(screen);
+  const mainApp = $("main-app");
+  const bottomNav = $("bottom-nav");
+  mainApp.hidden = !isProtectedScreen;
+  mainApp.style.display = isProtectedScreen ? "flex" : "none";
+  bottomNav.hidden = !isProtectedScreen;
+  bottomNav.style.display = isProtectedScreen ? "flex" : "none";
+  $("app").dataset.view = isProtectedScreen ? "protected" : id === "screen-auth-loading" ? "loading" : "public";
 }
 
 /* ---------------- Boot ---------------- */
@@ -207,13 +208,16 @@ async function boot() {
   try {
     const data = await Api.get("/auth/me");
     if (generation !== authBootGeneration) return;
-    if (!data.authenticated) { Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; navigate("/login", true); return; }
+    if (!data.authenticated) {
+      Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent(); navigate("/login", true); return;
+    }
     AuthState.authenticated(data.user);
     if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
     if (["/", "/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
     if (generation !== authBootGeneration) return;
-    Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; navigate("/login", true);
+    Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent(); navigate("/login", true);
+    banner($("auth-banner"), "error", e.message || "Couldn't check your session. Please try again.");
   }
 }
 
@@ -283,14 +287,22 @@ $("reset-submit").addEventListener("click", async () => {
 
 /* ---------------- Onboarding screen ---------------- */
 async function loadEquipmentChips() {
-  const equipment = await Api.get("/equipment");
-  State.equipmentList = equipment;
   const container = $("equipment-chips");
-  container.innerHTML = "";
-  equipment.forEach((eq) => {
+  if (!container) return;
+  container.textContent = "Loading equipment...";
+  const [equipment, savedEquipment] = await Promise.all([
+    Api.get("/equipment"),
+    Api.get("/equipment/user/equipment"),
+  ]);
+  State.equipmentList = (Array.isArray(equipment) ? equipment : []).filter((eq) => eq.name !== "No Equipment");
+  State.selectedEquipment = new Set((Array.isArray(savedEquipment) ? savedEquipment : [])
+    .map((eq) => eq.name)
+    .filter((name) => name !== "No Equipment"));
+  container.replaceChildren();
+  State.equipmentList.forEach((eq) => {
     const chip = document.createElement("button");
     chip.type = "button";
-    chip.className = "chip";
+    chip.className = `chip${State.selectedEquipment.has(eq.name) ? " active" : ""}`;
     chip.dataset.equipmentName = eq.name;
     chip.textContent = `${EQUIPMENT_ICONS[eq.name] || "🔧"} ${eq.name}`;
     chip.addEventListener("click", () => {
@@ -376,8 +388,7 @@ function switchTab(tab, updateUrl = true) {
   const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", gym: "/today", vision: "/today" };
   if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
   if (tab === "history") { void showHistory(); return; }
-  document.querySelectorAll("#main-app .screen").forEach((s) => s.classList.remove("active"));
-  $("screen-" + tab).classList.add("active");
+  showScreen("screen-" + tab);
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
 
   if (tab === "today") loadToday();
@@ -388,9 +399,9 @@ function switchTab(tab, updateUrl = true) {
 }
 
 async function showHistory() {
-  document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
   const screen = $("screen-history"); if (!screen) { navigate("/homepage", true); return; }
-  screen.classList.add("active"); screen.innerHTML = '<div class="header"><h1>Workout history</h1></div><div id="history-content"><div class="empty-state">Loading...</div></div>';
+  showScreen("screen-history");
+  screen.innerHTML = '<div class="header"><h1>Workout history</h1></div><div id="history-content"><div class="empty-state">Loading...</div></div>';
   try {
     const result = await Api.get("/workouts/history");
     const items = Array.isArray(result) ? result : (result.workouts || result.history || []);
@@ -494,9 +505,14 @@ function renderWorkoutScanButton() {
   $("workout-scan-btn").addEventListener("click", () => {
     scanArea.innerHTML = "";
     startEquipmentScan("workout-scan-area", async (detectedNames) => {
-      scanArea.innerHTML = `<div class="empty-state"><span class="spinner"></span> Generating with scanned equipment…</div>`;
+      scanArea.innerHTML = `<div class="empty-state"><span class="spinner"></span> Adding detected equipment to today's choices…</div>`;
       try {
-        await Api.post("/workouts/generate", { equipmentMode: "SCANNED", detectedEquipmentNames: detectedNames });
+        const existing = await Api.get("/equipment/user/equipment");
+        const equipmentNames = Array.from(new Set([
+          ...(Array.isArray(existing) ? existing.map((item) => item.name) : []),
+          ...detectedNames,
+        ].filter((name) => name && name !== "No Equipment")));
+        await Api.post("/equipment/user/equipment", { equipmentNames });
         await loadWorkout();
       } catch (e) {
         scanArea.innerHTML = `<div class="banner banner-error">${e.message}</div>`;
@@ -622,8 +638,6 @@ function renderActivePlanCard(plan) {
         <button class="btn btn-outline" id="switch-plan-btn">🔀 Switch to a different structure</button>
       </div>
     `;
-  } else if (nextWod) {
-    actionButtons = `<button class="btn btn-primary" id="generate-workout-btn">Generate ${nextWod.label} workout →</button>`;
   }
 
   const completedList = plan.completedUnits?.length
@@ -644,7 +658,6 @@ function renderActivePlanCard(plan) {
         Cycle <code style="font-size:11px;">${plan.cycleId}</code> · ${cycleLabel}
       </div>
       ${renderCircularProgress(plan)}
-      ${renderCycleProgress(plan)}
       ${completedList}
       ${remainingList}
       ${nextLine}
@@ -677,20 +690,107 @@ async function renderGenerateWorkoutPrompt(plan) {
   wirePlanActions(plan);
 
   if (plan.nextWorkout && plan.cycleStatus === "IN_PROGRESS") {
-    try {
-      const rec = await Api.get("/workouts/exercises-for-next");
-      const names = (rec.exercises || []).map((ex) => ex.name).slice(0, 8);
-      const recCard = document.createElement("div");
-      recCard.className = "card";
-      recCard.style.marginTop = "12px";
-      recCard.innerHTML = `
-        <div class="card-label">Step 2: Exercises for ${rec.workoutUnit?.label || plan.nextWorkout.label}</div>
-        <div class="card-sub">Workout unit is already locked. Equipment only filters these movements.</div>
-        <div class="card-sub" style="margin-top:8px;">${names.length ? names.join(" · ") : "Add gym equipment to unlock more exercise options for this unit."}</div>
-      `;
-      el.appendChild(recCard);
-    } catch (_) { /* preview is optional */ }
+    await renderWorkoutEquipmentPicker(plan, el);
   }
+}
+
+async function renderWorkoutEquipmentPicker(plan, parent) {
+  const card = document.createElement("section");
+  card.className = "card equipment-picker-card";
+  const heading = document.createElement("div");
+  heading.className = "card-label";
+  heading.textContent = "Step 2: What equipment can you use today?";
+  const description = document.createElement("div");
+  description.className = "card-sub";
+  description.textContent = `Choose the machines and equipment available for ${plan.nextWorkout.label}. FitOS will only recommend exercises you can do with these choices.`;
+  const chipGroup = document.createElement("div");
+  chipGroup.className = "chip-group equipment-picker-options";
+  const selectionSummary = document.createElement("div");
+  selectionSummary.className = "card-sub equipment-selection-summary";
+  const feedback = document.createElement("div");
+  const buildButton = document.createElement("button");
+  buildButton.type = "button";
+  buildButton.className = "btn btn-primary";
+  buildButton.textContent = "Show my exercises";
+  buildButton.disabled = true;
+  selectionSummary.textContent = "Loading your equipment...";
+  card.append(heading, description, chipGroup, selectionSummary, feedback, buildButton);
+  parent.appendChild(card);
+
+  let equipment;
+  let selected;
+  try {
+    const [catalog, saved] = await Promise.all([
+      Api.get("/equipment"),
+      Api.get("/equipment/user/equipment"),
+    ]);
+    equipment = (Array.isArray(catalog) ? catalog : []).filter((item) => item.name !== "No Equipment");
+    selected = new Set((Array.isArray(saved) ? saved : [])
+      .map((item) => item.name)
+      .filter((name) => name !== "No Equipment"));
+  } catch (error) {
+    feedback.className = "banner banner-error";
+    feedback.textContent = error.message || "Could not load your equipment list.";
+    buildButton.disabled = true;
+    return;
+  }
+
+  const bodyweightButton = document.createElement("button");
+  bodyweightButton.type = "button";
+  bodyweightButton.className = "chip";
+  bodyweightButton.textContent = "Bodyweight only";
+  bodyweightButton.addEventListener("click", () => {
+    selected.clear();
+    paintSelection();
+  });
+  chipGroup.appendChild(bodyweightButton);
+
+  const optionButtons = [];
+  equipment.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.textContent = item.name;
+    button.addEventListener("click", () => {
+      if (selected.has(item.name)) selected.delete(item.name);
+      else selected.add(item.name);
+      paintSelection();
+    });
+    optionButtons.push({ button, name: item.name });
+    chipGroup.appendChild(button);
+  });
+
+  function paintSelection() {
+    optionButtons.forEach(({ button, name }) => {
+      const active = selected.has(name);
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    bodyweightButton.classList.toggle("active", selected.size === 0);
+    bodyweightButton.setAttribute("aria-pressed", String(selected.size === 0));
+    selectionSummary.textContent = selected.size
+      ? `${selected.size} item${selected.size === 1 ? "" : "s"} selected`
+      : "No machines selected - FitOS will build a bodyweight workout.";
+  }
+  paintSelection();
+  buildButton.disabled = false;
+
+  buildButton.addEventListener("click", async () => {
+    buildButton.disabled = true;
+    buildButton.textContent = "Building your workout...";
+    feedback.className = "";
+    feedback.textContent = "";
+    try {
+      await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(selected) });
+      await Api.post("/workouts/generate", { equipmentMode: "USER_EQUIPMENT" });
+      await loadWorkout();
+    } catch (error) {
+      feedback.className = "banner banner-error";
+      feedback.textContent = error.message || "Could not build a workout from this equipment.";
+      buildButton.disabled = false;
+      buildButton.textContent = "Show my exercises";
+    }
+  });
 }
 
 function collectBroCustomUnits() {
@@ -736,23 +836,6 @@ function wirePlanSelection() {
 }
 
 function wirePlanActions(plan) {
-  const genBtn = $("generate-workout-btn");
-  if (genBtn) {
-    genBtn.addEventListener("click", async () => {
-      genBtn.disabled = true;
-      genBtn.innerHTML = `<span class="spinner"></span> Generating…`;
-      const el = $("workout-content");
-      try {
-        await Api.post("/workouts/generate", { equipmentMode: "FULL_GYM" });
-        await loadWorkout();
-      } catch (e) {
-        el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
-        genBtn.disabled = false;
-        genBtn.textContent = `Generate ${plan.nextWorkout?.label || ""} workout →`;
-      }
-    });
-  }
-
   const restartBtn = $("start-new-cycle-btn");
   if (restartBtn) {
     restartBtn.addEventListener("click", async () => {
@@ -782,66 +865,150 @@ function wirePlanActions(plan) {
   }
 }
 
-function renderWorkout(workout, plan) {
-  $("workout-focus-label").textContent = `${workout.focus} · ${workout.durationMin} min · ${workout.status}`;
-  const el = $("workout-content");
+function escapeWorkoutText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
 
-  const contextCard = plan
-    ? `<div class="card" style="margin-bottom:12px;">
-         <div class="card-label">Plan Context</div>
-         <div class="card-sub">Active: ${plan.activePlan?.structureLabel || plan.activePlan} · Cycle: ${plan.cycleId}</div>
-         <div class="card-sub">This workout corresponds to: <strong>${plan.nextWorkout?.label || workout.focus}</strong> in your plan order.</div>
-         ${plan.planSwitchAllowed ? "" : `<div class="card-sub" style="margin-top:6px;">🔒 Plan switching remains locked until cycle completion.</div>`}
-       </div>`
-    : "";
+function renderWorkout(workout, plan) {
+  const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
+  const el = $("workout-content");
+  const progress = exercises.map((exercise) => {
+    const targetSets = Math.max(1, Number(exercise.targetSets) || 1);
+    const completedSetRows = Array.isArray(exercise.completedSets) ? exercise.completedSets : [];
+    const completedSetNumbers = new Set(completedSetRows.map((set) => Number(set.setNumber)));
+    const nextSetNumber = Array.from({ length: targetSets }, (_, index) => index + 1)
+      .find((setNumber) => !completedSetNumbers.has(setNumber));
+    return { exercise, targetSets, completedSetRows, completedSetNumbers, nextSetNumber };
+  });
+  const totalSets = progress.reduce((sum, item) => sum + item.targetSets, 0);
+  const loggedSets = progress.reduce((sum, item) => sum + item.completedSetRows.length, 0);
+  const progressPercent = totalSets ? Math.min(100, Math.round((loggedSets / totalSets) * 100)) : 0;
+  const activeIndex = workout.status === "completed" ? -1 : progress.findIndex((item) =>
+    item.exercise.status !== "skipped" && item.exercise.status !== "completed" && item.nextSetNumber !== undefined
+  );
+  const active = activeIndex >= 0 ? progress[activeIndex] : null;
+  const workoutName = escapeWorkoutText(workout.focus || "Strength workout");
+  const duration = Number(workout.durationMin) || 0;
+  const planName = plan?.activePlan?.structureLabel || plan?.activePlan || "";
+  const nextPlanWorkout = plan?.nextWorkout?.label;
+  const equipmentLine = (exercise) => exercise.requiresEquipment
+    ? (exercise.equipmentRequired || []).join(", ") || exercise.equipmentName || "Gym equipment"
+    : "Bodyweight";
+
+  $("workout-focus-label").textContent = `${workout.focus} · ${duration} min`;
+  const completedWorkout = workout.status === "completed";
+  const activeExerciseCard = active
+    ? (() => {
+      const exercise = active.exercise;
+      const low = Number(exercise.repRangeLow) || 1;
+      const high = Math.max(low, Number(exercise.repRangeHigh) || low);
+      const reps = Math.round((low + high) / 2);
+      const isBodyweight = !exercise.requiresEquipment;
+      const equipment = equipmentLine(exercise);
+      return `
+        <section class="workout-next-card" aria-live="polite">
+          <div class="workout-next-top"><span class="workout-eyebrow">UP NEXT</span><span>Exercise ${activeIndex + 1} of ${progress.length}</span></div>
+          <h2>${escapeWorkoutText(exercise.name)}</h2>
+          <div class="workout-tags"><span>${escapeWorkoutText(exercise.primaryMuscle || "Full body")}</span><span>${escapeWorkoutText(equipment)}</span></div>
+          <div class="workout-target"><strong>${active.targetSets} sets</strong><span>${low}–${high} reps each</span><span>Set ${active.nextSetNumber} of ${active.targetSets}</span></div>
+          ${exercise.instructions ? `<p class="workout-instructions">${escapeWorkoutText(exercise.instructions)}</p>` : ""}
+          <div class="workout-set-log">
+            <div class="workout-eyebrow">LOG SET ${active.nextSetNumber}</div>
+            <p>Choose your reps${isBodyweight ? "; weight is optional." : " and the weight you used."}</p>
+            <div class="workout-set-inputs">
+              <label>Reps<input id="workout-set-reps" type="number" inputmode="numeric" min="0" max="100" value="${reps}" /></label>
+              <label>Weight (kg)<input id="workout-set-weight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="Optional" /></label>
+            </div>
+            <button class="btn btn-primary" id="log-workout-set">Log set · show me what's next</button>
+          </div>
+        </section>`;
+    })()
+    : completedWorkout
+      ? `<section class="workout-complete-card"><div class="workout-complete-mark">✓</div><h2>Workout complete</h2><p>${loggedSets} of ${totalSets} planned sets logged. Nice work.</p>${nextPlanWorkout ? `<div class="workout-next-hint">Next in your plan: <strong>${escapeWorkoutText(nextPlanWorkout)}</strong></div>` : ""}</section>`
+      : `<section class="workout-next-card" aria-live="polite"><div class="workout-eyebrow">UP NEXT</div><h2>All planned sets are done</h2><p>Finish your workout to save it and move your plan forward.</p></section>`;
+
+  const exerciseRows = progress.map((item, index) => {
+    const exercise = item.exercise;
+    const skipped = exercise.status === "skipped";
+    const isDone = skipped || exercise.status === "completed" || item.nextSetNumber === undefined;
+    const isActive = index === activeIndex;
+    const stateLabel = skipped ? "SKIPPED" : isDone ? "DONE" : isActive ? "UP NEXT" : "COMING UP";
+    const stateClass = skipped ? "skipped" : isDone ? "done" : isActive ? "active" : "later";
+    const setLabel = `${item.completedSetRows.length}/${item.targetSets} sets`;
+    const repLabel = `${Number(exercise.repRangeLow) || 1}–${Number(exercise.repRangeHigh) || Number(exercise.repRangeLow) || 1} reps`;
+    const swapButton = exercise.requiresEquipment && workout.status !== "completed"
+      ? `<button class="btn btn-outline workout-swap-btn" data-action="swap" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Swap</button>`
+      : "";
+    return `<article class="workout-exercise-row ${stateClass}">
+      <span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>
+      <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.name)}</strong><span>${escapeWorkoutText(exercise.primaryMuscle || "Full body")} · ${setLabel} · ${repLabel}</span></div>
+      <span class="workout-exercise-state">${stateLabel}</span>${swapButton}
+    </article>`;
+  }).join("");
 
   el.innerHTML = `
-    ${contextCard}
-    <div class="card" id="exercise-list"></div>
-    <div class="card-sub" style="margin-top:8px; margin-bottom:8px;">
-      💡 Decision flow: Active plan → Next workout → Target muscles → Available equipment → Recommended exercises
-    </div>
-    ${workout.status !== "completed" ? `<button class="btn btn-primary" id="complete-workout-btn">Mark workout complete</button>` : ""}
+    ${planName ? `<div class="workout-plan-line"><span>YOUR PLAN</span><strong>${escapeWorkoutText(planName)}</strong>${plan?.nextWorkout?.label ? `<span>· ${escapeWorkoutText(plan.nextWorkout.label)}</span>` : ""}</div>` : ""}
+    <section class="workout-session-card">
+      <div class="workout-session-top"><span class="workout-eyebrow">TODAY'S SESSION</span><span>${completedWorkout ? "COMPLETE" : "IN PROGRESS"}</span></div>
+      <h2>${workoutName}</h2>
+      <div class="workout-session-meta">${duration} min <span>·</span> ${progress.length} exercises <span>·</span> ${loggedSets}/${totalSets} sets</div>
+      <div class="workout-progress-track" role="progressbar" aria-label="Workout set progress" aria-valuemin="0" aria-valuemax="${totalSets}" aria-valuenow="${loggedSets}"><span style="width:${progressPercent}%"></span></div>
+    </section>
+    ${activeExerciseCard}
+    <section class="workout-exercise-list">
+      <div class="workout-list-heading"><div><span class="workout-eyebrow">YOUR WORKOUT</span><h3>Exercise order</h3></div><span>${progress.length} movements</span></div>
+      ${exerciseRows || `<p class="card-sub">No exercises were added to this workout.</p>`}
+    </section>
+    ${completedWorkout && plan ? renderActivePlanCard(plan) : ""}
+    ${!completedWorkout ? `<div class="workout-finish-note">You can finish early. Sets you haven't logged won't be added to your training history.</div><button class="btn btn-primary" id="complete-workout-btn">Finish workout</button>` : ""}
   `;
-  const listEl = $("exercise-list");
-  workout.exercises.forEach((ex) => {
-    const row = document.createElement("div");
-    row.className = "exercise-row";
-    const isBodyweight = !ex.requiresEquipment;
-    row.innerHTML = `
-      <div>
-        <div class="exercise-name">${ex.name}</div>
-        <div class="exercise-meta">${ex.primaryMuscle} · ${ex.targetSets} sets × ${ex.repRangeLow}-${ex.repRangeHigh} reps</div>
-        <div class="exercise-meta">${ex.status}${ex.painReported ? " · ⚠️ pain reported" : ""}${isBodyweight ? " · 🏋️ Bodyweight" : ""}</div>
-      </div>
-      <div class="btn-row" style="width:auto;">
-        ${!isBodyweight ? `<button class="btn btn-outline" style="width:auto; padding:8px 12px;" data-action="swap" data-id="${ex.workoutExerciseId}">No equipment?</button>` : ''}
-      </div>
-    `;
-    listEl.appendChild(row);
-  });
 
-  listEl.querySelectorAll('[data-action="swap"]').forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const ex = workout.exercises.find((e) => e.workoutExerciseId === btn.dataset.id);
-      if (ex && !ex.requiresEquipment) {
-        el.innerHTML = `<div class="banner banner-error">This exercise is bodyweight and does not require equipment.</div>` + el.innerHTML;
+  const logSetButton = $("log-workout-set");
+  if (logSetButton && active) {
+    logSetButton.addEventListener("click", async () => {
+      const repsInput = $("workout-set-reps");
+      const weightInput = $("workout-set-weight");
+      const reps = Number(repsInput.value);
+      const weightKg = weightInput.value === "" ? undefined : Number(weightInput.value);
+      if (!Number.isInteger(reps) || reps < 0 || (weightKg !== undefined && (!Number.isFinite(weightKg) || weightKg < 0))) {
+        showWorkoutNotice("Enter a valid rep count and a non-negative weight.", "error");
         return;
       }
-      btn.disabled = true;
-      btn.textContent = "Swapping…";
+      logSetButton.disabled = true;
+      logSetButton.innerHTML = `<span class="spinner"></span> Saving set…`;
+      try {
+        await Api.post(`/workouts/${workout.id}/complete-set`, {
+          workoutExerciseId: active.exercise.workoutExerciseId,
+          setNumber: active.nextSetNumber,
+          reps,
+          ...(weightKg === undefined ? {} : { weightKg }),
+        });
+        await loadWorkout();
+      } catch (error) {
+        showWorkoutNotice(error.message, "error");
+        logSetButton.disabled = false;
+        logSetButton.textContent = "Log set · show me what's next";
+      }
+    });
+  }
+
+  el.querySelectorAll('[data-action="swap"]').forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Swapping…";
       try {
         const result = await Api.post(`/workouts/${workout.id}/replace-exercise`, {
-          workoutExerciseId: btn.dataset.id,
+          workoutExerciseId: button.dataset.id,
           reason: "no_equipment",
         });
-        el.innerHTML = `<div class="banner banner-success">${result.explanation}</div>` + el.innerHTML;
         await loadWorkout();
-      } catch (e) {
-        el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "No equipment?";
+        showWorkoutNotice(result.explanation || "Exercise updated to match your available equipment.", "success");
+      } catch (error) {
+        showWorkoutNotice(error.message, "error");
+        button.disabled = false;
+        button.textContent = "Swap";
       }
     });
   });
@@ -850,24 +1017,25 @@ function renderWorkout(workout, plan) {
   if (completeBtn) {
     completeBtn.addEventListener("click", async () => {
       completeBtn.disabled = true;
-      completeBtn.innerHTML = `<span class="spinner"></span> Saving…`;
+      completeBtn.innerHTML = `<span class="spinner"></span> Saving workout…`;
       try {
-        const result = await Api.post(`/workouts/${workout.id}/complete`, {});
-        if (result?.cycle) {
-          if (result.cycle.cycleCompleted) {
-            el.innerHTML = `<div class="banner banner-success">🎉 Cycle complete! You can now start another cycle or switch to a different workout structure.</div>` + el.innerHTML;
-          } else if (result.cycle.nextUnit) {
-            el.innerHTML = `<div class="banner banner-success">✅ Saved. Next up in your plan: ${result.cycle.nextUnit.label}.</div>` + el.innerHTML;
-          }
-        }
+        await Api.post(`/workouts/${workout.id}/complete`, {});
         await loadWorkout();
-      } catch (e) {
-        el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
+      } catch (error) {
+        showWorkoutNotice(error.message, "error");
         completeBtn.disabled = false;
-        completeBtn.textContent = "Mark workout complete";
+        completeBtn.textContent = "Finish workout";
       }
     });
   }
+  if (plan && completedWorkout) wirePlanActions(plan);
+}
+
+function showWorkoutNotice(message, tone) {
+  const notice = document.createElement("div");
+  notice.className = `banner banner-${tone === "success" ? "success" : "error"}`;
+  notice.textContent = message;
+  $("workout-content").prepend(notice);
 }
 
 /* ================= DIET ================= */
@@ -1178,11 +1346,11 @@ function renderGymScan(equipment, plan) {
 
     <div class="card" style="margin-top:16px;">
       <div class="card-label">✏️ Or Select Equipment Manually</div>
-      <p class="card-sub" style="margin-bottom:12px;">Toggle equipment you have access to, then generate a workout.</p>
+      <p class="card-sub" style="margin-bottom:12px;">Save what your gym has, then choose what is available for today's workout.</p>
       <div class="chip-group" style="flex-wrap:wrap; gap:8px;">${equipmentHtml}</div>
       <div class="btn-row" style="margin-top:16px;">
         <button class="btn btn-primary" id="gym-scan-generate" ${!hasActivePlan ? "disabled" : ""}>
-          ${hasActivePlan ? `Generate ${nextWorkout || "Workout"}` : "Select a plan first in Workout tab"}
+          ${hasActivePlan ? "Choose equipment for workout" : "Select a plan first in Workout tab"}
         </button>
       </div>
     </div>
@@ -1282,15 +1450,8 @@ function renderGymScan(equipment, plan) {
       </div>
     `).join("");
     
-    const suggestionsHtml = (suggestedExercises || []).slice(0, 4).map(ex => `
-      <div class="exercise-row" style="padding:8px 12px; border-radius:8px; background:#fff;">
-        <div style="flex:1;">
-          <div style="font-weight:600; font-size:13px;">${ex.name}</div>
-          <div style="font-size:11px; color:#666;">${ex.primaryMuscle} · ${ex.sets}×${ex.repRangeLow}-${ex.repRangeHigh}</div>
-        </div>
-      </div>
-    `).join("") || "<p class='card-sub' style='margin-top:8px;'>No exercises matched</p>";
-    
+    const suggestionsHtml = "";
+
     resultsDiv.innerHTML = `
       <div class="card">
         <div class="card-label">✅ Detected Equipment</div>
@@ -1301,7 +1462,7 @@ function renderGymScan(equipment, plan) {
           <button class="btn btn-outline" id="gym-scan-rescan">Rescan</button>
         </div>
       </div>
-      ${suggestedExercises && suggestedExercises.length > 0 ? `
+      ${suggestionsHtml ? `
         <div class="card" style="margin-top:12px;">
           <div class="card-label">💡 Suggested Exercises</div>
           ${suggestionsHtml}
@@ -1371,24 +1532,18 @@ function renderGymScan(equipment, plan) {
     const checkboxes = el.querySelectorAll('input[name="gym-equipment"]:checked');
     const equipmentNames = Array.from(checkboxes).map(cb => cb.value);
     
-    if (equipmentNames.length === 0) {
-      alert("Please select at least one equipment");
-      return;
-    }
-    
     generateBtn.disabled = true;
-    generateBtn.innerHTML = `<span class="spinner"></span> Generating...`;
+    generateBtn.innerHTML = `<span class="spinner"></span> Saving equipment...`;
     
     try {
       await Api.post("/equipment/user/equipment", { equipmentNames });
-      // Switch to workout tab and generate
-      await Api.post("/workouts/generate", { equipmentMode: "SCANNED", detectedEquipmentNames: equipmentNames });
+      // The workout tab confirms today's equipment before exercise generation.
       switchTab("workout");
     } catch (e) {
       el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
     } finally {
       generateBtn.disabled = false;
-      generateBtn.textContent = `Generate ${nextWorkout || "Workout"}`;
+      generateBtn.textContent = "Choose equipment for workout";
     }
   });
 }
