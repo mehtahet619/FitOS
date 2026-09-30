@@ -77,6 +77,9 @@ export class TokenBucketRateLimiter {
 
 let limiter: TokenBucketRateLimiter | undefined;
 export function getOtpLimiter(): TokenBucketRateLimiter {
-  if (!limiter) limiter = new TokenBucketRateLimiter(process.env.NODE_ENV === "test" ? new MemoryBucketStore() : new RedisBucketStore());
+  if (!limiter) {
+    const store = process.env.NODE_ENV === "production" ? new RedisBucketStore() : new MemoryBucketStore();
+    limiter = new TokenBucketRateLimiter(store);
+  }
   return limiter;
 }

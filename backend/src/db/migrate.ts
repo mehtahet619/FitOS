@@ -131,6 +131,7 @@ db.exec(schema)
     } catch {
       // Column already exists
     }
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex)`);
 
     /*
      * Stores completed workout-plan cycles.
