@@ -30,7 +30,7 @@ import {
   PLAN_LABELS,
 } from "./plan";
 import type { WorkoutUnit } from "./plan";
-import { getEquipmentModeConfig, getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
+import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -187,7 +187,7 @@ workoutRouter.post("/plan/start-cycle", async (req: AuthedRequest, res) => {
 const generateSchema = z.object({
   focus: z.string().optional(),
   dayIndex: z.number().int().min(0).optional(),
-  equipmentMode: z.enum(["SCANNED", "FULL_GYM"]).optional(),
+  equipmentMode: z.enum(["SCANNED", "FULL_GYM", "USER_EQUIPMENT"]).optional(),
   imageBase64: z.string().min(100).optional(),
   detectedEquipmentNames: z.array(z.string().min(1)).optional(),
 });
@@ -221,7 +221,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   }
 
   const requestedMode = parsed.success ? parsed.data.equipmentMode : undefined;
-  const equipmentMode = requestedMode ?? getEquipmentModeConfig().mode;
+  const equipmentMode = requestedMode ?? "USER_EQUIPMENT";
   let scannedEquipmentIds: string[] = [];
   if (equipmentMode === "SCANNED") {
     let names = parsed.data.detectedEquipmentNames;
@@ -380,8 +380,8 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
   if ("error" in next) {
     return res.status(409).json({ error: next.error });
   }
-  const mode = getEquipmentModeConfig().mode;
-  const equipmentIds = mode === "SCANNED" ? scannedEquipmentByUser.get(userId) ?? [] : [];
+  const mode = "USER_EQUIPMENT";
+  const equipmentIds: string[] = [];
   const exercises = await getExercisesForWorkout(db, userId, next as WorkoutUnit, mode, equipmentIds);
   // Ensure consistent exercise format
   const normalizedExercises = exercises.map((ex) => ({
@@ -428,6 +428,20 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
     workout.id
   );
+  const loggedSets = await db.all<any>(
+    `SELECT ws.workoutExerciseId, ws.setNumber, ws.weightKg, ws.reps
+     FROM WorkoutSet ws
+     JOIN WorkoutExercise we ON we.id = ws.workoutExerciseId
+     WHERE we.workoutId = ? AND ws.completed = 1
+     ORDER BY ws.setNumber ASC`,
+    workout.id
+  );
+  const loggedSetsByExercise = new Map<string, Array<{ setNumber: number; weightKg: number | null; reps: number | null }>>();
+  for (const set of loggedSets) {
+    const sets = loggedSetsByExercise.get(set.workoutExerciseId) ?? [];
+    sets.push({ setNumber: set.setNumber, weightKg: set.weightKg, reps: set.reps });
+    loggedSetsByExercise.set(set.workoutExerciseId, sets);
+  }
   // Helper function to serialize exercise consistently
   function serializeExercise(exercise: any, equipmentRequired: string[], requiresEquipment: boolean) {
     return {
@@ -442,6 +456,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       repRangeHigh: exercise.repRangeHigh,
       status: exercise.status,
       painReported: !!exercise.painReported,
+      completedSets: loggedSetsByExercise.get(exercise.id) ?? [],
       equipmentRequired,
       equipmentName: equipmentRequired[0] ?? "Bodyweight",
       requiresEquipment,
@@ -485,9 +500,24 @@ workoutRouter.post("/:id/complete-set", async (req: AuthedRequest, res) => {
   const parsed = completeSetSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
   const { workoutExerciseId, setNumber, weightKg, reps } = parsed.data;
-  const exercise = await db.get<any>(`SELECT * FROM WorkoutExercise WHERE id = ?`, workoutExerciseId);
-  if (!exercise || exercise.workoutId !== req.params.id)
+  const workout = await db.get<any>(`SELECT id, userId, status FROM Workout WHERE id = ?`, req.params.id);
+  if (!workout || workout.userId !== req.userId)
+    return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "completed")
+    return res.status(409).json({ error: "This workout has already been completed." });
+  const exercise = await db.get<any>(
+    `SELECT * FROM WorkoutExercise WHERE id = ? AND workoutId = ?`,
+    workoutExerciseId, req.params.id
+  );
+  if (!exercise)
     return res.status(404).json({ error: "Workout exercise not found" });
+  if (setNumber > exercise.targetSets)
+    return res.status(400).json({ error: "Set number exceeds the exercise target." });
+  const existingSet = await db.get<any>(
+    `SELECT * FROM WorkoutSet WHERE workoutExerciseId = ? AND setNumber = ? AND completed = 1 LIMIT 1`,
+    workoutExerciseId, setNumber
+  );
+  if (existingSet) return res.json(existingSet);
   const setId = uuidv4();
   const ts = nowIso();
   await db.run(

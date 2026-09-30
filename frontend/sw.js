@@ -1,10 +1,10 @@
-const CACHE_NAME = "adaptive-fit-shell-v4";
+const CACHE_NAME = "adaptive-fit-shell-v15";
 
 const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./app.js",
+  "./app.js?v=fitos-20261001-equipment-picker-v15",
   "./api.js",
   "./config.js",
   "./vision.js",
@@ -35,19 +35,22 @@ self.addEventListener("fetch", (event) => {
   if (new URL(event.request.url).pathname.includes("/api/") || new URL(event.request.url).pathname.startsWith("/auth/")) return;
   const url = new URL(event.request.url);
   const isOwnOrigin = url.origin === self.location.origin;
-  const isShellFile = SHELL_ASSETS.some((asset) => url.pathname.endsWith(asset.replace("./", "/")));
+  const isShellFile = SHELL_ASSETS.some((asset) => url.pathname.endsWith(asset.replace("./", "/").split("?")[0]));
 
   if (!isOwnOrigin || !isShellFile) return; // let the browser handle it normally
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
-          return networkResponse;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse.ok) {
+          void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+        }
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        throw new Error("Offline and no cached FitOS asset is available.");
+      })
   );
 });

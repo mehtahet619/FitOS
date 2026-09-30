@@ -44,7 +44,7 @@
   </div>
 
   <div id="screen-verify-email" class="screen">
-    <div class="auth-wrap"><div class="header"><h1>Verify your email</h1><p>We sent a 6-digit verification code to <span id="verify-email-masked"></span></p></div>
+    <div class="auth-wrap"><div class="header"><h1>Verify your email</h1><p>We sent a 6-digit verification code to <span id="verify-email-masked"></span></p><button class="link-btn" id="verify-back" type="button">Wrong email? Change it</button></div>
       <div id="verify-banner"></div><div class="field"><label>Verification code</label><input id="verify-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
       <button class="btn btn-primary" id="verify-submit">Verify Email</button><button class="link-btn" id="verify-resend" type="button">Resend code</button><p id="verify-countdown" class="muted"></p><p class="muted">Check your spam folder.</p>
     </div>
@@ -58,6 +58,7 @@
     <div class="header">
       <h1>Set up your plan</h1>
       <p>This tunes your workouts, nutrition targets, and equipment matching.</p>
+      <p id="onboarding-account" class="muted"></p>
     </div>
     <div id="onboarding-banner"></div>
     <button class="btn btn-outline" data-logout type="button">Log out</button>
@@ -110,7 +111,7 @@
   </div>
 
   <!-- ============ MAIN APP (tabs) ============ -->
-  <div id="main-app" style="display:none; flex:1; flex-direction:column;">
+  <div id="main-app" hidden style="display:none; flex:1; flex-direction:column;">
 
     <!-- TODAY -->
     <div id="screen-today" class="screen">
@@ -206,7 +207,7 @@
   </div>
 
   <!-- ============ BOTTOM NAV ============ -->
-  <div id="bottom-nav" class="bottom-nav" style="display:none;">
+  <div id="bottom-nav" class="bottom-nav" hidden style="display:none;">
     <button class="nav-item active" data-tab="today">
       <span class="nav-icon">🏠</span><span>Today</span>
     </button>
@@ -232,7 +233,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="config.js"></script>
 <script src="api.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=fitos-20261001-equipment-picker-v15"></script>
 <script type="module" src="vision.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
