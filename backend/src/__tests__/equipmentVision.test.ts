@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+const { databaseMock } = vi.hoisted(() => ({
+  databaseMock: {
+    all: vi.fn(async () => []),
+    get: vi.fn(async (_sql: string, name: string) => ({ name })),
+  },
+}));
+vi.mock("../db/client", () => ({ db: databaseMock }));
 import { BestEquipmentVisionProvider } from "../vision/equipmentVisionProvider";
 
 const fetchMock = vi.fn();
