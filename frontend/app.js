@@ -384,30 +384,65 @@ function renderWorkoutScanButton() {
   });
 }
 
-function renderCycleProgress(plan) {
+/**
+ * Render a circular progress indicator showing cycle completion status
+ */
+function renderCircularProgress(plan) {
   if (!plan?.units || plan.units.length === 0) return "";
-  const nextKey = plan.nextWorkout?.key;
-  const unitMarkers = plan.units.map((unit, idx) => {
-    const isCompleted = unit.status === "COMPLETED";
-    const isNext = !isCompleted && (unit.key === nextKey || idx === plan.currentIndex) && plan.cycleStatus === "IN_PROGRESS";
-    const classes = ["cycle-unit"];
-    if (isCompleted) classes.push("cycle-done");
-    if (isNext) classes.push("cycle-next");
-    return `
-      <div class="${classes.join(" ")}" title="${unit.label}">
-        <span class="cycle-marker">${isCompleted ? "✓" : idx + 1}</span>
-        <span class="cycle-label">${unit.label}</span>
-        ${idx < plan.units.length - 1 ? `<span class="cycle-connector"></span>` : ""}
-      </div>
-    `;
-  }).join("");
+  
+  const total = plan.units.length;
+  const completed = plan.completedUnits?.length || 0;
+  const currentIndex = plan.currentIndex;
+  const cycleStatus = plan.cycleStatus;
+  const isComplete = cycleStatus === "COMPLETED";
+  
+  const progressPercent = total > 0 ? (completed / total) * 100 : 0;
+  const circumference = 2 * Math.PI * 45; // 2 * PI * r (r=45)
+  const dashOffset = circumference * (1 - progressPercent / 100);
+  
+  const currentUnit = plan.units[currentIndex];
+  const currentLabel = currentUnit ? currentUnit.label : (isComplete ? "Complete" : "Ready");
+  
   return `
-    <div class="cycle-progress">
-      <div class="card-label" style="margin-bottom:8px;">Cycle Progress</div>
-      <div class="cycle-track">${unitMarkers}</div>
+    <div class="circular-progress-container" style="text-align: center; margin-bottom: 16px;">
+      <div class="circular-progress">
+        <svg viewBox="0 0 100 100">
+          <circle class="circular-progress-bg" cx="50" cy="50" r="45" />
+          <circle class="circular-progress-fill" 
+                  cx="50" cy="50" r="45"
+                  style="stroke-dashoffset: ${dashOffset};" />
+          ${currentIndex < plan.units.length ? `
+            <circle class="circular-progress-current"
+                    cx="50" cy="50" r="45"
+                    style="stroke-dashoffset: ${circumference * (1 - (currentIndex + 1) / plan.units.length * 100)};" />
+          ` : ''}
+        </svg>
+        <div class="circular-progress-text">
+          <div class="circular-progress-done">${completed}/${total}</div>
+          <div class="circular-progress-label">${isComplete ? "Cycle Complete" : currentLabel}</div>
+        </div>
+      </div>
+      <div class="circular-progress-legend">
+        <span class="circular-legend-item">
+          <span class="circular-legend-dot done"></span>
+          <span>${completed}/${total} Done</span>
+        </span>
+        ${!isComplete ? `
+        <span class="circular-legend-item">
+          <span class="circular-legend-dot current"></span>
+          <span>Current</span>
+        </span>
+        ` : ''}
+        <span class="circular-legend-item">
+          <span class="circular-legend-dot remaining"></span>
+          <span>${total - completed} Left</span>
+        </span>
+      </div>
     </div>
   `;
 }
+
+function renderCycleProgress(plan) {
 
 const BRO_DEFAULT_UNITS = [
   { label: "Chest + Triceps", muscles: ["chest", "triceps"] },
@@ -489,6 +524,7 @@ function renderActivePlanCard(plan) {
       <div class="card-sub" style="margin-bottom:8px;">
         Cycle <code style="font-size:11px;">${plan.cycleId}</code> · ${cycleLabel}
       </div>
+      ${renderCircularProgress(plan)}
       ${renderCycleProgress(plan)}
       ${completedList}
       ${remainingList}

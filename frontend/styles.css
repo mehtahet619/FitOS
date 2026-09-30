@@ -327,3 +327,19 @@ html, body {
 
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.15); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Circular Progress Indicator ---------- */
+.circular-progress { position: relative; width: 100px; height: 100px; margin: 0 auto 16px; }
+.circular-progress svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.circular-progress-bg { fill: none; stroke: #e8e8e8; stroke-width: 8; }
+.circular-progress-fill { fill: none; stroke: var(--mint-strong); stroke-width: 8; stroke-linecap: round; stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 0.5s ease; }
+.circular-progress-current { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linecap: round; stroke-dasharray: 283; stroke-dashoffset: 283; }
+.circular-progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.circular-progress-done { font-size: 24px; font-weight: 800; color: var(--ink); line-height: 1.2; }
+.circular-progress-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.circular-progress-legend { display: flex; justify-content: center; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+.circular-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.circular-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.circular-legend-dot.done { background: var(--mint-strong); }
+.circular-legend-dot.current { background: var(--accent); }
+.circular-legend-dot.remaining { background: var(--border); }
