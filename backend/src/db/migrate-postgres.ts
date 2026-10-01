@@ -22,6 +22,10 @@ async function main() {
 
   await database.exec(schema);
 
+  for (const column of ["sourceExerciseName", "sourceMuscle", "sourcePrimaryMuscle", "sourceMachine"]) {
+    await database.exec(`ALTER TABLE WorkoutExercise ADD COLUMN IF NOT EXISTS ${column} TEXT`);
+  }
+
   await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS name TEXT`);
   await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS emailVerified INTEGER NOT NULL DEFAULT 1`);
   await database.exec(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS emailVerifiedAt TEXT`);
