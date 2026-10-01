@@ -10,10 +10,9 @@ export function safeOtpError(error: unknown): { name: string; message: string } 
   const err = error instanceof Error ? error : new Error("Unknown error");
   let message = err.message || "No error message";
   const sensitiveValues = [
+    process.env.RESEND_API_KEY,
     process.env.UPSTASH_REDIS_REST_TOKEN,
     process.env.UPSTASH_REDIS_REST_URL,
-    process.env.EMAIL_PASSWORD,
-    process.env.EMAIL_USER,
     process.env.EMAIL_FROM,
   ].filter((value): value is string => Boolean(value));
   for (const value of sensitiveValues) message = message.split(value).join("[redacted]");

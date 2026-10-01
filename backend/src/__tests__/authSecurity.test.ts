@@ -50,15 +50,15 @@ describe("OTP diagnostics and Redis configuration", () => {
   it("masks email addresses and credential-like values in diagnostic errors", () => {
     const oldUrl = process.env.UPSTASH_REDIS_REST_URL;
     const oldToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-    const oldPassword = process.env.EMAIL_PASSWORD;
+    const oldResendKey = process.env.RESEND_API_KEY;
     process.env.UPSTASH_REDIS_REST_URL = "https://secret-cache.upstash.io";
     process.env.UPSTASH_REDIS_REST_TOKEN = "private-redis-token";
-    process.env.EMAIL_PASSWORD = "private-smtp-password";
+    process.env.RESEND_API_KEY = "private-resend-api-key";
     try {
-      const safe = safeOtpError(new Error("Request to https://secret-cache.upstash.io failed for het@gmail.com: private-redis-token private-smtp-password OTP 483921"));
+      const safe = safeOtpError(new Error("Request to https://secret-cache.upstash.io failed for het@gmail.com: private-redis-token private-resend-api-key OTP 483921"));
       expect(safe.message).not.toContain("secret-cache.upstash.io");
       expect(safe.message).not.toContain("private-redis-token");
-      expect(safe.message).not.toContain("private-smtp-password");
+      expect(safe.message).not.toContain("private-resend-api-key");
       expect(safe.message).not.toContain("het@gmail.com");
       expect(safe.message).not.toContain("483921");
       expect(safe.message).toContain("h***@gmail.com");
@@ -68,8 +68,8 @@ describe("OTP diagnostics and Redis configuration", () => {
       else process.env.UPSTASH_REDIS_REST_URL = oldUrl;
       if (oldToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
       else process.env.UPSTASH_REDIS_REST_TOKEN = oldToken;
-      if (oldPassword === undefined) delete process.env.EMAIL_PASSWORD;
-      else process.env.EMAIL_PASSWORD = oldPassword;
+      if (oldResendKey === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = oldResendKey;
     }
   });
 
