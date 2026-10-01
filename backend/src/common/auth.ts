@@ -72,12 +72,18 @@ async function resolveIdentity(req: Request): Promise<{ userId: string; sessionI
   return session ? { userId: session.userId, sessionId: session.id } : undefined;
 }
 export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  const routePath = `${req.baseUrl}${req.path}`;
+  const trace = ["/progress/dashboard", "/user/profile", "/workouts/plan", "/nutrition/today", "/gym/today"].includes(routePath);
+  const startedAt = Date.now();
+  if (trace) console.info(`[TRACE] ${req.method} ${routePath}:auth:start`);
   try {
     const identity = await resolveIdentity(req);
+    if (trace) console.info(`[TRACE] ${req.method} ${routePath}:auth:end durationMs=${Date.now() - startedAt}`);
     if (!identity) return res.status(401).json({ error: "Unauthorized" });
     req.userId = identity.userId; req.sessionId = identity.sessionId;
     next();
   } catch {
+    if (trace) console.warn(`[TRACE] ${req.method} ${routePath}:auth:error durationMs=${Date.now() - startedAt}`);
     return res.status(401).json({ error: "Unauthorized" });
   }
 }

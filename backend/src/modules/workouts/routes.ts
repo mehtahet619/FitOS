@@ -43,10 +43,11 @@ workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
   const log = (label: string) => {
-    if (process.env.NODE_ENV !== "production") console.info(`[workouts/plan] userId=${userId} ${label} ${Date.now() - started}ms`);
+    console.info(`[TRACE] GET /workouts/plan:${label} durationMs=${Date.now() - started}`);
   };
 
   try {
+    log("plan-state:start");
     const state = await getPlanState(db, userId);
     log("plan state fetched");
 

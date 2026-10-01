@@ -28,10 +28,12 @@ userRouter.get("/profile", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
   const log = (label: string) => {
-    if (process.env.NODE_ENV !== "production") console.info(`[user/profile] userId=${userId} ${label} ${Date.now() - started}ms`);
+    console.info(`[TRACE] GET /user/profile:${label} durationMs=${Date.now() - started}`);
   };
 
+  log("profile-query:start");
   const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);
+  log("profile-query:end");
   if (!profile) return res.status(404).json({ error: "Profile not created yet" });
   log("response ready");
   return res.json({

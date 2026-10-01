@@ -185,23 +185,29 @@ nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
   const log = (label: string) => {
-    if (process.env.NODE_ENV !== "production") console.info(`[nutrition/today] userId=${userId} ${label} ${Date.now() - started}ms`);
+    console.info(`[TRACE] GET /nutrition/today:${label} durationMs=${Date.now() - started}`);
   };
 
+  log("profile-query:start");
   const nutritionProfile = await db.get<any>(`SELECT * FROM NutritionProfile WHERE userId = ?`, userId);
+  log("profile-query:end");
   if (!nutritionProfile) return res.status(404).json({ error: "No nutrition profile yet" });
 
+  log("recommendation-query:start");
   const rec = await db.get<any>(
     `SELECT * FROM NutritionRecommendation WHERE nutritionProfileId = ? ORDER BY createdAt DESC LIMIT 1`,
     nutritionProfile.id
   );
+  log("recommendation-query:end");
   if (!rec) return res.status(404).json({ error: "No nutrition plan generated today yet. POST /nutrition/generate" });
 
+  log("meals-query:start");
   const meals = await db.all<any>(
     `SELECT m.slot, m.foodId, f.name, f.calories, f.proteinG, f.carbsG, f.fatG, f.estPriceInr
      FROM Meal m JOIN Food f ON f.id = m.foodId WHERE m.nutritionRecommendationId = ?`,
     rec.id
   );
+  log("meals-query:end");
 
   log("response ready");
   return res.json({
