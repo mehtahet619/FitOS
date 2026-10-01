@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS Workout (
   planStepIndex INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_workout_user ON Workout(userId);
+CREATE INDEX IF NOT EXISTS idx_workout_user_created ON Workout(userId, createdAt DESC);
 
 CREATE TABLE IF NOT EXISTS WorkoutPlanState (
   id TEXT PRIMARY KEY,
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS WorkoutHistory (
   recordedAt TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_history_user_exercise ON WorkoutHistory(userId, exerciseId);
+CREATE INDEX IF NOT EXISTS idx_workouthistory_user_recorded ON WorkoutHistory(userId, recordedAt DESC);
 
 CREATE TABLE IF NOT EXISTS MuscleHistory (
   id TEXT PRIMARY KEY,
@@ -296,6 +298,7 @@ CREATE TABLE IF NOT EXISTS NutritionRecommendation (
   totalFatG REAL NOT NULL,
   source TEXT NOT NULL DEFAULT 'general-nutrition'
 );
+CREATE INDEX IF NOT EXISTS idx_nutritionrecommendation_profile_created ON NutritionRecommendation(nutritionProfileId, createdAt DESC);
 
 CREATE TABLE IF NOT EXISTS Meal (
   id TEXT PRIMARY KEY,

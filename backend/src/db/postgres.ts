@@ -100,8 +100,17 @@ export class PostgresDatabase implements DatabaseLike {
       connectionString,
       max: Number(process.env.PG_POOL_MAX ?? 10),
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 5_000,
+      query_timeout: 10_000,
+      // PostgreSQL enforces this on the server, so a locked or expensive query
+      // releases its pool slot instead of leaving the request pending forever.
+      options: "-c statement_timeout=8000 -c lock_timeout=3000",
       ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: false },
+    });
+
+    this.pool.on("error", () => {
+      // Never include connection details or query parameters in runtime logs.
+      console.error("[DB] idle PostgreSQL connection error");
     });
   }
 

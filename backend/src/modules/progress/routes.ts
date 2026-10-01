@@ -16,9 +16,10 @@ progressRouter.get("/dashboard", async (req: AuthedRequest, res) => {
 
   const started = Date.now();
   const log = (label: string) => {
-    if (process.env.NODE_ENV !== "production") console.info(`[progress/dashboard] ${label} ${Date.now() - started}ms`);
+    console.info(`[TRACE] GET /progress/dashboard:${label} durationMs=${Date.now() - started}`);
   };
 
+  log("db:start");
   const [todayWorkout, personalRecords, weekHistory, workoutsThisWeekResult] = await Promise.all([
     db.get<any>(
       `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,

@@ -216,8 +216,14 @@ async function boot() {
     if (["/", "/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
     if (generation !== authBootGeneration) return;
-    Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent(); navigate("/login", true);
-    banner($("auth-banner"), "error", e.message || "Couldn't check your session. Please try again.");
+    if (e?.status === 401) Api.clearTokens();
+    AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; clearProtectedContent(); navigate("/login", true);
+    const message = e?.status === 401
+      ? "Your session has expired. Please sign in again."
+      : "Couldn't check your session. Your sign-in is saved; retry the check or log in again.";
+    const bannerEl = $("auth-banner");
+    banner(bannerEl, "error", `${message} <button id="auth-retry-session" class="btn btn-outline" type="button">Retry session check</button>`);
+    $("auth-retry-session").addEventListener("click", () => { void boot(); });
   }
 }
 
@@ -411,12 +417,22 @@ async function showHistory() {
 }
 
 /* ================= TODAY ================= */
-let todayRetryCount = 0;
-const MAX_TODAY_RETRIES = 2;
+let todayLoadGeneration = 0;
+let todayRequest = null;
 
-async function loadToday() {
+function loadToday() {
+  if (todayRequest) return todayRequest;
+  const generation = ++todayLoadGeneration;
+  todayRequest = loadTodayData(generation).finally(() => {
+    if (generation === todayLoadGeneration) todayRequest = null;
+  });
+  return todayRequest;
+}
+
+async function loadTodayData(generation) {
   const el = $("today-content");
   const greetingEl = $("today-greeting");
+  el.dataset.loadState = "loading";
   el.innerHTML = `<div class="empty-state">Loading your day…</div>`;
 
   try {
@@ -425,6 +441,7 @@ async function loadToday() {
       Api.get("/user/profile"),
       Api.get("/workouts/plan"),
     ]);
+    if (generation !== todayLoadGeneration) return;
 
     greetingEl.textContent = `Hi, ${profile.name?.split(" ")[0] || "there"}`;
 
@@ -432,14 +449,19 @@ async function loadToday() {
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
     ]);
+    if (generation !== todayLoadGeneration) return;
 
     const nutritionData = nutrition.status === "fulfilled" ? nutrition.value : null;
     const gymData = gym.status === "fulfilled" ? gym.value : null;
 
     renderTodaySuccess(el, dashboard, plan, nutritionData, gymData);
-    todayRetryCount = 0;
+    el.dataset.loadState = "success";
   } catch (e) {
-    handleTodayError(el, e);
+    if (generation === todayLoadGeneration) handleTodayError(el, e);
+  } finally {
+    if (generation === todayLoadGeneration && el.dataset.loadState === "loading") {
+      renderTodayError(el, "Unable to load today's data. Please try again.");
+    }
   }
 }
 
@@ -494,23 +516,20 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym) {
 
 function handleTodayError(el, error) {
   const isAuthError = error?.status === 401;
-  const isTimeout = error?.cause?.name === "AbortError" || error?.message?.includes("too long") || error?.message?.includes("timed out");
 
   if (isAuthError) {
-    el.innerHTML = `<div class="empty-state">Session expired. Please sign in again.</div>`;
-    return;
-  }
-
-  if (todayRetryCount < MAX_TODAY_RETRIES) {
-    todayRetryCount++;
-    setTimeout(() => loadToday(), 1000 * todayRetryCount);
+    el.dataset.loadState = "error";
     return;
   }
 
   let message = "Unable to load today's data.";
-  if (isTimeout) message = "Connection timed out.";
-  else if (error?.message) message = error.message;
+  if (error?.status === 429) message = "Too many requests. Please wait a moment and try again.";
+  else if (error?.timedOut || error?.message?.includes("too long") || error?.message?.includes("timed out")) message = "The request timed out. Please try again.";
+  renderTodayError(el, message);
+}
 
+function renderTodayError(el, message) {
+  el.dataset.loadState = "error";
   el.innerHTML = `
     <div class="empty-state">
       <div style="margin-bottom: 12px;">${message}</div>

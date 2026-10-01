@@ -18,6 +18,26 @@ import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 
 const app = express();
 app.set("trust proxy", 1);
+const tracedApiPaths = new Set([
+  "/auth/login", "/auth/me", "/auth/refresh",
+  "/progress/dashboard", "/user/profile", "/workouts/plan",
+  "/nutrition/today", "/gym/today",
+]);
+app.use((req, res, next) => {
+  if (!tracedApiPaths.has(req.path)) return next();
+  const startedAt = Date.now();
+  const route = `${req.method} ${req.path}`;
+  console.info(`[HTTP] ${route} start`);
+  res.once("finish", () => {
+    console.info(`[HTTP] ${route} status=${res.statusCode} durationMs=${Date.now() - startedAt}`);
+  });
+  res.once("close", () => {
+    if (!res.writableFinished) {
+      console.warn(`[HTTP] ${route} client_closed durationMs=${Date.now() - startedAt}`);
+    }
+  });
+  next();
+});
 const allowedFrontendOrigins = new Set(
   (process.env.FRONTEND_ORIGIN || "")
     .split(",")

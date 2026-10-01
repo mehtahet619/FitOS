@@ -11,82 +11,112 @@ const Api = (() => {
     localStorage.removeItem("refreshToken");
   }
 
-  async function fetchWithRetry(url, options, settings = {}) {
-    let lastError;
-    const maxAttempts = settings.maxAttempts || 3;
-    const timeoutMs = settings.timeoutMs || 10000;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        return await fetch(url, { ...options, signal: controller.signal });
-      } catch (error) {
-        lastError = error;
-        if (attempt + 1 < maxAttempts) await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
-      } finally {
-        clearTimeout(timeout);
+  async function fetchResponse(path, options, timeoutMs) {
+    const controller = new AbortController();
+    const startedAt = performance.now();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(window.API_BASE + path, {
+        ...options,
+        signal: controller.signal,
+      });
+      // Keep the deadline active until the complete body has arrived. fetch()
+      // resolves at the headers, so clearing the timer there leaves res.text()
+      // able to wait forever on a stalled response body.
+      const text = await response.text();
+      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        console.info(`[API] ${options.method || "GET"} ${path} ${response.status} ${Math.round(performance.now() - startedAt)}ms`);
       }
+      return { response, text };
+    } catch (cause) {
+      const timedOut = cause?.name === "AbortError";
+      const error = new Error(timedOut
+        ? "The FitOS API took too long to respond. Please try again."
+        : "Cannot reach the FitOS API. Check your connection and try again.");
+      error.cause = cause;
+      error.retryable = true;
+      error.timedOut = timedOut;
+      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        console.warn(`[API] ${options.method || "GET"} ${path} ${timedOut ? "timeout" : "network error"} ${Math.round(performance.now() - startedAt)}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    const error = new Error(lastError?.name === "AbortError" ? "The FitOS API took too long to respond. Please try again." : "Cannot reach the FitOS API. Check your connection and try again.");
-    error.cause = lastError;
-    throw error;
   }
 
-  async function request(path, opts = {}) {
-    const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-    if (token()) headers["Authorization"] = "Bearer " + token();
-
-    const isSessionCheck = path === "/auth/me";
-    let res = await fetchWithRetry(window.API_BASE + path, {
-      method: opts.method || "GET",
-      headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: "include",
-    }, isSessionCheck ? { maxAttempts: 1, timeoutMs: 7000 } : undefined);
-
-    // one silent refresh attempt on 401
-    if (res.status === 401 && path !== "/auth/refresh" && path !== "/auth/me" && !path.startsWith("/auth/")) {
-      const refreshed = await fetchWithRetry(window.API_BASE + "/auth/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: localStorage.getItem("refreshToken") }),
-        credentials: "include",
-      });
-      if (refreshed.ok) {
-        const data = await refreshed.json();
-        if (data.accessToken) {
-          setTokens(data.accessToken, null);
-          headers["Authorization"] = "Bearer " + data.accessToken;
-        } else {
-          delete headers.Authorization;
-        }
-        res = await fetchWithRetry(window.API_BASE + path, {
-          method: opts.method || "GET",
-          headers,
-          body: opts.body ? JSON.stringify(opts.body) : undefined,
-          credentials: "include",
-        });
-      } else {
-        clearTokens();
-        if (window.AuthState && window.AuthState.status === "AUTHENTICATED" && path !== "/auth/me") window.AuthState.unauthenticated();
-      }
-    }
-
-    const text = await res.text();
+  function parseResponse(response, text) {
     let json = null;
     try {
       json = text ? JSON.parse(text) : null;
     } catch {
       json = null;
     }
-    if (!res.ok) {
-      const err = new Error((json && (json.message || json.error)) || res.statusText);
-      err.status = res.status;
-      err.body = json;
-      if (res.status === 401 && window.AuthState && path !== "/auth/me") window.AuthState.unauthenticated();
-      throw err;
+    if (!response.ok) {
+      const message = response.status === 429
+        ? "Too many requests. Please wait a moment and try again."
+        : (json && (json.message || json.error)) || response.statusText;
+      const error = new Error(message);
+      error.status = response.status;
+      error.body = json;
+      throw error;
     }
     return json;
+  }
+
+  function unauthenticate() {
+    clearTokens();
+    if (window.AuthState) window.AuthState.unauthenticated();
+  }
+
+  async function request(path, opts = {}) {
+    const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    if (token()) headers.Authorization = "Bearer " + token();
+
+    const isSessionCheck = path === "/auth/me";
+    const method = opts.method || "GET";
+    const requestOptions = {
+      method,
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: "include",
+    };
+    const timeoutMs = isSessionCheck ? 7000 : 10000;
+    let { response, text } = await fetchResponse(path, requestOptions, timeoutMs);
+
+    // A protected request may refresh once, but transport failures are never
+    // retried automatically. The page can show the error and offer a manual retry.
+    if (response.status === 401 && path !== "/auth/refresh" && path !== "/auth/me" && !path.startsWith("/auth/")) {
+      try {
+        const refreshResult = await fetchResponse("/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: localStorage.getItem("refreshToken") }),
+          credentials: "include",
+        }, 10000);
+        if (refreshResult.response.ok) {
+          const data = JSON.parse(refreshResult.text || "{}");
+          if (data.accessToken) {
+            setTokens(data.accessToken, null);
+            headers.Authorization = "Bearer " + data.accessToken;
+          } else {
+            delete headers.Authorization;
+          }
+          ({ response, text } = await fetchResponse(path, { ...requestOptions, headers }, timeoutMs));
+        } else {
+          unauthenticate();
+        }
+      } catch {
+        unauthenticate();
+      }
+    }
+
+    try {
+      return parseResponse(response, text);
+    } catch (error) {
+      if (error.status === 401 && path !== "/auth/me") unauthenticate();
+      throw error;
+    }
   }
 
   return {
