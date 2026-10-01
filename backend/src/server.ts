@@ -14,6 +14,7 @@ import { foodRouter } from "./modules/food/routes";
 import { progressRouter } from "./modules/progress/routes";
 import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
+import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -99,4 +100,5 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Adaptive Fit API listening on :${PORT}`);
+  void logOtpRuntimeDiagnostics();
 });

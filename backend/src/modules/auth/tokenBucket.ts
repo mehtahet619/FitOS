@@ -5,6 +5,7 @@ export interface BucketRequest { key: string; capacity: number; refillPerSecond:
 export interface BucketResult { allowed: boolean; retryAfter: number; }
 export interface AtomicBucketStore {
   consumeMany(requests: BucketRequest[], nowMs: number): Promise<BucketResult>;
+  ping?(): Promise<unknown>;
 }
 
 /** Local/test implementation. Production always uses RedisBucketStore. */
@@ -28,6 +29,7 @@ export class MemoryBucketStore implements AtomicBucketStore {
       return { allowed: true, retryAfter: 0 };
     } finally { release(); }
   }
+  async ping(): Promise<string> { return "PONG"; }
 }
 
 const LUA_CONSUME = `
@@ -52,18 +54,30 @@ return {1, 0};
 export class RedisBucketStore implements AtomicBucketStore {
   private readonly redis: Redis;
   constructor(url = process.env.UPSTASH_REDIS_REST_URL, token = process.env.UPSTASH_REDIS_REST_TOKEN) {
-    if (!url || !token) throw new Error("Shared OTP rate-limit storage is not configured");
-    this.redis = new Redis({ url, token });
+    const endpoint = url?.trim();
+    const authToken = token?.trim();
+    if (!endpoint || !authToken) throw new Error("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN");
+    let parsed: URL;
+    try { parsed = new URL(endpoint); }
+    catch { throw new Error("UPSTASH_REDIS_REST_URL must be a valid HTTPS URL"); }
+    if (parsed.protocol !== "https:") throw new Error("UPSTASH_REDIS_REST_URL must use HTTPS");
+    this.redis = new Redis({ url: endpoint, token: authToken });
   }
   async consumeMany(requests: BucketRequest[], nowMs: number): Promise<BucketResult> {
     const args = [String(nowMs), String(requests.length), ...requests.flatMap((r) => [String(r.capacity), String(r.refillPerSecond)])];
     const result = await (this.redis.eval as unknown as (script: string, keys: string[], args: string[]) => Promise<number[]>)(LUA_CONSUME, requests.map((r) => r.key), args);
+    if (!Array.isArray(result) || result.length < 2) throw new Error("Unexpected Upstash EVAL response for OTP token bucket");
     return { allowed: Number(result[0]) === 1, retryAfter: Number(result[1]) };
   }
+  async ping(): Promise<unknown> { return this.redis.ping(); }
 }
 
 export class TokenBucketRateLimiter {
   constructor(private readonly store: AtomicBucketStore, private readonly now = () => Date.now()) {}
+  async ping(): Promise<unknown> {
+    if (!this.store.ping) throw new Error("OTP rate-limit store does not support connectivity checks");
+    return this.store.ping();
+  }
   consumeRegistration(email: string, ip: string): Promise<BucketResult> {
     const normalized = email.trim().toLowerCase();
     const ipKey = createHash("sha256").update(ip).digest("hex");
@@ -82,4 +96,11 @@ export function getOtpLimiter(): TokenBucketRateLimiter {
     limiter = new TokenBucketRateLimiter(store);
   }
   return limiter;
+}
+
+export function getOtpRedisConfigStatus(): { urlConfigured: boolean; tokenConfigured: boolean } {
+  return {
+    urlConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL?.trim()),
+    tokenConfigured: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN?.trim()),
+  };
 }

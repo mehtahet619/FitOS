@@ -8,6 +8,15 @@ function smtpConfigured(): boolean {
   return Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASSWORD && process.env.EMAIL_FROM);
 }
 
+export function getEmailConfigStatus(): { providerConfigured: boolean; senderConfigured: boolean; credentialsConfigured: boolean } {
+  const port = Number(process.env.EMAIL_PORT || 587);
+  return {
+    providerConfigured: Boolean(process.env.EMAIL_HOST?.trim()) && Number.isInteger(port) && port > 0 && port <= 65535,
+    senderConfigured: Boolean(process.env.EMAIL_FROM?.trim()),
+    credentialsConfigured: Boolean(process.env.EMAIL_USER?.trim() && process.env.EMAIL_PASSWORD),
+  };
+}
+
 function saveLocalMail(mail: LocalMail): void {
   localOutbox.push(mail);
   if (localOutbox.length > 100) localOutbox.shift();

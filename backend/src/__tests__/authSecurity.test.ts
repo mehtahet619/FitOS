@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MemoryBucketStore, TokenBucketRateLimiter } from "../modules/auth/tokenBucket";
+import { MemoryBucketStore, RedisBucketStore, TokenBucketRateLimiter } from "../modules/auth/tokenBucket";
 import { validateRegistrationEmail } from "../modules/auth/emailValidation";
+import { maskEmail, safeOtpError } from "../modules/auth/otpDiagnostics";
 
 describe("OTP token bucket limiter", () => {
   it("starts with 50 email tokens, rejects the 51st, and refills at 50 per minute", async () => {
@@ -42,5 +43,42 @@ describe("registration email policy", () => {
   it("rejects malformed and disposable addresses", async () => {
     expect(await validateRegistrationEmail("not-an-email")).toMatchObject({ valid: false, code: "INVALID_EMAIL" });
     expect(await validateRegistrationEmail("user@mailinator.com")).toMatchObject({ valid: false, code: "DISPOSABLE_EMAIL" });
+  });
+});
+
+describe("OTP diagnostics and Redis configuration", () => {
+  it("masks email addresses and credential-like values in diagnostic errors", () => {
+    const oldUrl = process.env.UPSTASH_REDIS_REST_URL;
+    const oldToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const oldPassword = process.env.EMAIL_PASSWORD;
+    process.env.UPSTASH_REDIS_REST_URL = "https://secret-cache.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "private-redis-token";
+    process.env.EMAIL_PASSWORD = "private-smtp-password";
+    try {
+      const safe = safeOtpError(new Error("Request to https://secret-cache.upstash.io failed for het@gmail.com: private-redis-token private-smtp-password OTP 483921"));
+      expect(safe.message).not.toContain("secret-cache.upstash.io");
+      expect(safe.message).not.toContain("private-redis-token");
+      expect(safe.message).not.toContain("private-smtp-password");
+      expect(safe.message).not.toContain("het@gmail.com");
+      expect(safe.message).not.toContain("483921");
+      expect(safe.message).toContain("h***@gmail.com");
+      expect(maskEmail("  Het@GMAIL.COM ")).toBe("h***@gmail.com");
+    } finally {
+      if (oldUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+      else process.env.UPSTASH_REDIS_REST_URL = oldUrl;
+      if (oldToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+      else process.env.UPSTASH_REDIS_REST_TOKEN = oldToken;
+      if (oldPassword === undefined) delete process.env.EMAIL_PASSWORD;
+      else process.env.EMAIL_PASSWORD = oldPassword;
+    }
+  });
+
+  it("rejects missing credentials and non-HTTPS Redis endpoints before connecting", () => {
+    expect(() => new RedisBucketStore("", "")).toThrow("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN");
+    expect(() => new RedisBucketStore("redis://cache.example", "not-a-real-token")).toThrow("UPSTASH_REDIS_REST_URL must use HTTPS");
+  });
+
+  it("supports the same connectivity probe with the local test store", async () => {
+    await expect(new MemoryBucketStore().ping()).resolves.toBe("PONG");
   });
 });
