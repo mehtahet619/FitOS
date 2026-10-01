@@ -63,6 +63,10 @@ services:
     buildCommand: node scripts/inject-frontend-api-url.js
     staticPublishPath: frontend
     autoDeploy: false
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
     routes:
       - type: rewrite
         source: /*

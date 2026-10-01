@@ -1,7 +1,5 @@
 const Api = (() => {
-  function token() {
-    return localStorage.getItem("accessToken");
-  }
+  let refreshInFlight = null;
   function setTokens(access, refresh) {
     if (access) localStorage.setItem("accessToken", access);
     if (refresh) localStorage.setItem("refreshToken", refresh);
@@ -69,9 +67,27 @@ const Api = (() => {
     if (window.AuthState) window.AuthState.unauthenticated();
   }
 
+  // Refresh tokens rotate on every use. Share a single refresh request when
+  // multiple protected requests receive an expired access token together.
+  function refreshSession() {
+    if (!refreshInFlight) {
+      refreshInFlight = fetchResponse("/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        credentials: "include",
+      }, 10000).then(({ response, text }) => {
+        if (!response.ok) return false;
+        const data = JSON.parse(text || "{}");
+        if (data.accessToken) setTokens(data.accessToken, null);
+        return true;
+      }).finally(() => { refreshInFlight = null; });
+    }
+    return refreshInFlight;
+  }
+
   async function request(path, opts = {}) {
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-    if (token()) headers.Authorization = "Bearer " + token();
 
     const isSessionCheck = path === "/auth/me";
     const method = opts.method || "GET";
@@ -84,24 +100,22 @@ const Api = (() => {
     const timeoutMs = isSessionCheck ? 7000 : 10000;
     let { response, text } = await fetchResponse(path, requestOptions, timeoutMs);
 
+    // /auth/me intentionally reports an expired access cookie as an
+    // unauthenticated session. Try the refresh cookie before boot treats that
+    // response as a logout (including after reload with a still-valid refresh).
+    if (response.ok && isSessionCheck) {
+      let session = null;
+      try { session = JSON.parse(text || "{}"); } catch { session = null; }
+      if (session?.authenticated === false && await refreshSession()) {
+        ({ response, text } = await fetchResponse(path, requestOptions, timeoutMs));
+      }
+    }
+
     // A protected request may refresh once, but transport failures are never
     // retried automatically. The page can show the error and offer a manual retry.
     if (response.status === 401 && path !== "/auth/refresh" && path !== "/auth/me" && !path.startsWith("/auth/")) {
       try {
-        const refreshResult = await fetchResponse("/auth/refresh", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: localStorage.getItem("refreshToken") }),
-          credentials: "include",
-        }, 10000);
-        if (refreshResult.response.ok) {
-          const data = JSON.parse(refreshResult.text || "{}");
-          if (data.accessToken) {
-            setTokens(data.accessToken, null);
-            headers.Authorization = "Bearer " + data.accessToken;
-          } else {
-            delete headers.Authorization;
-          }
+        if (await refreshSession()) {
           ({ response, text } = await fetchResponse(path, { ...requestOptions, headers }, timeoutMs));
         } else {
           unauthenticate();
@@ -120,7 +134,6 @@ const Api = (() => {
   }
 
   return {
-    token,
     setTokens,
     clearTokens,
     get: (path) => request(path),

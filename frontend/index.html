@@ -7,6 +7,29 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Adaptive Fit" />
+<script>
+  // Migration cleanup for clients that still have the old cache-first worker.
+  // Keep this ahead of application scripts so the next navigation is network-backed.
+  if ("serviceWorker" in navigator) {
+    const unregisterFitOSWorker = navigator.serviceWorker.getRegistrations().then((registrations) =>
+      Promise.all(registrations
+        .filter((registration) => registration.scope === `${location.origin}/`)
+        .map((registration) => registration.unregister()))
+    );
+    const removeFitOSCaches = "caches" in window
+      ? caches.keys().then((keys) => Promise.all(
+          keys.filter((key) => key.startsWith("adaptive-fit-shell-")).map((key) => caches.delete(key))
+        ))
+      : Promise.resolve();
+    Promise.all([unregisterFitOSWorker, removeFitOSCaches]).then(() => {
+      const reloadKey = "fitos-sw-migration-reload-v16";
+      if (navigator.serviceWorker.controller && !sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        location.reload();
+      }
+    }).catch(() => {});
+  }
+</script>
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <title>Adaptive Fit</title>
@@ -235,12 +258,5 @@
 <script src="api.js"></script>
 <script src="app.js?v=fitos-20261001-equipment-picker-v15"></script>
 <script type="module" src="vision.js"></script>
-<script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW registration failed", e));
-    });
-  }
-</script>
 </body>
 </html>
