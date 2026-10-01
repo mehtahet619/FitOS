@@ -1,4 +1,4 @@
-import { getEmailConfigStatus } from "./emailService";
+import { getEmailConfigStatus, smtpConfigured, getTransport } from "./emailService";
 import { logOtpFailure, logOtpStage } from "./otpDiagnostics";
 import { getOtpLimiter, getOtpRedisConfigStatus } from "./tokenBucket";
 
@@ -42,6 +42,23 @@ export async function logOtpRuntimeDiagnostics(): Promise<void> {
       console.error("[OTP] Redis connectivity: FAILED");
       logOtpFailure("redis_ping", process.env.NODE_ENV === "production" ? "upstash" : "memory", error);
     }
+  }
+
+  // Verify SMTP transport if email is configured
+  if (smtpConfigured()) {
+    try {
+      console.info("[EMAIL] SMTP transport verification started");
+      const transport = getTransport();
+      await transport.verify();
+      console.info("[EMAIL] SMTP transport verification: OK");
+    } catch (error: any) {
+      console.error("[EMAIL] SMTP transport verification: FAILED", {
+        error: error?.message || String(error),
+        hint: "Check EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM"
+      });
+    }
+  } else {
+    console.info("[EMAIL] SMTP transport verification: SKIPPED (not configured)");
   }
 
   logOtpStage("OTP service initialization complete");

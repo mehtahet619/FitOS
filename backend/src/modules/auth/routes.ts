@@ -64,7 +64,7 @@ function transaction<T>(work: (tx: import("../../db/types").DatabaseLike) => Pro
   return db.transaction(work);
 }
 
-async function sendRegistrationChallenge(email: string, name: string, passwordHash: string, userId: string | null) {
+async function sendRegistrationChallenge(email: string, name: string, passwordHash: string, userId: string | null, res: Response) {
   let otp: string;
   let hashedOtp: string;
   try {
@@ -93,8 +93,10 @@ async function sendRegistrationChallenge(email: string, name: string, passwordHa
     await emailService.sendVerificationOTP(name, email, otp);
     logOtpStage("email send succeeded", { flow: "registration", provider: "nodemailer-smtp" });
   } catch (error) {
+    // Clean up OTP on email send failure so user can retry
+    await db.run(`UPDATE PendingRegistration SET otpHash=NULL, otpExpiresAt=NULL, updatedAt=? WHERE email=?`, nowIso(), email);
     logOtpFailure("email_send_registration", "nodemailer-smtp", error);
-    throw error;
+    return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
   }
 }
 
@@ -129,7 +131,7 @@ authRouter.post("/register/request-otp", async (req, res) => {
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   if (!found && await db.get(`SELECT id FROM "User" WHERE email=?`, validated.email)) return res.status(409).json({ code: "ACCOUNT_EXISTS", message: "An account with this email already exists. Please sign in." });
   try {
-    await sendRegistrationChallenge(validated.email, parsed.data.name, passwordHash, found?.id ?? null);
+    await sendRegistrationChallenge(validated.email, parsed.data.name, passwordHash, found?.id ?? null, res);
   } catch {
     return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
   }
@@ -145,8 +147,8 @@ authRouter.post("/register/resend-otp", async (req, res) => {
   logOtpStage("email validation passed", { flow: "registration_resend" });
   if (!await otpRateLimit(req, res, validated.email, "registration_resend")) return res;
   const pending = await db.get<{ email: string; name: string; passwordHash: string; userId: string | null }>(`SELECT * FROM PendingRegistration WHERE email=?`, validated.email);
-  if (pending) {
-    try { await sendRegistrationChallenge(pending.email, pending.name, pending.passwordHash, pending.userId); }
+if (pending) {
+      try { await sendRegistrationChallenge(pending.email, pending.name, pending.passwordHash, pending.userId, res); }
     catch {
       return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
     }
@@ -315,7 +317,10 @@ authRouter.post("/password/request-otp", async (req, res) => {
       await emailService.sendPasswordResetOTP(user.name || "there", user.email, otp);
       logOtpStage("email send succeeded", { flow: "password_reset", provider: "nodemailer-smtp" });
     } catch (error) {
+      // Clean up OTP on email send failure so user can retry
+      await db.run(`UPDATE PasswordResetChallenge SET otpHash=NULL, otpExpiresAt=NULL, updatedAt=? WHERE userId=?`, nowIso(), user.id);
       logOtpFailure("email_send_password_reset", "nodemailer-smtp", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
     }
   }
   return res.status(202).json({ message: "If the account exists, a reset code has been sent." });
