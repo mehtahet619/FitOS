@@ -15,7 +15,7 @@ export async function logOtpRuntimeDiagnostics(): Promise<void> {
   console.info(`[CONFIG] OTP_HASH_SECRET configured: ${otpHashSecretConfigured}`);
 
   const email = getEmailConfigStatus();
-  console.info("[EMAIL] provider: nodemailer-smtp");
+  console.info("[EMAIL] provider: resend-api");
   console.info(`[EMAIL] provider configured: ${email.providerConfigured}`);
   console.info(`[EMAIL] sender configured: ${email.senderConfigured}`);
   console.info(`[EMAIL] credentials configured: ${email.credentialsConfigured}`);

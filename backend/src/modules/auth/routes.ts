@@ -88,10 +88,10 @@ async function sendRegistrationChallenge(email: string, name: string, passwordHa
     logOtpFailure("otp_storage_registration", "database", error);
     throw error;
   }
-  logOtpStage("email send started", { flow: "registration", provider: "nodemailer-smtp" });
+  logOtpStage("email send started", { flow: "registration", provider: "resend-api" });
   try {
     await emailService.sendVerificationOTP(name, email, otp);
-    logOtpStage("email send succeeded", { flow: "registration", provider: "nodemailer-smtp" });
+    logOtpStage("email send succeeded", { flow: "registration", provider: "resend-api" });
   } catch (error) {
     try {
       await db.run(`UPDATE PendingRegistration SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE email=?`, nowIso(), email);
@@ -99,7 +99,7 @@ async function sendRegistrationChallenge(email: string, name: string, passwordHa
     } catch (cleanupError) {
       logOtpFailure("otp_cleanup_registration", "database", cleanupError);
     }
-    logOtpFailure("email_send_registration", "nodemailer-smtp", error);
+    logOtpFailure("email_send_registration", "resend-api", error);
     return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
   }
 }
@@ -316,10 +316,10 @@ authRouter.post("/password/request-otp", async (req, res) => {
       logOtpFailure("otp_storage_password_reset", "database", error);
       return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
     }
-    logOtpStage("email send started", { flow: "password_reset", provider: "nodemailer-smtp" });
+    logOtpStage("email send started", { flow: "password_reset", provider: "resend-api" });
     try {
       await emailService.sendPasswordResetOTP(user.name || "there", user.email, otp);
-      logOtpStage("email send succeeded", { flow: "password_reset", provider: "nodemailer-smtp" });
+      logOtpStage("email send succeeded", { flow: "password_reset", provider: "resend-api" });
     } catch (error) {
       try {
         await db.run(`UPDATE PasswordResetChallenge SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE userId=?`, nowIso(), user.id);
@@ -327,7 +327,7 @@ authRouter.post("/password/request-otp", async (req, res) => {
       } catch (cleanupError) {
         logOtpFailure("otp_cleanup_password_reset", "database", cleanupError);
       }
-      logOtpFailure("email_send_password_reset", "nodemailer-smtp", error);
+      logOtpFailure("email_send_password_reset", "resend-api", error);
       return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
     }
   }

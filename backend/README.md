@@ -45,10 +45,10 @@ DATABASE_URL="postgresql://..." npm run migrate:postgres
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
-| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` | Transactional SMTP settings. |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email delivery through Resend's HTTPS API. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
-| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` | Transactional SMTP settings. |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email delivery through Resend's HTTPS API. |
 | `AI_PROVIDER` | `template` (default, no key needed) — see `src/ai/provider.ts` to add a real one. |
 | `MAPS_PROVIDER` | `mock` (default, returns honest empty results) or `apify_swiggy` — see **Food Discovery** below. |
 | `ROBOFLOW_WORKFLOW_MODE` | `true` for serverless workflows (recommended), `false` or unset for legacy hosted models — see **Equipment Vision** below. |
