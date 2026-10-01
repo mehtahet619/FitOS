@@ -183,6 +183,11 @@ function inferDietType(name: string): string {
 
 nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[nutrition/today] userId=${userId} ${label} ${Date.now() - started}ms`);
+  };
+
   const nutritionProfile = await db.get<any>(`SELECT * FROM NutritionProfile WHERE userId = ?`, userId);
   if (!nutritionProfile) return res.status(404).json({ error: "No nutrition profile yet" });
 
@@ -198,12 +203,13 @@ nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
     rec.id
   );
 
+  log("response ready");
   return res.json({
     recommendationId: rec.id,
     totals: {
       calories: rec.totalCalories,
       proteinG: rec.totalProteinG,
-      carbsG: rec.totalCarbsG,
+      carbG: rec.totalCarbsG,
       fatG: rec.totalFatG,
     },
     dataSource: rec.source || "general-nutrition",

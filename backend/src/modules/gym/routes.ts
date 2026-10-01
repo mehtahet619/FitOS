@@ -18,7 +18,14 @@ function todayDateStr(): string {
 }
 
 gymRouter.get("/today", async (req: AuthedRequest, res) => {
+  const userId = req.userId!;
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[gym/today] userId=${userId} ${label} ${Date.now() - started}ms`);
+  };
+
   const row = await db.get<any>(`SELECT * FROM GymAttendance WHERE userId = ? AND date = ?`, req.userId!, todayDateStr());
+  log("response ready");
   return res.json({ checkedIn: !!row, attendance: row ?? null });
 });
 

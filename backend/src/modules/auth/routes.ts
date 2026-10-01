@@ -220,34 +220,41 @@ authRouter.post("/register/verify-otp", async (req, res) => {
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });
 authRouter.post("/login", async (req, res) => {
   const started = Date.now();
-  const stage = (name: string) => { if (process.env.NODE_ENV !== "production") console.info(`[AUTH] ${name} ${Date.now() - started}ms`); };
-  stage("login request started");
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[auth/login] ${label} ${Date.now() - started}ms`);
+  };
+  log("login request started");
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return codeError(res, 400, "INVALID_INPUT", "Please enter a valid email and password.");
   const email = parsed.data.email.trim().toLowerCase();
   const user = await db.get<{ id: string; email: string; name: string | null; passwordHash: string | null; emailVerified: number }>(`SELECT id,email,name,passwordHash,emailVerified FROM "User" WHERE LOWER(email)=?`, email);
-  stage("database lookup completed");
+  log("database lookup completed");
   if (!user || !user.passwordHash) return codeError(res, 401, "INVALID_CREDENTIALS", "Invalid email or password.");
   const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-  stage("password verification completed");
+  log("password verification completed");
   if (!valid) return codeError(res, 401, "INVALID_CREDENTIALS", "Invalid email or password.");
   if (!user.emailVerified) return codeError(res, 403, "EMAIL_NOT_VERIFIED", "Please verify your email before signing in.");
   const mobileTokens = await createSession(user.id, res, req);
-  stage("session created");
+  log("session created");
   const profileComplete = await hasCompletedProfile(user.id);
   const response = res.json({ authenticated: true, user: { id: user.id, name: user.name, email: user.email, emailVerified: true, profileComplete }, ...(mobileTokens || {}) });
-  stage("login response sent");
+  log("login response sent");
   return response;
 });
 
 authRouter.get("/me", async (req, res) => {
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[auth/me] ${label} ${Date.now() - started}ms`);
+  };
   res.setHeader("Cache-Control", "no-store");
   const identity = await readIdentity(req);
-  if (!identity) return res.json({ authenticated: false });
+  if (!identity) { log("no identity"); return res.json({ authenticated: false }); }
   const user = await db.get<{ id: string; name: string | null; email: string }>(`SELECT id,name,email FROM "User" WHERE id=?`, identity.userId);
-  if (!user) return res.json({ authenticated: false });
-  if (process.env.NODE_ENV !== "production") console.info("[AUTH] frontend session restored");
-  return res.json({ authenticated: true, user: { ...user, emailVerified: true, profileComplete: await hasCompletedProfile(identity.userId) } });
+  if (!user) { log("no user"); return res.json({ authenticated: false }); }
+  const profileComplete = await hasCompletedProfile(identity.userId);
+  log("response ready");
+  return res.json({ authenticated: true, user: { ...user, emailVerified: true, profileComplete } });
 });
 
 authRouter.post("/refresh", async (req, res) => {

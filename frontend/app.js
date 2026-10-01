@@ -239,9 +239,8 @@ $("auth-submit").addEventListener("click", async () => {
   }
   const btn = $("auth-submit");
   btn.disabled = true;
-  const registrationRequest = State.isRegisterMode;
-  if (registrationRequest) btn.textContent = "Sending code...";
-  btn.textContent = "Loading…";
+  if (State.isRegisterMode) btn.textContent = "Sending code…";
+  else btn.textContent = "Signing in…";
   try {
     if (State.isRegisterMode) {
       const name = $("auth-name").value.trim();
@@ -412,72 +411,112 @@ async function showHistory() {
 }
 
 /* ================= TODAY ================= */
+let todayRetryCount = 0;
+const MAX_TODAY_RETRIES = 2;
+
 async function loadToday() {
   const el = $("today-content");
-  el.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const greetingEl = $("today-greeting");
+  el.innerHTML = `<div class="empty-state">Loading your day…</div>`;
+
   try {
     const [dashboard, profile, plan] = await Promise.all([
       Api.get("/progress/dashboard"),
       Api.get("/user/profile"),
       Api.get("/workouts/plan"),
     ]);
-    $("today-greeting").textContent = `Hi, ${profile.name.split(" ")[0]}`;
 
-    let nutrition = null;
-    try { nutrition = await Api.get("/nutrition/today"); } catch (_) {}
+    greetingEl.textContent = `Hi, ${profile.name?.split(" ")[0] || "there"}`;
 
-    let gym = null;
-    try { gym = await Api.get("/gym/today"); } catch (_) {}
+    const [nutrition, gym] = await Promise.allSettled([
+      Api.get("/nutrition/today"),
+      Api.get("/gym/today"),
+    ]);
 
-    const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
-    const nextWod = plan?.nextWorkout?.label || null;
-    const statusInfo = activePlanLabel
-      ? `${activePlanLabel} · ${plan.cycleStatus}${nextWod ? " · Next: " + nextWod : ""}`
-      : "Choose a workout structure in the Workout tab";
+    const nutritionData = nutrition.status === "fulfilled" ? nutrition.value : null;
+    const gymData = gym.status === "fulfilled" ? gym.value : null;
 
-    el.innerHTML = `
-      <div class="card">
-        <div class="card-label">🏋️ Today's Workout Plan</div>
-        <div class="card-value">${plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete — new cycle or switch plan" : "No active plan")}</div>
-        <div class="card-sub">${statusInfo}</div>
-        ${plan?.recentlyTrainedMuscles?.length
-          ? `<div class="card-sub">Recently trained: ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
-          : ""}
-        ${plan?.planSwitchAllowed === false && plan?.activePlan
-          ? `<div class="banner banner-info" style="margin-top:8px;">🔒 Plan switching locked — finish all ${plan.units?.length || 0} workouts in this cycle first.</div>`
-          : ""}
-        ${plan?.decision?.warning
-          ? `<div class="banner banner-info" style="margin-top:8px;">⚠️ ${plan.decision.warning}</div>`
-          : ""}
-      </div>
-      <div class="card-grid-2">
-        <div class="card">
-          <div class="card-label">🔥 Calories</div>
-          <div class="card-value">${nutrition ? nutrition.totals.calories : "—"}</div>
-          <div class="card-sub">${nutrition ? "planned today" : "no plan yet"}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">🍽️ Nearby food</div>
-          <div class="card-value">${nutrition ? nutrition.meals.length : 0}</div>
-          <div class="card-sub">meals to find nearby</div>
-        </div>
-      </div>
-      <div class="card-grid-2">
-        <div class="card">
-          <div class="card-label">📊 Weekly Volume</div>
-          <div class="card-value">${dashboard.progress.weeklyVolumeKg}kg</div>
-          <div class="card-sub">${dashboard.progress.workoutsThisWeek} workouts this week</div>
-        </div>
-        <div class="card">
-          <div class="card-label">📇 Gym</div>
-          <div class="card-value">${gym && gym.checkedIn ? "✓" : "—"}</div>
-          <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
-        </div>
-      </div>
-    `;
+    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData);
+    todayRetryCount = 0;
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Couldn't load your summary: ${e.message}</div>`;
+    handleTodayError(el, e);
   }
+}
+
+function renderTodaySuccess(el, dashboard, plan, nutrition, gym) {
+  const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
+  const nextWod = plan?.nextWorkout?.label || null;
+  const statusInfo = activePlanLabel
+    ? `${activePlanLabel} · ${plan.cycleStatus}${nextWod ? " · Next: " + nextWod : ""}`
+    : "Choose a workout structure in the Workout tab";
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-label">🏋️ Today's Workout Plan</div>
+      <div class="card-value">${plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete — new cycle or switch plan" : "No active plan")}</div>
+      <div class="card-sub">${statusInfo}</div>
+      ${plan?.recentlyTrainedMuscles?.length
+        ? `<div class="card-sub">Recently trained: ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
+        : ""}
+      ${plan?.planSwitchAllowed === false && plan?.activePlan
+        ? `<div class="banner banner-info" style="margin-top:8px;">🔒 Plan switching locked — finish all ${plan.units?.length || 0} workouts in this cycle first.</div>`
+        : ""}
+      ${plan?.decision?.warning
+        ? `<div class="banner banner-info" style="margin-top:8px;">⚠️ ${plan.decision.warning}</div>`
+        : ""}
+    </div>
+    <div class="card-grid-2">
+      <div class="card">
+        <div class="card-label">🔥 Calories</div>
+        <div class="card-value">${nutrition ? nutrition.totals.calories : "—"}</div>
+        <div class="card-sub">${nutrition ? "planned today" : "no plan yet"}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🍽️ Nearby food</div>
+        <div class="card-value">${nutrition ? nutrition.meals.length : 0}</div>
+        <div class="card-sub">meals to find nearby</div>
+      </div>
+    </div>
+    <div class="card-grid-2">
+      <div class="card">
+        <div class="card-label">📊 Weekly Volume</div>
+        <div class="card-value">${dashboard.progress.weeklyVolumeKg}kg</div>
+        <div class="card-sub">${dashboard.progress.workoutsThisWeek} workouts this week</div>
+      </div>
+      <div class="card">
+        <div class="card-label">📇 Gym</div>
+        <div class="card-value">${gym && gym.checkedIn ? "✓" : "—"}</div>
+        <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
+      </div>
+    </div>
+  `;
+}
+
+function handleTodayError(el, error) {
+  const isAuthError = error?.status === 401;
+  const isTimeout = error?.cause?.name === "AbortError" || error?.message?.includes("too long") || error?.message?.includes("timed out");
+
+  if (isAuthError) {
+    el.innerHTML = `<div class="empty-state">Session expired. Please sign in again.</div>`;
+    return;
+  }
+
+  if (todayRetryCount < MAX_TODAY_RETRIES) {
+    todayRetryCount++;
+    setTimeout(() => loadToday(), 1000 * todayRetryCount);
+    return;
+  }
+
+  let message = "Unable to load today's data.";
+  if (isTimeout) message = "Connection timed out.";
+  else if (error?.message) message = error.message;
+
+  el.innerHTML = `
+    <div class="empty-state">
+      <div style="margin-bottom: 12px;">${message}</div>
+      <button class="btn btn-primary" onclick="loadToday()">Retry</button>
+    </div>
+  `;
 }
 
 /* ================= WORKOUT ================= */
