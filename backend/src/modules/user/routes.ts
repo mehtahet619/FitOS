@@ -25,8 +25,15 @@ const profileSchema = z.object({
 });
 
 userRouter.get("/profile", async (req: AuthedRequest, res) => {
-  const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, req.userId!);
+  const userId = req.userId!;
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[user/profile] userId=${userId} ${label} ${Date.now() - started}ms`);
+  };
+
+  const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);
   if (!profile) return res.status(404).json({ error: "Profile not created yet" });
+  log("response ready");
   return res.json({
     ...profile,
     allergies: (profile.allergies || "").split(",").filter(Boolean),

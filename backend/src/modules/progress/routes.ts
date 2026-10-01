@@ -14,38 +14,46 @@ progressRouter.get("/dashboard", async (req: AuthedRequest, res) => {
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - 7);
 
-  const todayWorkout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,
-    userId,
-    startOfDay.toISOString()
-  );
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[progress/dashboard] ${label} ${Date.now() - started}ms`);
+  };
 
-  const personalRecords = await db.all<any>(
-    `SELECT pr.*, e.name as exerciseName FROM PersonalRecord pr JOIN Exercise e ON e.id = pr.exerciseId WHERE pr.userId = ?`,
-    userId
-  );
+  const [todayWorkout, personalRecords, weekHistory, workoutsThisWeekResult] = await Promise.all([
+    db.get<any>(
+      `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,
+      userId,
+      startOfDay.toISOString()
+    ),
+    db.all<any>(
+      `SELECT pr.*, e.name as exerciseName FROM PersonalRecord pr JOIN Exercise e ON e.id = pr.exerciseId WHERE pr.userId = ?`,
+      userId
+    ),
+    db.all<any>(
+      `SELECT h.*, e.primaryMuscle FROM WorkoutHistory h JOIN Exercise e ON e.id = h.exerciseId WHERE h.userId = ? AND h.recordedAt >= ?`,
+      userId,
+      startOfWeek.toISOString()
+    ),
+    db.get<{ c: number }>(
+      `SELECT COUNT(*) as c FROM Workout WHERE userId = ? AND createdAt >= ?`,
+      userId,
+      startOfWeek.toISOString()
+    ),
+  ]);
 
-  const weekHistory = await db.all<any>(
-    `SELECT * FROM WorkoutHistory WHERE userId = ? AND recordedAt >= ?`,
-    userId,
-    startOfWeek.toISOString()
-  );
+  log("queries completed");
 
-  const workoutsThisWeek = (await db.get<{ c: number }>(
-    `SELECT COUNT(*) as c FROM Workout WHERE userId = ? AND createdAt >= ?`,
-    userId,
-    startOfWeek.toISOString()
-  ))?.c ?? 0;
+  const workoutsThisWeek = workoutsThisWeekResult?.c ?? 0;
 
   const weeklyVolumeKg = weekHistory.reduce((sum, h) => sum + (h.volumeKg ?? 0), 0);
 
   const muscleVolume: Record<string, number> = {};
   for (const h of weekHistory) {
-    const exercise = await db.get<{ primaryMuscle: string }>(`SELECT primaryMuscle FROM Exercise WHERE id = ?`, h.exerciseId);
-    if (!exercise) continue;
-    muscleVolume[exercise.primaryMuscle] = (muscleVolume[exercise.primaryMuscle] ?? 0) + (h.volumeKg ?? 0);
+    if (!h.primaryMuscle) continue;
+    muscleVolume[h.primaryMuscle] = (muscleVolume[h.primaryMuscle] ?? 0) + (h.volumeKg ?? 0);
   }
 
+  log("response ready");
   return res.json({
     todaysPlan: todayWorkout
       ? {

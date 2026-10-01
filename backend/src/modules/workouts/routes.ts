@@ -41,72 +41,103 @@ workoutRouter.get("/plan/structures", async (_req, res) => {
 
 workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
-  console.info(`[workouts/plan] userId=${userId} - fetching plan state`);
+  const started = Date.now();
+  const log = (label: string) => {
+    if (process.env.NODE_ENV !== "production") console.info(`[workouts/plan] userId=${userId} ${label} ${Date.now() - started}ms`);
+  };
+
   try {
-    let state;
-    try {
-      state = await getPlanState(db, userId);
-      console.info(`[workouts/plan] userId=${userId} - plan state: ${state ? `structureKey=${state.structureKey}, cycleId=${state.cycleId}, cycleStatus=${state.cycleStatus}, unitsCount=${state.units.length}` : 'none'}`);
-    } catch (error) {
-      console.error(`[workouts/plan] userId=${userId} - error fetching plan state:`, error);
-      throw error;
+    const state = await getPlanState(db, userId);
+    log("plan state fetched");
+
+    if (!state) {
+      log("no plan state");
+      return res.json({
+        activePlan: null,
+        activePlanKey: null,
+        cycleId: null,
+        cycleStatus: "NOT_STARTED",
+        currentIndex: 0,
+        completedUnits: [],
+        nextWorkout: null,
+        remainingWorkouts: [],
+        planSwitchAllowed: true,
+        machineState: "NO_PLAN",
+        units: [],
+        workoutUnits: [],
+        stateSnapshot: serializePlanSnapshot(undefined),
+        plan: null,
+        cycle: null,
+        recentlyTrainedMuscles: [],
+        decision: {
+          nextUnit: null,
+          targetMuscles: [],
+          recentlyTrainedMuscles: [],
+          remainingUnits: [],
+          completedUnits: [],
+          cycleStatus: "NOT_STARTED",
+          planSwitchAllowed: true,
+          machineState: "NO_PLAN",
+          history: [],
+          todayOptions: [],
+          blockedAlternatives: [],
+        },
+      });
     }
 
-    let activePlan, cycle, decision, recentlyTrained, snapshot;
-    try {
-      activePlan = await getActiveWorkoutPlan(db, userId);
-      cycle = await getCurrentCycle(db, userId);
-      decision = await getTodayWorkoutDecision(db, userId);
-      recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
-      snapshot = serializePlanSnapshot(state);
-      console.info(`[workouts/plan] userId=${userId} - activePlan=${activePlan?.structureKey}, cycleStatus=${cycle?.cycleStatus}, nextWorkout=${decision?.nextUnit?.label}, recentlyTrained=${recentlyTrained.map(m => m.muscle).join(',')}`);
-    } catch (error) {
-      console.error(`[workouts/plan] userId=${userId} - error fetching plan data:`, error);
-      throw error;
-    }
+    const [activePlan, cycle, decision, recentlyTrained] = await Promise.all([
+      getActiveWorkoutPlan(db, userId),
+      getCurrentCycle(db, userId),
+      getTodayWorkoutDecision(db, userId),
+      getRecentlyTrainedMuscles(db, userId),
+    ]);
+    log("plan data fetched");
 
+    const snapshot = serializePlanSnapshot(state);
+
+    log("response ready");
     return res.json({
-    activePlan: state
-      ? {
-          structureKey: state.structureKey,
-          structureLabel: PLAN_LABELS[state.structureKey] ?? state.structureKey,
-        }
-      : null,
-    activePlanKey: snapshot.activePlan,
-    cycleId: snapshot.cycleId,
-    cycleStatus: snapshot.cycleStatus,
-    currentIndex: state?.currentIndex ?? 0,
-    completedUnits: state ? listCompletedUnits(state) : [],
-    nextWorkout: decision.nextUnit
-      ? {
-          key: decision.nextUnit.key,
-          label: decision.nextUnit.label,
-          muscles: decision.nextUnit.muscles,
-        }
-      : null,
-    remainingWorkouts: decision.remainingUnits.map((unit) => ({
-      key: unit.key,
-      label: unit.label,
-      muscles: unit.muscles,
-    })),
-    planSwitchAllowed: snapshot.planSwitchAllowed,
-    machineState: snapshot.machineState,
-    units: state?.units ?? [],
-    workoutUnits: snapshot.workoutUnits,
-    stateSnapshot: snapshot,
-    plan: activePlan,
-    cycle,
-    recentlyTrainedMuscles: recentlyTrained,
-    decision,
-  });
-} catch (error: any) {
-  console.error(`[workouts/plan] userId=${userId} - UNHANDLED ERROR:`, error);
-  return res.status(500).json({
-    error: "Internal server error",
-    detail: error?.message || String(error),
-    stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
-  });
-}
+      activePlan: state
+        ? {
+            structureKey: state.structureKey,
+            structureLabel: PLAN_LABELS[state.structureKey] ?? state.structureKey,
+          }
+        : null,
+      activePlanKey: snapshot.activePlan,
+      cycleId: snapshot.cycleId,
+      cycleStatus: snapshot.cycleStatus,
+      currentIndex: state.currentIndex,
+      completedUnits: listCompletedUnits(state),
+      nextWorkout: decision.nextUnit
+        ? {
+            key: decision.nextUnit.key,
+            label: decision.nextUnit.label,
+            muscles: decision.nextUnit.muscles,
+          }
+        : null,
+      remainingWorkouts: decision.remainingUnits.map((unit) => ({
+        key: unit.key,
+        label: unit.label,
+        muscles: unit.muscles,
+      })),
+      planSwitchAllowed: snapshot.planSwitchAllowed,
+      machineState: snapshot.machineState,
+      units: state.units,
+      workoutUnits: snapshot.workoutUnits,
+      stateSnapshot: snapshot,
+      plan: activePlan,
+      cycle,
+      recentlyTrainedMuscles: recentlyTrained,
+      decision,
+    });
+  } catch (error: any) {
+    console.error(`[workouts/plan] userId=${userId} - UNHANDLED ERROR:`, error);
+    return res.status(500).json({
+      error: "Internal server error",
+      detail: error?.message || String(error),
+      stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
+    });
+  }
 });
 
 workoutRouter.get("/plan/completed-units", async (req: AuthedRequest, res) => {
