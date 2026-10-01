@@ -49,8 +49,11 @@ void (async () => {
     .join("\n");
 
   const title = danger.github.pr.title;
-  if (!/^\[[A-Z][A-Z0-9-]*\]\s+\S+/.test(title)) {
-    fail("PR title must use the required `[TAG] description` format.");
+  const hasBracketTagTitle = /^\[[A-Z][A-Z0-9-]*\]\s+\S+/.test(title);
+  const hasConventionalCommitTitle =
+    /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?:\s+\S+/i.test(title);
+  if (!hasBracketTagTitle && !hasConventionalCommitTitle) {
+    fail("PR title must use `[TAG] description` or Conventional Commit format (for example `fix(auth): description`).");
   }
   if (linesChanged > 400) warn(`This PR changes ${linesChanged} lines and may be hard to review.`);
   if (sensitiveFiles.length) {
