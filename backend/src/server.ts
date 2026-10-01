@@ -39,37 +39,48 @@ app.use((req, res, next) => {
   next();
 });
 const allowedFrontendOrigins = new Set(
-  (process.env.FRONTEND_ORIGIN || "")
+  (process.env.FRONTEND_ORIGIN || (process.env.NODE_ENV === "production" ? "" : "http://localhost:5173"))
     .split(",")
     .map((origin) => origin.trim().replace(/\/$/, ""))
     .filter(Boolean)
 );
+function isAllowedFrontendOrigin(origin: string): boolean {
+  const normalized = origin.replace(/\/$/, "");
+  if (allowedFrontendOrigins.has(normalized)) return true;
+  // Render preview deploys use unique subdomains. Trust only the configured
+  // static-site service, not every arbitrary *.onrender.com origin.
+  if (!allowedRenderServiceId) return false;
+  try {
+    const parsedOrigin = new URL(origin);
+    const previewHostPrefix = `${allowedRenderServiceId.toLowerCase()}-`;
+    return parsedOrigin.protocol === "https:" &&
+      parsedOrigin.hostname.toLowerCase().startsWith(previewHostPrefix) &&
+      parsedOrigin.hostname.toLowerCase().endsWith(".onrender.com");
+  } catch {
+    return false;
+  }
+}
 const allowedRenderServiceId = process.env.RENDER_SERVICE_ID;
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_REFRESH_SECRET) {
+    throw new Error("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET are required in production");
+  }
+  if (allowedFrontendOrigins.size === 0 || [...allowedFrontendOrigins].some((origin) => {
+    try {
+      const parsed = new URL(origin);
+      return parsed.protocol !== "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    } catch { return true; }
+  })) {
+    throw new Error("FRONTEND_ORIGIN must contain the production HTTPS frontend origin(s)");
+  }
+}
 app.use(
   cors({
     credentials: true,
     origin(origin, callback) {
-      if (!origin || allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
+      if (!origin || isAllowedFrontendOrigin(origin)) {
         callback(null, true);
         return;
-      }
-      // Render preview deploys use unique subdomains. Trust only the configured
-      // static-site service, not every arbitrary *.onrender.com origin.
-      if (allowedRenderServiceId) {
-        try {
-          const parsedOrigin = new URL(origin);
-          const previewHostPrefix = `${allowedRenderServiceId.toLowerCase()}-`;
-          if (
-            parsedOrigin.protocol === "https:" &&
-            parsedOrigin.hostname.toLowerCase().startsWith(previewHostPrefix) &&
-            parsedOrigin.hostname.toLowerCase().endsWith(".onrender.com")
-          ) {
-            callback(null, true);
-            return;
-          }
-        } catch {
-          // Invalid Origin headers are rejected below.
-        }
       }
       callback(null, false);
     },
@@ -80,7 +91,7 @@ app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   const origin = req.header("Origin");
   const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
-  if (origin && mutating && req.headers.cookie && !allowedFrontendOrigins.has(origin.replace(/\/$/, ""))) {
+  if (origin && mutating && req.headers.cookie && !isAllowedFrontendOrigin(origin)) {
     return res.status(403).json({ code: "CSRF_ORIGIN_REJECTED", error: "Request origin is not allowed" });
   }
   next();

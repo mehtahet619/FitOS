@@ -37,6 +37,21 @@ export function secureEqualHex(a: string, b: string): boolean {
 }
 export function makeRefreshSecret(): string { return randomBytes(32).toString("base64url"); }
 
+function sessionCookieOptions() {
+  const production = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: production,
+    // The Render web and API services are different sites. Lax cookies are
+    // omitted by credentialed cross-site fetches, including /auth/refresh.
+    sameSite: production ? "none" as const : "lax" as const,
+    // Partitioned cookies remain available to the FitOS top-level site in
+    // browsers that block unpartitioned third-party cookies.
+    ...(production ? { partitioned: true } : {}),
+    path: "/" as const,
+  };
+}
+
 export interface AuthedRequest extends Request { userId?: string; sessionId?: string; }
 function cookieValue(req: Request, name: string): string | undefined {
   const cookie = req.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
@@ -50,12 +65,12 @@ export function getRefreshCookie(req: Request): string | undefined {
   return cookieValue(req, SESSION_COOKIE_REFRESH);
 }
 export function setSessionCookies(res: Response, accessToken: string, refreshToken: string): void {
-  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+  const options = sessionCookieOptions();
   res.cookie(SESSION_COOKIE_ACCESS, accessToken, { ...options, maxAge: 15 * 60 * 1000 });
   res.cookie(SESSION_COOKIE_REFRESH, refreshToken, { ...options, maxAge: 30 * 24 * 60 * 60 * 1000 });
 }
 export function clearSessionCookies(res: Response): void {
-  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+  const options = sessionCookieOptions();
   res.clearCookie(SESSION_COOKIE_ACCESS, options); res.clearCookie(SESSION_COOKIE_REFRESH, options);
 }
 export function isMobileClient(req: Request): boolean { return req.header("X-FitOS-Client") === "mobile"; }
