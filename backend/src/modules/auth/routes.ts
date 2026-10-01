@@ -7,7 +7,8 @@ import { db, nowIso } from "../../db/client";
 import { AuthedRequest, clearSessionCookies, getRefreshCookie, hashRefreshSecret, isMobileClient, makeRefreshSecret, readIdentity, requireAuth, secureEqualHex, setSessionCookies, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../common/auth";
 import { emailService, getLocalVerificationCode } from "./emailService";
 import { validateRegistrationEmail } from "./emailValidation";
-import { getOtpLimiter } from "./tokenBucket";
+import { logOtpFailure, logOtpStage } from "./otpDiagnostics";
+import { getOtpLimiter, getOtpRedisConfigStatus } from "./tokenBucket";
 
 export const authRouter = Router();
 const OTP_MS = 10 * 60 * 1000;
@@ -34,17 +35,29 @@ authRouter.get("/dev/email-preview", (req, res) => {
   return res.json(getLocalVerificationCode(email) || { code: null });
 });
 
-async function allowOtpRequest(req: Request, res: Response, email: string): Promise<boolean> {
+async function allowOtpRequest(req: Request, res: Response, email: string, flow: string): Promise<boolean> {
   let result;
+  logOtpStage("rate limiter check started", { flow });
   try { result = await getOtpLimiter().consumeRegistration(email, req.ip || "unknown"); }
-  catch { res.status(503).json({ code: "OTP_SERVICE_UNAVAILABLE", message: "Verification is temporarily unavailable. Please try again later." }); return false; }
-  if (result.allowed) return true;
+  catch (error) {
+    const config = getOtpRedisConfigStatus();
+    const missingConfiguration = process.env.NODE_ENV === "production" && (!config.urlConfigured || !config.tokenConfigured);
+    const operation = missingConfiguration ? "redis_configuration" : "redis_rate_limiter";
+    console.error(missingConfiguration ? "[OTP] Redis configuration failed" : "[OTP] Redis rate limiter unavailable");
+    logOtpFailure(operation, "upstash", error);
+    res.status(503).json({ code: "OTP_SERVICE_UNAVAILABLE", message: "Verification is temporarily unavailable. Please try again later." });
+    return false;
+  }
+  if (result.allowed) {
+    logOtpStage("rate limiter check passed", { flow });
+    return true;
+  }
   res.setHeader("Retry-After", String(result.retryAfter));
   res.status(429).json({ code: "OTP_RATE_LIMITED", message: "Too many verification code requests. Please try again later.", retryAfter: result.retryAfter });
   return false;
 }
-function otpRateLimit(req: Request, res: Response, email: string) {
-  return allowOtpRequest(req, res, email);
+function otpRateLimit(req: Request, res: Response, email: string, flow: string) {
+  return allowOtpRequest(req, res, email, flow);
 }
 function transaction<T>(work: (tx: import("../../db/types").DatabaseLike) => Promise<T>): Promise<T> {
   if (!db.transaction) throw new Error("Database transaction support is required for authentication");
@@ -52,15 +65,37 @@ function transaction<T>(work: (tx: import("../../db/types").DatabaseLike) => Pro
 }
 
 async function sendRegistrationChallenge(email: string, name: string, passwordHash: string, userId: string | null) {
-  const otp = String(randomInt(100000, 1000000));
+  let otp: string;
+  let hashedOtp: string;
+  try {
+    otp = String(randomInt(100000, 1000000));
+    hashedOtp = otpHash(email, otp);
+  } catch (error) {
+    logOtpFailure("otp_generation_or_hash", "node-crypto", error);
+    throw error;
+  }
+  logOtpStage("OTP generated", { flow: "registration" });
   const now = nowIso();
-  await db.run(`DELETE FROM PendingRegistration WHERE otpExpiresAt IS NOT NULL AND otpExpiresAt < ?`, now);
-  await db.run(
-    `INSERT INTO PendingRegistration (id,userId,email,name,passwordHash,otpHash,otpExpiresAt,otpAttempts,createdAt,updatedAt)
-     VALUES (?,?,?,?,?,?,?,0,?,?) ON CONFLICT(email) DO UPDATE SET userId=excluded.userId,name=excluded.name,passwordHash=excluded.passwordHash,otpHash=excluded.otpHash,otpExpiresAt=excluded.otpExpiresAt,otpAttempts=0,updatedAt=excluded.updatedAt`,
-    uuidv4(), userId, email, name, passwordHash, otpHash(email, otp), new Date(Date.now() + OTP_MS).toISOString(), now, now
-  );
-  await emailService.sendVerificationOTP(name, email, otp);
+  try {
+    await db.run(`DELETE FROM PendingRegistration WHERE otpExpiresAt IS NOT NULL AND otpExpiresAt < ?`, now);
+    await db.run(
+      `INSERT INTO PendingRegistration (id,userId,email,name,passwordHash,otpHash,otpExpiresAt,otpAttempts,createdAt,updatedAt)
+       VALUES (?,?,?,?,?,?,?,0,?,?) ON CONFLICT(email) DO UPDATE SET userId=excluded.userId,name=excluded.name,passwordHash=excluded.passwordHash,otpHash=excluded.otpHash,otpExpiresAt=excluded.otpExpiresAt,otpAttempts=0,updatedAt=excluded.updatedAt`,
+      uuidv4(), userId, email, name, passwordHash, hashedOtp, new Date(Date.now() + OTP_MS).toISOString(), now, now
+    );
+    logOtpStage("OTP storage succeeded", { flow: "registration" });
+  } catch (error) {
+    logOtpFailure("otp_storage_registration", "database", error);
+    throw error;
+  }
+  logOtpStage("email send started", { flow: "registration", provider: "nodemailer-smtp" });
+  try {
+    await emailService.sendVerificationOTP(name, email, otp);
+    logOtpStage("email send succeeded", { flow: "registration", provider: "nodemailer-smtp" });
+  } catch (error) {
+    logOtpFailure("email_send_registration", "nodemailer-smtp", error);
+    throw error;
+  }
 }
 
 function sessionTokens(userId: string, sessionId: string) {
@@ -82,35 +117,39 @@ async function hasCompletedProfile(userId: string): Promise<boolean> {
 authRouter.post("/register", (_req, res) => codeError(res, 410, "OTP_REQUIRED", "Please register using email verification."));
 
 authRouter.post("/register/request-otp", async (req, res) => {
+  logOtpStage("request started", { flow: "registration" });
   const parsed = requestSchema.safeParse(req.body);
   if (!parsed.success) return codeError(res, 400, "INVALID_INPUT", "Please provide a name, valid email, and password of at least 8 characters.");
   const validated = await validateRegistrationEmail(parsed.data.email);
   if (!validated.valid) return codeError(res, 400, validated.code, validated.message);
-  if (!await otpRateLimit(req, res, validated.email)) return res;
+  logOtpStage("email validation passed", { flow: "registration" });
+  if (!await otpRateLimit(req, res, validated.email, "registration")) return res;
   const found = await db.get<{ id: string; email: string; name: string | null; passwordHash: string | null; emailVerified: number }>(`SELECT id,email,name,passwordHash,emailVerified FROM "User" WHERE LOWER(email)=?`, validated.email);
   if (found?.emailVerified) return res.status(409).json({ code: "ACCOUNT_EXISTS", message: "An account with this email already exists. Please sign in." });
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   if (!found && await db.get(`SELECT id FROM "User" WHERE email=?`, validated.email)) return res.status(409).json({ code: "ACCOUNT_EXISTS", message: "An account with this email already exists. Please sign in." });
   try {
     await sendRegistrationChallenge(validated.email, parsed.data.name, passwordHash, found?.id ?? null);
-  } catch (error) {
-    // No OTP, password, or email values are included in this error log.
-    console.error("[AUTH] Verification email delivery failed", error instanceof Error ? error.message : "unknown");
-    return codeError(res, 503, "EMAIL_UNAVAILABLE", "We couldn't send a verification code right now. Please try again later.");
+  } catch {
+    return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
   }
   return res.status(202).json({ message: "If this address can be registered, a verification code has been sent." });
 });
 
 authRouter.post("/register/resend-otp", async (req, res) => {
+  logOtpStage("request started", { flow: "registration_resend" });
   const parsed = resendSchema.safeParse(req.body);
   if (!parsed.success) return codeError(res, 400, "INVALID_EMAIL", "Please enter a valid email address.");
   const validated = await validateRegistrationEmail(parsed.data.email);
   if (!validated.valid) return codeError(res, 400, validated.code, validated.message);
-  if (!await otpRateLimit(req, res, validated.email)) return res;
+  logOtpStage("email validation passed", { flow: "registration_resend" });
+  if (!await otpRateLimit(req, res, validated.email, "registration_resend")) return res;
   const pending = await db.get<{ email: string; name: string; passwordHash: string; userId: string | null }>(`SELECT * FROM PendingRegistration WHERE email=?`, validated.email);
   if (pending) {
     try { await sendRegistrationChallenge(pending.email, pending.name, pending.passwordHash, pending.userId); }
-    catch (error) { console.error("[AUTH] Verification email delivery failed", error instanceof Error ? error.message : "unknown"); return codeError(res, 503, "EMAIL_UNAVAILABLE", "We couldn't send a verification code right now. Please try again later."); }
+    catch {
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+    }
   }
   return res.status(202).json({ message: "If a verification is pending, a new code has been sent." });
 });
@@ -228,24 +267,56 @@ authRouter.post("/logout", requireAuth, async (req: AuthedRequest, res) => {
 });
 
 authRouter.post("/password/request-otp", async (req, res) => {
+  logOtpStage("request started", { flow: "password_reset" });
   const parsed = resendSchema.safeParse(req.body);
   if (!parsed.success) return res.status(202).json({ message: "If the account exists, a reset code has been sent." });
   const validated = await validateRegistrationEmail(parsed.data.email);
   if (!validated.valid) return res.status(202).json({ message: "If the account exists, a reset code has been sent." });
+  logOtpStage("email validation passed", { flow: "password_reset" });
   let allowed: boolean;
   try {
+    logOtpStage("rate limiter check started", { flow: "password_reset" });
     const result = await getOtpLimiter().consumeRegistration(`password:${validated.email}`, req.ip || "unknown");
     allowed = result.allowed;
+    if (allowed) logOtpStage("rate limiter check passed", { flow: "password_reset" });
     if (!allowed) { res.setHeader("Retry-After", String(result.retryAfter)); return res.status(429).json({ code: "OTP_RATE_LIMITED", message: "Too many verification code requests. Please try again later.", retryAfter: result.retryAfter }); }
-  } catch { return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later."); }
+  } catch (error) {
+    const config = getOtpRedisConfigStatus();
+    const missingConfiguration = process.env.NODE_ENV === "production" && (!config.urlConfigured || !config.tokenConfigured);
+    const operation = missingConfiguration ? "redis_configuration" : "redis_rate_limiter";
+    console.error(missingConfiguration ? "[OTP] Redis configuration failed" : "[OTP] Redis rate limiter unavailable");
+    logOtpFailure(operation, "upstash", error);
+    return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+  }
   const user = await db.get<{ id: string; email: string; name: string | null }>(`SELECT id,email,name FROM "User" WHERE LOWER(email)=? AND emailVerified=1`, validated.email);
   if (user) {
-    const otp = String(randomInt(100000, 1000000)); const ts = nowIso();
-    const previous = await db.get<{ id: string }>(`SELECT id FROM PasswordResetChallenge WHERE userId=?`, user.id);
-    if (previous) await db.run(`UPDATE PasswordResetChallenge SET otpHash=?,otpExpiresAt=?,otpAttempts=0,updatedAt=? WHERE id=?`, otpHash(user.email, otp), new Date(Date.now() + OTP_MS).toISOString(), ts, previous.id);
-    else await db.run(`INSERT INTO PasswordResetChallenge(id,userId,otpHash,otpExpiresAt,otpAttempts,createdAt,updatedAt) VALUES(?,?,?,?,0,?,?)`, uuidv4(), user.id, otpHash(user.email, otp), new Date(Date.now() + OTP_MS).toISOString(), ts, ts);
-    try { await emailService.sendPasswordResetOTP(user.name || "there", user.email, otp); }
-    catch (error) { console.error("[AUTH] Password reset email delivery failed", error instanceof Error ? error.message : "unknown"); }
+    let otp: string;
+    let hashedOtp: string;
+    try {
+      otp = String(randomInt(100000, 1000000));
+      hashedOtp = otpHash(user.email, otp);
+    } catch (error) {
+      logOtpFailure("otp_generation_or_hash_password_reset", "node-crypto", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+    }
+    const ts = nowIso();
+    logOtpStage("OTP generated", { flow: "password_reset" });
+    try {
+      const previous = await db.get<{ id: string }>(`SELECT id FROM PasswordResetChallenge WHERE userId=?`, user.id);
+      if (previous) await db.run(`UPDATE PasswordResetChallenge SET otpHash=?,otpExpiresAt=?,otpAttempts=0,updatedAt=? WHERE id=?`, hashedOtp, new Date(Date.now() + OTP_MS).toISOString(), ts, previous.id);
+      else await db.run(`INSERT INTO PasswordResetChallenge(id,userId,otpHash,otpExpiresAt,otpAttempts,createdAt,updatedAt) VALUES(?,?,?,?,0,?,?)`, uuidv4(), user.id, hashedOtp, new Date(Date.now() + OTP_MS).toISOString(), ts, ts);
+      logOtpStage("OTP storage succeeded", { flow: "password_reset" });
+    } catch (error) {
+      logOtpFailure("otp_storage_password_reset", "database", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+    }
+    logOtpStage("email send started", { flow: "password_reset", provider: "nodemailer-smtp" });
+    try {
+      await emailService.sendPasswordResetOTP(user.name || "there", user.email, otp);
+      logOtpStage("email send succeeded", { flow: "password_reset", provider: "nodemailer-smtp" });
+    } catch (error) {
+      logOtpFailure("email_send_password_reset", "nodemailer-smtp", error);
+    }
   }
   return res.status(202).json({ message: "If the account exists, a reset code has been sent." });
 });
