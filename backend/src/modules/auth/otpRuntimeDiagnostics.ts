@@ -1,4 +1,4 @@
-import { getEmailConfigStatus } from "./emailService";
+import { emailService, getEmailConfigStatus } from "./emailService";
 import { logOtpFailure, logOtpStage } from "./otpDiagnostics";
 import { getOtpLimiter, getOtpRedisConfigStatus } from "./tokenBucket";
 
@@ -43,6 +43,8 @@ export async function logOtpRuntimeDiagnostics(): Promise<void> {
       logOtpFailure("redis_ping", process.env.NODE_ENV === "production" ? "upstash" : "memory", error);
     }
   }
+
+  if (process.env.NODE_ENV === "production") await emailService.verifyTransport();
 
   logOtpStage("OTP service initialization complete");
 }

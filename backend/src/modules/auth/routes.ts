@@ -93,6 +93,12 @@ async function sendRegistrationChallenge(email: string, name: string, passwordHa
     await emailService.sendVerificationOTP(name, email, otp);
     logOtpStage("email send succeeded", { flow: "registration", provider: "nodemailer-smtp" });
   } catch (error) {
+    try {
+      await db.run(`UPDATE PendingRegistration SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE email=?`, nowIso(), email);
+      logOtpStage("failed email OTP invalidated", { flow: "registration" });
+    } catch (cleanupError) {
+      logOtpFailure("otp_cleanup_registration", "database", cleanupError);
+    }
     logOtpFailure("email_send_registration", "nodemailer-smtp", error);
     throw error;
   }
@@ -315,7 +321,14 @@ authRouter.post("/password/request-otp", async (req, res) => {
       await emailService.sendPasswordResetOTP(user.name || "there", user.email, otp);
       logOtpStage("email send succeeded", { flow: "password_reset", provider: "nodemailer-smtp" });
     } catch (error) {
+      try {
+        await db.run(`UPDATE PasswordResetChallenge SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE userId=?`, nowIso(), user.id);
+        logOtpStage("failed password reset OTP invalidated", { flow: "password_reset" });
+      } catch (cleanupError) {
+        logOtpFailure("otp_cleanup_password_reset", "database", cleanupError);
+      }
       logOtpFailure("email_send_password_reset", "nodemailer-smtp", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
     }
   }
   return res.status(202).json({ message: "If the account exists, a reset code has been sent." });

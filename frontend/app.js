@@ -239,6 +239,8 @@ $("auth-submit").addEventListener("click", async () => {
   }
   const btn = $("auth-submit");
   btn.disabled = true;
+  const registrationRequest = State.isRegisterMode;
+  if (registrationRequest) btn.textContent = "Sending code...";
   btn.textContent = "Loading…";
   try {
     if (State.isRegisterMode) {
