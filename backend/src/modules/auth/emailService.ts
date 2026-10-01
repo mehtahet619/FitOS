@@ -4,7 +4,7 @@ type LocalMail = { email: string; subject: string; text: string; createdAt: numb
 const localOutbox: LocalMail[] = [];
 const LOCAL_CODE_TTL_MS = 10 * 60 * 1000;
 
-function smtpConfigured(): boolean {
+export function smtpConfigured(): boolean {
   return Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASSWORD && process.env.EMAIL_FROM);
 }
 
@@ -32,10 +32,23 @@ export function getLocalVerificationCode(email: string): { subject: string; code
   return mail && code ? { subject: mail.subject, code } : undefined;
 }
 
-function getTransport() {
+export function getTransport() {
   const { EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM } = process.env;
   if (!EMAIL_HOST || !EMAIL_USER || !EMAIL_PASSWORD || !EMAIL_FROM) throw new Error("Transactional email is not configured");
-  return nodemailer.createTransport({ host: EMAIL_HOST, port: Number(process.env.EMAIL_PORT || 587), secure: process.env.EMAIL_PORT === "465", auth: { user: EMAIL_USER, pass: EMAIL_PASSWORD } });
+  
+  const port = Number(process.env.EMAIL_PORT || 587);
+  const secure = Number(process.env.EMAIL_PORT) === 465;
+  
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: Number(process.env.EMAIL_PORT) === 465,
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD },
+    // Explicit SMTP timeouts to prevent hanging
+    connectionTimeout: 10000,    // 10 seconds to establish connection
+    greetingTimeout: 10000,      // 10 seconds for greeting
+    socketTimeout: 15000,        // 15 seconds for socket operations
+  });
 }
 
 export const emailService = {
@@ -45,7 +58,14 @@ export const emailService = {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
     }
-    await getTransport().sendMail(mail);
+    try {
+      console.log("[OTP] email send started", { flow: "registration", to: email });
+      await getTransport().sendMail(mail);
+      console.log("[OTP] email send succeeded", { flow: "registration", to: email });
+    } catch (error: any) {
+      console.error("[OTP] email send failed", { provider: "nodemailer-smtp", to: email, error: error?.message || String(error) });
+      throw error;
+    }
   },
   async sendPasswordResetOTP(name: string, email: string, otp: string): Promise<void> {
     const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Reset your FitOS password", text: `Hi ${name},\n\nYour FitOS password reset code is:\n\n${otp}\n\nThis code expires in 10 minutes. If you did not request it, ignore this email.\n\nFitOS Team` };
@@ -53,6 +73,13 @@ export const emailService = {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
     }
-    await getTransport().sendMail(mail);
+    try {
+      console.log("[OTP] email send started", { flow: "password_reset", to: email });
+      await getTransport().sendMail(mail);
+      console.log("[OTP] email send succeeded", { flow: "password_reset", to: email });
+    } catch (error: any) {
+      console.error("[OTP] email send failed", { provider: "nodemailer-smtp", to: email, error: error?.message || String(error) });
+      throw error;
+    }
   },
 };
