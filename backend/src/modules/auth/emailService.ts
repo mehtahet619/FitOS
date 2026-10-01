@@ -1,5 +1,8 @@
+import dns from "node:dns";
 import nodemailer from "nodemailer";
 import { logOtpFailure } from "./otpDiagnostics";
+
+dns.setDefaultResultOrder("ipv4first");
 
 type LocalMail = { email: string; subject: string; text: string; createdAt: number };
 const localOutbox: LocalMail[] = [];
