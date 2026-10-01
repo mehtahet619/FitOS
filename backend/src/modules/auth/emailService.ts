@@ -1,8 +1,12 @@
 import nodemailer from "nodemailer";
+import { logOtpFailure } from "./otpDiagnostics";
 
 type LocalMail = { email: string; subject: string; text: string; createdAt: number };
 const localOutbox: LocalMail[] = [];
 const LOCAL_CODE_TTL_MS = 10 * 60 * 1000;
+const SMTP_CONNECTION_TIMEOUT_MS = 10_000;
+const SMTP_GREETING_TIMEOUT_MS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MS = 15_000;
 
 export function smtpConfigured(): boolean {
   return Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASSWORD && process.env.EMAIL_FROM);
@@ -35,20 +39,71 @@ export function getLocalVerificationCode(email: string): { subject: string; code
 export function getTransport() {
   const { EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM } = process.env;
   if (!EMAIL_HOST || !EMAIL_USER || !EMAIL_PASSWORD || !EMAIL_FROM) throw new Error("Transactional email is not configured");
-  
   const port = Number(process.env.EMAIL_PORT || 587);
-  const secure = Number(process.env.EMAIL_PORT) === 465;
-  
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("EMAIL_PORT must be a valid TCP port");
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD },
-    // Explicit SMTP timeouts to prevent hanging
-    connectionTimeout: 10000,    // 10 seconds to establish connection
-    greetingTimeout: 10000,      // 10 seconds for greeting
-    socketTimeout: 15000,        // 15 seconds for socket operations
+    host: EMAIL_HOST,
+    port,
+    secure: port === 465,
+    requireTLS: port === 587,
+    auth: { user: EMAIL_USER, pass: EMAIL_PASSWORD },
+    connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+    socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
   });
+}
+
+function classifySmtpError(error: unknown): string {
+  const smtpError = error as { code?: string; command?: string; responseCode?: number };
+  const code = smtpError?.code || "";
+  const command = (smtpError?.command || "").toUpperCase();
+  if (["EDNS", "ENOTFOUND", "EAI_AGAIN"].includes(code)) return "SMTP DNS resolution failed";
+  if (["ECONNECTION", "ETIMEDOUT", "ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH"].includes(code)) return "SMTP TCP connection failed";
+  if (command.includes("TLS") || command.includes("STARTTLS") || code.startsWith("ERR_TLS")) return "SMTP TLS/STARTTLS failed";
+  if (command.includes("AUTH") || smtpError?.responseCode === 535 || smtpError?.responseCode === 534) return "SMTP authentication failed";
+  return "SMTP message send failed";
+}
+
+async function withSmtpDeadline<T>(transport: ReturnType<typeof getTransport>, operation: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          transport.close();
+          reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    transport.close();
+  }
+}
+
+async function sendSmtpMail(mail: { from: string | undefined; to: string; subject: string; text: string }, flow: string): Promise<void> {
+  const transport = getTransport();
+  const timeoutMs = SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS + SMTP_SOCKET_TIMEOUT_MS + 1_000;
+  try {
+    await withSmtpDeadline(transport, transport.sendMail(mail), timeoutMs, "SMTP message send");
+  } catch (error) {
+    console.error(`[EMAIL] ${classifySmtpError(error)}`);
+    logOtpFailure(`smtp_message_send_${flow}`, "nodemailer-smtp", error);
+    throw error;
+  }
+}
+
+async function verifySmtpTransport(): Promise<void> {
+  const transport = getTransport();
+  try {
+    await withSmtpDeadline(transport, transport.verify(), SMTP_CONNECTION_TIMEOUT_MS + SMTP_GREETING_TIMEOUT_MS + 1_000, "SMTP transport verification");
+    console.info("[EMAIL] SMTP transport verification: OK");
+  } catch (error) {
+    console.error("[EMAIL] SMTP transport verification: FAILED");
+    console.error(`[EMAIL] ${classifySmtpError(error)}`);
+    logOtpFailure("smtp_transport_verification", "nodemailer-smtp", error);
+  }
 }
 
 export const emailService = {
@@ -58,14 +113,7 @@ export const emailService = {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
     }
-    try {
-      console.log("[OTP] email send started", { flow: "registration", to: email });
-      await getTransport().sendMail(mail);
-      console.log("[OTP] email send succeeded", { flow: "registration", to: email });
-    } catch (error: any) {
-      console.error("[OTP] email send failed", { provider: "nodemailer-smtp", to: email, error: error?.message || String(error) });
-      throw error;
-    }
+    await sendSmtpMail(mail, "registration");
   },
   async sendPasswordResetOTP(name: string, email: string, otp: string): Promise<void> {
     const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Reset your FitOS password", text: `Hi ${name},\n\nYour FitOS password reset code is:\n\n${otp}\n\nThis code expires in 10 minutes. If you did not request it, ignore this email.\n\nFitOS Team` };
@@ -73,13 +121,14 @@ export const emailService = {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
     }
-    try {
-      console.log("[OTP] email send started", { flow: "password_reset", to: email });
-      await getTransport().sendMail(mail);
-      console.log("[OTP] email send succeeded", { flow: "password_reset", to: email });
-    } catch (error: any) {
-      console.error("[OTP] email send failed", { provider: "nodemailer-smtp", to: email, error: error?.message || String(error) });
-      throw error;
-    }
+    await sendSmtpMail(mail, "password_reset");
   },
+  async verifyTransport(): Promise<void> {
+    if (!smtpConfigured()) {
+      console.info("[EMAIL] SMTP transport verification: SKIPPED (configuration incomplete)");
+      return;
+    }
+    await verifySmtpTransport();
+  },
+  timeouts: { connection: SMTP_CONNECTION_TIMEOUT_MS, greeting: SMTP_GREETING_TIMEOUT_MS, socket: SMTP_SOCKET_TIMEOUT_MS },
 };

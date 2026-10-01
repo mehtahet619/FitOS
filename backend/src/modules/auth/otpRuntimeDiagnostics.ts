@@ -1,4 +1,4 @@
-import { getEmailConfigStatus, smtpConfigured, getTransport } from "./emailService";
+import { emailService, getEmailConfigStatus } from "./emailService";
 import { logOtpFailure, logOtpStage } from "./otpDiagnostics";
 import { getOtpLimiter, getOtpRedisConfigStatus } from "./tokenBucket";
 
@@ -44,22 +44,7 @@ export async function logOtpRuntimeDiagnostics(): Promise<void> {
     }
   }
 
-  // Verify SMTP transport if email is configured
-  if (smtpConfigured()) {
-    try {
-      console.info("[EMAIL] SMTP transport verification started");
-      const transport = getTransport();
-      await transport.verify();
-      console.info("[EMAIL] SMTP transport verification: OK");
-    } catch (error: any) {
-      console.error("[EMAIL] SMTP transport verification: FAILED", {
-        error: error?.message || String(error),
-        hint: "Check EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM"
-      });
-    }
-  } else {
-    console.info("[EMAIL] SMTP transport verification: SKIPPED (not configured)");
-  }
+  if (process.env.NODE_ENV === "production") await emailService.verifyTransport();
 
   logOtpStage("OTP service initialization complete");
 }
