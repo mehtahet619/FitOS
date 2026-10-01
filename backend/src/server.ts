@@ -90,7 +90,8 @@ app.use((req: Request, res: Response) => {
 
 // Central error handler — every route above should be using try/catch or
 // async errors that fall through to here rather than crashing the process.
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) return next(err);
   // eslint-disable-next-line no-console
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
