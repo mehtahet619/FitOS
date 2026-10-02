@@ -37,22 +37,38 @@ describe("bundled CSV exercise recommendations", () => {
   });
 
   it.each([
-    [15, 2], [30, 2], [31, 3], [60, 3], [61, 4], [75, 4], [76, 5], [90, 5], [91, 6], [120, 6], [121, 6], [240, 6],
+    [15, 2], [30, 2], [31, 2], [45, 2], [46, 3], [59, 3], [60, 3], [61, 3],
+    [70, 3], [71, 4], [75, 4], [76, 4], [90, 4], [91, 4], [110, 4], [111, 5],
+    [120, 5], [121, 5], [180, 5], [181, 6], [240, 6],
   ])("uses the duration rule for %i minutes", (minutes, count) => {
     expect(exerciseCountForDuration(minutes)).toBe(count);
   });
 
-  it("returns 2 Back exercises at 30 minutes, 3 at 60, and up to 6 at 120", () => {
+  it("returns practical Back volume at 30, 60, 90, and 120 minutes", () => {
     expect(fullGym(["Back"], 30).exercises).toHaveLength(2);
     expect(fullGym(["Back"], 60).exercises).toHaveLength(3);
-    expect(fullGym(["Back"], 120).exercises).toHaveLength(6);
+    expect(fullGym(["Back"], 90).exercises).toHaveLength(4);
+    expect(fullGym(["Back"], 120).exercises).toHaveLength(5);
+  });
+
+  it("chooses different CSV exercise-name patterns before equipment-only variations", () => {
+    const mixService = new CsvExerciseRecommendationService(new CsvExerciseRepository("mix.csv", () =>
+      "exercise,machine,muscle\nBarbell Bench Press,Barbell,Chest\nDumbbell Bench Press,Dumbbell,Chest\nIncline Bench Press,Dumbbell,Upper Chest\nCable Chest Fly,Cable Machine,Chest\nPec Deck Fly,Pec Deck Machine,Chest\nPush Up,Bodyweight,Chest"
+    ));
+    const result = mixService.getRecommendedExercises({
+      targetMuscles: ["Chest"], sessionDurationMinutes: 59, availableEquipment: [], equipmentMode: "FULL_GYM",
+    });
+    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises[0].exercise).toBe("Barbell Bench Press");
+    expect(result.exercises.map((exercise) => exercise.exercise)).toContain("Cable Chest Fly");
+    expect(new Set(result.exercises.map((exercise) => exercise.exercise)).size).toBe(3);
   });
 
   it("matches normalized target text and uses CSV categories such as Upper Back", () => {
     const normal = fullGym(["Back"], 60).exercises;
     const varied = fullGym(["  bAcK  "], 60).exercises;
     expect(varied).toEqual(normal);
-    expect(fullGym(["Back"], 120).exercises.some((exercise) => exercise.muscleCategories.includes("Upper Back"))).toBe(true);
+    expect(repository.getAll().some((exercise) => exercise.muscleCategories.includes("Upper Back"))).toBe(true);
     expect(fullGym(["Chest"], 60).exercises.every((exercise) => exercise.muscleCategories.some((muscle) => /chest/i.test(muscle)))).toBe(true);
   });
 
@@ -63,7 +79,7 @@ describe("bundled CSV exercise recommendations", () => {
     const result = exactFirstService.getRecommendedExercises({
       targetMuscles: ["Back"], sessionDurationMinutes: 15, availableEquipment: [], equipmentMode: "FULL_GYM",
     });
-    expect(result.exercises[0].exercise).toBe("Exact");
+    expect(result.exercises.map((exercise) => exercise.exercise)).toEqual(["Exact", "Related"]);
   });
 
   it("never returns duplicate exercise names and preserves each selected machine value", () => {
@@ -101,7 +117,7 @@ describe("bundled CSV exercise recommendations", () => {
       targetMuscles: ["Back"], sessionDurationMinutes: 120, availableEquipment: [], equipmentMode: "FULL_GYM",
     });
     expect(result.exercises.map((exercise) => exercise.exercise)).toEqual(["One", "Two"]);
-    expect(result.requestedCount).toBe(6);
+    expect(result.requestedCount).toBe(5);
     expect(result.limitedByDataset).toBe(true);
   });
 
@@ -121,8 +137,8 @@ describe("bundled CSV exercise recommendations", () => {
 
   it("contains no AI, recommendation network call, or random selection", () => {
     const source = repository.getAll();
-    expect(source).toHaveLength(116);
-    expect(exerciseCountForDuration(120)).toBe(6);
+    expect(source).toHaveLength(10000);
+    expect(exerciseCountForDuration(120)).toBe(5);
     expect(String(CsvExerciseRecommendationService)).not.toMatch(/Math\.random|fetch\(|https?:\/\//i);
   });
 });

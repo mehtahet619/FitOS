@@ -34,16 +34,59 @@ export interface ExerciseRecommendationService {
 export function exerciseCountForDuration(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes <= 0) throw new Error("Session duration must be a positive number of minutes.");
   if (minutes <= 30) return 2;
-  if (minutes <= 60) return 3;
-  if (minutes <= 75) return 4;
-  return 5 <= minutes && minutes <= 90 ? 5 : 6;
+  if (minutes <= 45) return 2;
+  if (minutes <= 70) return 3;
+  if (minutes <= 110) return 4;
+  if (minutes <= 180) return 5;
+  return 6;
+}
+
+type Candidate = { row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<string> };
+
+const variationWords = new Set([
+  "alternating", "controlled", "explosive", "grip", "narrow", "overhand", "paused",
+  "pause", "semi", "slow", "split", "staggered", "stance", "supinated", "tempo",
+  "underhand", "wide",
+]);
+
+/** Use only words present in the CSV name/equipment fields to spot close variants. */
+function exerciseNameSignature(candidate: Candidate): string[] {
+  const ignoredWords = new Set([
+    ...normalizeExerciseValue(candidate.row.machine).split(" "),
+    ...[...candidate.targetKeys].flatMap((target) => target.split(" ")),
+    ...variationWords,
+  ]);
+  const signature = normalizeExerciseValue(candidate.row.exercise)
+    .split(" ")
+    .filter((word) => word && !ignoredWords.has(word));
+  return signature.length > 0 ? [...new Set(signature)] : normalizeExerciseValue(candidate.row.exercise).split(" ");
+}
+
+function redundancyPenalty(candidate: Candidate, selectedSignatures: string[][]): number {
+  const signature = exerciseNameSignature(candidate);
+  let penalty = 0;
+  for (const selected of selectedSignatures) {
+    const sharedWords = signature.filter((word) => selected.includes(word)).length;
+    const similarity = (2 * sharedWords) / (signature.length + selected.length);
+    if (similarity >= 0.8) penalty += 2;
+    else if (similarity >= 0.5) penalty += 1;
+  }
+  return penalty;
+}
+
+function repeatedNameEndingPenalty(candidate: Candidate, selectedSignatures: string[][]): number {
+  const ending = exerciseNameSignature(candidate).at(-1);
+  if (!ending) return 0;
+  const priorCount = selectedSignatures.filter((signature) => signature.at(-1) === ending).length;
+  return priorCount >= 2 ? (priorCount - 1) * 3 : 0;
 }
 
 function selectWithCoverage(
-  candidates: Array<{ row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<string> }>,
+  candidates: Candidate[],
   count: number,
 ): RecommendedExercise[] {
   const selected: RecommendedExercise[] = [];
+  const selectedSignatures: string[][] = [];
   const coveredTargets = new Set<string>();
   const coveredCategories = new Set<string>();
   const usedMachines = new Set<string>();
@@ -52,10 +95,13 @@ function selectWithCoverage(
   while (selected.length < count && remaining.length > 0) {
     remaining.sort((left, right) => {
       const exactCategoryMatches = (candidate: typeof left) => candidate.matchingMuscles
-        .filter((muscle) => candidate.targetKeys.has(normalizeExerciseValue(muscle))).length;
+        .filter((muscle) => candidate.targetKeys.has(normalizeExerciseValue(muscle)) && !coveredTargets.has(normalizeExerciseValue(muscle))).length;
       const leftExactMatches = exactCategoryMatches(left);
       const rightExactMatches = exactCategoryMatches(right);
       if (leftExactMatches !== rightExactMatches) return rightExactMatches - leftExactMatches;
+      const leftFamilyPenalty = repeatedNameEndingPenalty(left, selectedSignatures);
+      const rightFamilyPenalty = repeatedNameEndingPenalty(right, selectedSignatures);
+      if (leftFamilyPenalty !== rightFamilyPenalty) return leftFamilyPenalty - rightFamilyPenalty;
       const newTargetCoverage = (candidate: typeof left) => candidate.matchingMuscles
         .filter((muscle) => !coveredTargets.has(normalizeExerciseValue(muscle))).length;
       const newCategoryCoverage = (candidate: typeof left) => candidate.row.muscleCategories
@@ -66,6 +112,9 @@ function selectWithCoverage(
       const leftCategories = newCategoryCoverage(left);
       const rightCategories = newCategoryCoverage(right);
       if (leftCategories !== rightCategories) return rightCategories - leftCategories;
+      const leftRedundancy = redundancyPenalty(left, selectedSignatures);
+      const rightRedundancy = redundancyPenalty(right, selectedSignatures);
+      if (leftRedundancy !== rightRedundancy) return leftRedundancy - rightRedundancy;
       const leftNewMachine = usedMachines.has(normalizeExerciseValue(left.row.machine)) ? 0 : 1;
       const rightNewMachine = usedMachines.has(normalizeExerciseValue(right.row.machine)) ? 0 : 1;
       if (leftNewMachine !== rightNewMachine) return rightNewMachine - leftNewMachine;
@@ -74,6 +123,7 @@ function selectWithCoverage(
 
     const [next] = remaining.splice(0, 1);
     selected.push({ ...next.row, primaryMuscle: next.matchingMuscles[0] });
+    selectedSignatures.push(exerciseNameSignature(next));
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
     next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
     usedMachines.add(normalizeExerciseValue(next.row.machine));
@@ -92,7 +142,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     }
 
     const availableEquipment = new Set([...input.availableEquipment].map(normalizeExerciseValue).filter(Boolean));
-    const uniqueCandidates = new Map<string, { row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<string> }>();
+    const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
       // A target term may match a CSV category containing that same full word
       // (for example Back -> Upper Back). This derives relevance only from
