@@ -170,7 +170,10 @@ CREATE TABLE IF NOT EXISTS Workout (
   durationMin INTEGER NOT NULL,
   createdAt TEXT NOT NULL,
   completedAt TEXT,
-  planStepIndex INTEGER
+  planStepIndex INTEGER,
+  equipmentMode TEXT NOT NULL DEFAULT 'USER_EQUIPMENT',
+  equipmentSnapshot TEXT NOT NULL DEFAULT '[]',
+  generatorVersion TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_workout_user ON Workout(userId);
 CREATE INDEX IF NOT EXISTS idx_workout_user_created ON Workout(userId, createdAt DESC);

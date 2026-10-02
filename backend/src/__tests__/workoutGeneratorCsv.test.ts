@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DatabaseLike } from "../db/types";
+import { csvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
 import { generateWorkout } from "../modules/workouts/workoutGenerator";
 
 function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[]; queries: string[] } {
@@ -62,6 +63,9 @@ describe("CSV recommendations inside workout generation", () => {
     expect(result.exercises).toHaveLength(3);
     expect(result.exercises.every((exercise) => /back/i.test(exercise.muscle))).toBe(true);
     expect(result.exercises.every((exercise) => Boolean(exercise.machine))).toBe(true);
+    const csvNames = new Set(csvExerciseRepository.getAll().map((exercise) => exercise.exercise));
+    expect(result.exercises.every((exercise) => csvNames.has(exercise.exerciseName))).toBe(true);
+    expect(exercises.map((exercise) => exercise.name).sort()).toEqual(result.exercises.map((exercise) => exercise.exerciseName).sort());
     expect(exercises).toHaveLength(3);
     expect(state).toEqual(before);
     expect(queries.some((sql) => /UPDATE\s+WorkoutPlanState|INSERT\s+INTO\s+WorkoutCycleHistory/i.test(sql))).toBe(false);
@@ -77,7 +81,7 @@ describe("CSV recommendations inside workout generation", () => {
       lockToMuscles: ["back", "biceps"],
       equipmentMode: "FULL_GYM",
     });
-    expect(first.exercises.map((exercise) => exercise.name)).toEqual(second.exercises.map((exercise) => exercise.name));
+    expect(first.exercises.map((exercise) => exercise.exerciseName)).toEqual(second.exercises.map((exercise) => exercise.exerciseName));
     expect(first.exercises.every((exercise) => /back|biceps/i.test(exercise.muscle))).toBe(true);
   });
 

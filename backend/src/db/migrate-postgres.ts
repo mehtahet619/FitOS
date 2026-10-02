@@ -18,6 +18,9 @@ async function main() {
 
   // Add planStepIndex column BEFORE executing schema (needed for index creation in schema)
   await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER`);
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS equipmentMode TEXT NOT NULL DEFAULT 'USER_EQUIPMENT'`);
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS equipmentSnapshot TEXT NOT NULL DEFAULT '[]'`);
+  await database.exec(`ALTER TABLE Workout ADD COLUMN IF NOT EXISTS generatorVersion TEXT`);
   await database.exec(`CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex)`);
 
   await database.exec(schema);
