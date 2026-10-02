@@ -216,7 +216,7 @@ export async function generateWorkout(
   userId: string,
   focus: string,
   durationMin: number,
-  options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[] }
+  options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[]; userEquipmentIds?: string[] }
 ): Promise<{ focus: string; exercises: GeneratedExercise[]; requestedExerciseCount: number; availableExerciseCount: number; limitedByDataset: boolean }> {
   const unitMuscles = options?.lockToMuscles?.length ? options.lockToMuscles : musclesForFocus(focus);
   const equipmentMode = options?.equipmentMode ?? "USER_EQUIPMENT";
@@ -227,12 +227,12 @@ export async function generateWorkout(
   } else if (equipmentMode === "SCANNED") {
     availableEquipmentIds = new Set(options?.scannedEquipmentIds ?? []);
   } else {
-    availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
+    availableEquipmentIds = new Set(options?.userEquipmentIds ?? await getAvailableEquipmentIds(database, userId));
   }
   const availableEquipment = equipmentMode === "FULL_GYM"
     ? []
     : await getEquipmentAliases(database, availableEquipmentIds);
-  if (equipmentMode === "USER_EQUIPMENT") availableEquipment.push("Bodyweight");
+  if (equipmentMode === "USER_EQUIPMENT" && availableEquipmentIds.size === 0) availableEquipment.push("Bodyweight");
 
   const result = exerciseRecommendationService.getRecommendedExercises({
     targetMuscles: unitMuscles,

@@ -221,6 +221,7 @@ const generateSchema = z.object({
   focus: z.string().optional(),
   dayIndex: z.number().int().min(0).optional(),
   equipmentMode: z.enum(["SCANNED", "FULL_GYM", "USER_EQUIPMENT"]).optional(),
+  availableEquipmentNames: z.array(z.string().trim().min(1)).optional(),
   replaceExisting: z.boolean().optional(),
   imageBase64: z.string().min(100).optional(),
   detectedEquipmentNames: z.array(z.string().min(1)).optional(),
@@ -254,6 +255,33 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
 
   const requestedMode = parsed.success ? parsed.data.equipmentMode : undefined;
   const equipmentMode = requestedMode ?? "USER_EQUIPMENT";
+  if (parsed.data.availableEquipmentNames !== undefined && equipmentMode !== "USER_EQUIPMENT") {
+    return res.status(400).json({ error: "availableEquipmentNames can only be used with USER_EQUIPMENT mode." });
+  }
+  let userEquipmentOverrideIds: string[] | undefined;
+  if (parsed.data.availableEquipmentNames !== undefined) {
+    const selectedNames = new Set(parsed.data.availableEquipmentNames.map(normalizeExerciseValue));
+    const catalogRows = await db.all<{ id: string; name: string; alias: string | null }>(
+      `SELECT e.id,e.name,ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id WHERE e.name != 'No Equipment'`
+    );
+    const matchedSelection = new Set<string>();
+    const selectedEquipmentIds = new Set<string>();
+    for (const row of catalogRows) {
+      for (const value of [row.name, row.alias]) {
+        if (!value) continue;
+        const normalized = normalizeExerciseValue(value);
+        if (selectedNames.has(normalized)) {
+          matchedSelection.add(normalized);
+          selectedEquipmentIds.add(row.id);
+        }
+      }
+    }
+    const unknownEquipment = [...selectedNames].filter((name) => !matchedSelection.has(name));
+    if (unknownEquipment.length > 0) {
+      return res.status(400).json({ error: `Unknown equipment selection: ${unknownEquipment.join(", ")}.` });
+    }
+    userEquipmentOverrideIds = [...selectedEquipmentIds];
+  }
   let scannedEquipmentIds: string[] = [];
   if (equipmentMode === "SCANNED") {
     let names = parsed.data.detectedEquipmentNames;
@@ -279,20 +307,28 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       .filter((row) => normalized.has(normalizeExerciseValue(row.name)) || (row.alias && normalized.has(normalizeExerciseValue(row.alias))))
       .map((row) => row.id))];
   }
-  const savedEquipmentRows = await db.all<{ equipmentId: string }>(
-    `SELECT equipmentId FROM UserEquipment WHERE userId = ?`, userId);
+  const savedEquipmentRows = await db.all<{ equipmentId: string; name: string }>(
+    `SELECT ue.equipmentId,e.name FROM UserEquipment ue JOIN Equipment e ON e.id=ue.equipmentId WHERE ue.userId = ?`, userId);
   const equipmentSnapshot = equipmentMode === "FULL_GYM"
     ? []
     : equipmentMode === "SCANNED"
       ? scannedEquipmentIds
-      : savedEquipmentRows.map((row) => row.equipmentId);
+      : userEquipmentOverrideIds ?? savedEquipmentRows.map((row) => row.equipmentId);
 
   // Check if there's already a workout for the current plan step
   const currentPlanStepIndex = state.currentIndex;
-  const existingWorkout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status != 'superseded' ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, createdAt DESC LIMIT 1`,
-    userId, currentPlanStepIndex
-  );
+  let existingWorkout = state.activeWorkoutId
+    ? await db.get<any>(
+      `SELECT * FROM Workout WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)`,
+      state.activeWorkoutId, userId, state.cycleId
+    )
+    : undefined;
+  if (!existingWorkout) {
+    existingWorkout = await db.get<any>(
+      `SELECT * FROM Workout WHERE userId = ? AND cycleId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
+      userId, state.cycleId, currentPlanStepIndex
+    );
+  }
   if (existingWorkout && !parsed.data.replaceExisting) {
 // Return the existing workout with its exercises
   const existingExercises = await db.all<any>(
@@ -387,9 +423,27 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     lockToMuscles: requiredUnit.muscles,
     equipmentMode,
     scannedEquipmentIds,
+    userEquipmentIds: userEquipmentOverrideIds,
   });
   const { exercises } = generation;
+  const availableEquipmentForLog = equipmentMode === "FULL_GYM"
+    ? ["FULL_GYM"]
+    : equipmentMode === "SCANNED"
+      ? (parsed.data.detectedEquipmentNames ?? [])
+      : parsed.data.availableEquipmentNames ?? savedEquipmentRows.map((row) => row.name);
+  const generationTrace = {
+    event: "workout_generation",
+    cycleId: state.cycleId,
+    targetMuscles: requiredUnit.muscles,
+    sessionDurationMinutes: profile.sessionMinutes,
+    equipmentMode,
+    availableEquipment: availableEquipmentForLog,
+    csvCandidateCount: generation.availableExerciseCount,
+    requestedExerciseCount: generation.requestedExerciseCount,
+    persistedExercises: exercises.map(({ exerciseName, muscle, machine }) => ({ exerciseName, muscle, machine })),
+  };
   if (exercises.length === 0) {
+    console.info(JSON.stringify({ ...generationTrace, event: "workout_generation_empty", persistedExercises: [] }));
     return res.status(422).json({
       code: "CSV_EXERCISES_NOT_FOUND",
       error: `No bundled CSV exercises match the current plan target (${requiredUnit.muscles.join(", ")}) and equipment mode.`,
@@ -400,8 +454,8 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const ts = nowIso();
   const workoutExerciseIds: string[] = [];
   await db.run(
-    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex, equipmentMode, equipmentSnapshot, generatorVersion) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?)`,
-    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
+    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex, cycleId, equipmentMode, equipmentSnapshot, generatorVersion) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?, ?)`,
+    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex, state.cycleId, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
   );
   if (state)
     await db.run(`UPDATE WorkoutPlanState SET activeWorkoutId = ? WHERE userId = ?`, workoutId, userId);
@@ -415,11 +469,12 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       exercise.exerciseName, exercise.muscle, exercise.primaryMuscle, exercise.machine
     );
   }
+  console.info(JSON.stringify(generationTrace));
 
   // The selection is fully local and deterministic; no AI/provider is part of generation.
   const summary = null;
   return res.status(201).json({
-    workout: { id: workoutId, focus, durationMin: profile.sessionMinutes, status: "pending" },
+    workout: { id: workoutId, focus, durationMin: profile.sessionMinutes, status: "pending", cycleId: state.cycleId },
     requestedExerciseCount: generation.requestedExerciseCount,
     availableExerciseCount: generation.availableExerciseCount,
     limitedByDataset: generation.limitedByDataset,
@@ -482,27 +537,20 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
 
 workoutRouter.get("/today", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
-  
-  // Get current plan state to find the current plan step
   const state = await getPlanState(db, userId);
   const currentPlanStepIndex = state?.currentIndex ?? 0;
-  
-  // First try to find a pending workout for the current plan step
-  let workout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
-    userId, currentPlanStepIndex
-  );
-  
-  // Fallback: if no pending workout for current step, check for any workout today
-  if (!workout) {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+  let workout = state?.activeWorkoutId
+    ? await db.get<any>(
+      `SELECT * FROM Workout WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)`,
+      state.activeWorkoutId, userId, state.cycleId
+    )
+    : undefined;
+  if (!workout && state) {
     workout = await db.get<any>(
-      `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? AND status != 'superseded' ORDER BY createdAt DESC LIMIT 1`,
-      userId, startOfDay.toISOString()
+      `SELECT * FROM Workout WHERE userId = ? AND cycleId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
+      userId, state.cycleId, currentPlanStepIndex
     );
   }
-  
   if (!workout) return res.status(404).json({ error: "No workout generated today yet. POST /workouts/generate" });
   const exercises = await db.all<any>(
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
@@ -565,6 +613,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     focus: workout.focus,
     status: workout.status,
     durationMin: workout.durationMin,
+    cycleId: workout.cycleId ?? state?.cycleId ?? null,
     generatorVersion: workout.generatorVersion ?? null,
     equipmentMode: workout.equipmentMode ?? "USER_EQUIPMENT",
     needsRegeneration: workout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
