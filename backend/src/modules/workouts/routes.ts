@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
-import { generateWorkout } from "./workoutGenerator";
-import { loadExerciseWithLinks, loadSubstituteCandidates, pickSubstitute } from "../exercises/substitutionEngine";
+import { ensureExerciseRows, generateWorkout } from "./workoutGenerator";
+import { loadExerciseWithLinks, loadSubstituteCandidates, pickSubstitute, type ExerciseWithLinks } from "../exercises/substitutionEngine";
 import { getAiProvider } from "../../ai/provider";
 import {
   canSwitchWorkoutPlan,
@@ -31,6 +31,7 @@ import {
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
+import { exerciseRecommendationService } from "./exerciseRecommendation";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -626,9 +627,19 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const parsed = replaceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
   const { workoutExerciseId, reason } = parsed.data;
+  const workout = await db.get<{ userId: string; status: string }>(
+    `SELECT userId,status FROM Workout WHERE id = ?`, req.params.id);
+  if (!workout || workout.userId !== req.userId)
+    return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "completed")
+    return res.status(409).json({ error: "This workout has already been completed." });
   const exerciseRow = await db.get<any>(`SELECT * FROM WorkoutExercise WHERE id = ?`, workoutExerciseId);
   if (!exerciseRow || exerciseRow.workoutId !== req.params.id)
     return res.status(404).json({ error: "Workout exercise not found" });
+  const loggedSets = await db.get<{ count: number }>(
+    `SELECT COUNT(*) as count FROM WorkoutSet WHERE workoutExerciseId = ? AND completed = 1`, workoutExerciseId);
+  if ((loggedSets?.count ?? 0) > 0)
+    return res.status(409).json({ error: "An exercise cannot be swapped after you have logged sets for it." });
   if (reason === "pain")
     await db.run(`UPDATE WorkoutExercise SET painReported = 1 WHERE id = ?`, workoutExerciseId);
   const equipmentRows = await db.all<{ equipmentId: string }>(
@@ -662,17 +673,71 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const usedRows = await db.all<{ exerciseId: string }>(
     `SELECT exerciseId FROM WorkoutExercise WHERE workoutId = ?`, req.params.id);
   const usedIds = new Set(usedRows.map((row) => row.exerciseId));
+  const usedNames = await db.all<{ name: string }>(
+    `SELECT e.name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ?`, req.params.id);
+  const availableEquipmentIds = new Set(equipmentRows.map((row) => row.equipmentId));
+  const csvAlternatives = exerciseRecommendationService.getCsvAlternatives(
+    [base.primaryMuscle], usedNames.map((row) => row.name));
+  const allEquipmentRows = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
+  const equipmentIdByAlias = new Map<string, string>();
+  for (const row of allEquipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
+  const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
+    `SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
+  for (const row of equipmentAliases) {
+    const key = normalizeExerciseValue(row.alias);
+    if (!equipmentIdByAlias.has(key)) equipmentIdByAlias.set(key, row.equipmentId);
+  }
+
+  const csvCandidateById = new Map<string, (typeof csvAlternatives)[number]>();
+  const csvCandidates: ExerciseWithLinks[] = [];
+  for (const exercise of csvAlternatives) {
+    const machineKey = normalizeExerciseValue(exercise.machine);
+    const isBodyweight = machineKey === "bodyweight";
+    const equipmentId = equipmentIdByAlias.get(machineKey);
+    if (!isBodyweight && !equipmentId) continue;
+    const id = `csv-source-${exercise.sourceIndex}`;
+    csvCandidateById.set(id, exercise);
+    csvCandidates.push({
+      id,
+      name: exercise.exercise,
+      primaryMuscle: exercise.primaryMuscle,
+      secondaryMuscles: "",
+      movementPattern: "",
+      difficulty: "",
+      defaultSets: 3,
+      repRangeLow: 8,
+      repRangeHigh: 12,
+      instructions: "",
+      requiredEquipmentIds: isBodyweight ? [] : [equipmentId!],
+    });
+  }
+
   const freshCandidates = candidates.filter((candidate) => !usedIds.has(candidate.id));
   const substitute = pickSubstitute(
-    base, freshCandidates.length ? freshCandidates : candidates, new Set(equipmentRows.map((row) => row.equipmentId)));
+    base, [...freshCandidates, ...csvCandidates], availableEquipmentIds);
   if (!substitute)
     return res.status(422).json({
       error: `No performable substitute found for "${base.name}" with your current equipment. Consider adding equipment or skipping this exercise.`,
       requiresEquipment: baseRequiresEquipment,
     });
+
+  let persistedSubstitute = substitute;
+  const csvExercise = csvCandidateById.get(substitute.id);
+  if (csvExercise) {
+    const persisted = await ensureExerciseRows(db, [csvExercise]);
+    const exerciseRecord = persisted.get(csvExercise.sourceIndex);
+    if (!exerciseRecord) throw new Error(`Could not persist CSV substitute "${csvExercise.exercise}".`);
+    const loaded = await loadExerciseWithLinks(db, exerciseRecord.id);
+    if (!loaded) throw new Error(`Could not load CSV substitute "${csvExercise.exercise}".`);
+    persistedSubstitute = loaded;
+  }
+
   await db.run(
-    `UPDATE WorkoutExercise SET exerciseId = ?, replacedFromId = ?, status = 'replaced', targetSets = ?, repRangeLow = ?, repRangeHigh = ? WHERE id = ?`,
-    substitute.id, exerciseRow.exerciseId, substitute.defaultSets, substitute.repRangeLow, substitute.repRangeHigh, workoutExerciseId
+    `UPDATE WorkoutExercise
+     SET exerciseId = ?, replacedFromId = ?, status = 'replaced', targetSets = ?, repRangeLow = ?, repRangeHigh = ?,
+         sourceExerciseName = NULL, sourceMuscle = NULL, sourcePrimaryMuscle = NULL, sourceMachine = NULL
+     WHERE id = ?`,
+    persistedSubstitute.id, exerciseRow.exerciseId, persistedSubstitute.defaultSets, persistedSubstitute.repRangeLow, persistedSubstitute.repRangeHigh, workoutExerciseId
   );
   const reasonText = reason === "pain"
     ? "you reported discomfort on the original movement"
@@ -681,19 +746,19 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
       : "you asked for a change";
   const explanation = await getAiProvider().explainSubstitution({
     originalExercise: base.name,
-    substituteExercise: substitute.name,
+    substituteExercise: persistedSubstitute.name,
     reason: reasonText,
   });
   return res.json({
-    replaced: { from: base.name, to: substitute.name },
+    replaced: { from: base.name, to: persistedSubstitute.name },
     exercise: {
-      exerciseId: substitute.id,
-      name: substitute.name,
-      primaryMuscle: substitute.primaryMuscle,
-      instructions: substitute.instructions,
-      sets: substitute.defaultSets,
-      repRangeLow: substitute.repRangeLow,
-      repRangeHigh: substitute.repRangeHigh,
+      exerciseId: persistedSubstitute.id,
+      name: persistedSubstitute.name,
+      primaryMuscle: persistedSubstitute.primaryMuscle,
+      instructions: persistedSubstitute.instructions,
+      sets: persistedSubstitute.defaultSets,
+      repRangeLow: persistedSubstitute.repRangeLow,
+      repRangeHigh: persistedSubstitute.repRangeHigh,
     },
     explanation,
   });

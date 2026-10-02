@@ -998,7 +998,8 @@ function renderWorkout(workout, plan) {
     const stateClass = skipped ? "skipped" : isDone ? "done" : isActive ? "active" : "later";
     const setLabel = `${item.completedSetRows.length}/${item.targetSets} sets`;
     const repLabel = `${Number(exercise.repRangeLow) || 1}–${Number(exercise.repRangeHigh) || Number(exercise.repRangeLow) || 1} reps`;
-    const swapButton = exercise.requiresEquipment && workout.status !== "completed"
+    const hasLoggedSets = item.completedSetRows.length > 0;
+    const swapButton = !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped" && workout.status !== "completed"
       ? `<button class="btn btn-outline workout-swap-btn" data-action="swap" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Swap</button>`
       : "";
     return `<article class="workout-exercise-row ${stateClass}">
@@ -1061,7 +1062,7 @@ function renderWorkout(workout, plan) {
       try {
         const result = await Api.post(`/workouts/${workout.id}/replace-exercise`, {
           workoutExerciseId: button.dataset.id,
-          reason: "no_equipment",
+          reason: "user_preference",
         });
         await loadWorkout();
         showWorkoutNotice(result.explanation || "Exercise updated to match your available equipment.", "success");

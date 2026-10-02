@@ -90,7 +90,7 @@ function stableCsvId(prefix: string, value: string): string {
 
 /** Persist only the selected CSV rows into the existing Exercise relation so
  * WorkoutExercise and workout history keep their current foreign-key model. */
-async function ensureExerciseRows(
+export async function ensureExerciseRows(
   database: DatabaseLike,
   selected: ReturnType<typeof exerciseRecommendationService.getRecommendedExercises>["exercises"]
 ): Promise<Map<number, { id: string; sets: number; repRangeLow: number; repRangeHigh: number }>> {

@@ -64,6 +64,15 @@ describe("bundled CSV exercise recommendations", () => {
     expect(new Set(result.exercises.map((exercise) => exercise.exercise)).size).toBe(3);
   });
 
+  it("returns same-target CSV swap alternatives and excludes exercises already in the workout", () => {
+    const swapService = new CsvExerciseRecommendationService(new CsvExerciseRepository("swap.csv", () =>
+      "exercise,machine,muscle\nBarbell Bench Press,Barbell,Chest\nCable Chest Fly,Cable Machine,Chest\nLat Pulldown,Cable Machine,Back"
+    ));
+    const alternatives = swapService.getCsvAlternatives(["Chest"], [" BARBELL bench press "]);
+    expect(alternatives.map((exercise) => exercise.exercise)).toEqual(["Cable Chest Fly"]);
+    expect(alternatives[0].primaryMuscle).toBe("Chest");
+  });
+
   it("matches normalized target text and uses CSV categories such as Upper Back", () => {
     const normal = fullGym(["Back"], 60).exercises;
     const varied = fullGym(["  bAcK  "], 60).exercises;
