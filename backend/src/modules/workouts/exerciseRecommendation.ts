@@ -29,6 +29,7 @@ export interface ExerciseRecommendationResult {
 
 export interface ExerciseRecommendationService {
   getRecommendedExercises(input: ExerciseRecommendationInput): ExerciseRecommendationResult;
+  getCsvAlternatives(targetMuscles: string[], excludedExerciseNames?: Iterable<string>): RecommendedExercise[];
 }
 
 export function exerciseCountForDuration(minutes: number): number {
@@ -133,6 +134,24 @@ function selectWithCoverage(
 
 export class CsvExerciseRecommendationService implements ExerciseRecommendationService {
   constructor(private readonly repository: CsvExerciseRepository = csvExerciseRepository) {}
+
+  getCsvAlternatives(targetMuscles: string[], excludedExerciseNames: Iterable<string> = []): RecommendedExercise[] {
+    const targetKeys = new Set(targetMuscles.map(normalizeExerciseValue).filter(Boolean));
+    const excludedNames = new Set([...excludedExerciseNames].map(normalizeExerciseValue).filter(Boolean));
+    if (targetKeys.size === 0) return [];
+
+    const uniqueCandidates = new Map<string, RecommendedExercise>();
+    for (const row of this.repository.getAll()) {
+      const matchingMuscles = row.muscleCategories.filter((muscle) => {
+        const categoryWords = normalizeExerciseValue(muscle).split(" ");
+        return [...targetKeys].some((target) => categoryWords.includes(target));
+      });
+      const exerciseKey = normalizeExerciseValue(row.exercise);
+      if (matchingMuscles.length === 0 || excludedNames.has(exerciseKey) || uniqueCandidates.has(exerciseKey)) continue;
+      uniqueCandidates.set(exerciseKey, { ...row, primaryMuscle: matchingMuscles[0] });
+    }
+    return [...uniqueCandidates.values()];
+  }
 
   getRecommendedExercises(input: ExerciseRecommendationInput): ExerciseRecommendationResult {
     const requestedCount = exerciseCountForDuration(input.sessionDurationMinutes);
