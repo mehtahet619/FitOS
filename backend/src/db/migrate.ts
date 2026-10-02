@@ -131,6 +131,17 @@ db.exec(schema)
     } catch {
       // Column already exists
     }
+    for (const [column, definition] of [
+      ["equipmentMode", "TEXT NOT NULL DEFAULT 'USER_EQUIPMENT'"],
+      ["equipmentSnapshot", "TEXT NOT NULL DEFAULT '[]'"],
+      ["generatorVersion", "TEXT"],
+    ]) {
+      try {
+        await db.exec(`ALTER TABLE Workout ADD COLUMN ${column} ${definition}`);
+      } catch {
+        // Column already exists.
+      }
+    }
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex)`);
 
     for (const column of ["sourceExerciseName", "sourceMuscle", "sourcePrimaryMuscle", "sourceMachine"]) {

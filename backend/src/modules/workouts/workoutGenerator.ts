@@ -5,7 +5,7 @@ import { exerciseRecommendationService } from "./exerciseRecommendation";
 
 export interface GeneratedExercise {
   exerciseId: string;
-  name: string;
+  exerciseName: string;
   primaryMuscle: string;
   instructions: string;
   sets: number;
@@ -246,7 +246,7 @@ export async function generateWorkout(
     if (!exerciseRecord) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
     return {
       exerciseId: exerciseRecord.id,
-      name: exercise.exercise,
+      exerciseName: exercise.exercise,
       primaryMuscle: exercise.primaryMuscle,
       instructions: "",
       sets: exerciseRecord.sets,

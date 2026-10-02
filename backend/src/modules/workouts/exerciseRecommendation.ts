@@ -143,12 +143,17 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     const uniqueCandidates = new Map<string, RecommendedExercise>();
     for (const row of this.repository.getAll()) {
       const matchingMuscles = row.muscleCategories.filter((muscle) => {
-        const categoryWords = normalizeExerciseValue(muscle).split(" ");
-        return [...targetKeys].some((target) => categoryWords.includes(target));
+        const categoryKey = normalizeExerciseValue(muscle);
+        const categoryWords = new Set(categoryKey.split(" "));
+        return [...targetKeys].some((target) => {
+          if (categoryKey === target) return true;
+          return target.split(" ").some((word) => categoryWords.has(word));
+        });
       });
       const exerciseKey = normalizeExerciseValue(row.exercise);
       if (matchingMuscles.length === 0 || excludedNames.has(exerciseKey) || uniqueCandidates.has(exerciseKey)) continue;
-      uniqueCandidates.set(exerciseKey, { ...row, primaryMuscle: matchingMuscles[0] });
+      const exactTargetCategory = matchingMuscles.find((muscle) => targetKeys.has(normalizeExerciseValue(muscle)));
+      uniqueCandidates.set(exerciseKey, { ...row, primaryMuscle: exactTargetCategory ?? matchingMuscles[0] });
     }
     return [...uniqueCandidates.values()];
   }

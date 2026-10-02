@@ -4,8 +4,7 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { ensureExerciseRows, generateWorkout } from "./workoutGenerator";
-import { loadExerciseWithLinks, loadSubstituteCandidates, pickSubstitute, type ExerciseWithLinks } from "../exercises/substitutionEngine";
-import { getAiProvider } from "../../ai/provider";
+import { loadExerciseWithLinks, pickSubstitute, type ExerciseWithLinks } from "../exercises/substitutionEngine";
 import {
   canSwitchWorkoutPlan,
   getActiveWorkoutPlan,
@@ -35,6 +34,7 @@ import { exerciseRecommendationService } from "./exerciseRecommendation";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
+const CSV_WORKOUT_GENERATOR_VERSION = "csv-v1";
 
 workoutRouter.get("/plan/structures", async (_req, res) => {
   return res.json({ structures: listAvailableStructures() });
@@ -221,6 +221,7 @@ const generateSchema = z.object({
   focus: z.string().optional(),
   dayIndex: z.number().int().min(0).optional(),
   equipmentMode: z.enum(["SCANNED", "FULL_GYM", "USER_EQUIPMENT"]).optional(),
+  replaceExisting: z.boolean().optional(),
   imageBase64: z.string().min(100).optional(),
   detectedEquipmentNames: z.array(z.string().min(1)).optional(),
 });
@@ -278,14 +279,21 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       .filter((row) => normalized.has(normalizeExerciseValue(row.name)) || (row.alias && normalized.has(normalizeExerciseValue(row.alias))))
       .map((row) => row.id))];
   }
+  const savedEquipmentRows = await db.all<{ equipmentId: string }>(
+    `SELECT equipmentId FROM UserEquipment WHERE userId = ?`, userId);
+  const equipmentSnapshot = equipmentMode === "FULL_GYM"
+    ? []
+    : equipmentMode === "SCANNED"
+      ? scannedEquipmentIds
+      : savedEquipmentRows.map((row) => row.equipmentId);
 
   // Check if there's already a workout for the current plan step
   const currentPlanStepIndex = state.currentIndex;
   const existingWorkout = await db.get<any>(
-    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, createdAt DESC LIMIT 1`,
+    `SELECT * FROM Workout WHERE userId = ? AND planStepIndex = ? AND status != 'superseded' ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END, createdAt DESC LIMIT 1`,
     userId, currentPlanStepIndex
   );
-  if (existingWorkout) {
+  if (existingWorkout && !parsed.data.replaceExisting) {
 // Return the existing workout with its exercises
   const existingExercises = await db.all<any>(
     `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
@@ -302,8 +310,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     return {
       workoutExerciseId: ex.id,
       exerciseId: ex.exerciseId,
-      name: ex.sourceExerciseName ?? ex.name,
-      exerciseName: ex.sourceExerciseName ?? ex.name,
+      exerciseName: ex.sourceExerciseName || ex.name,
       primaryMuscle: ex.sourcePrimaryMuscle ?? ex.primaryMuscle,
       muscle: ex.sourceMuscle ?? ex.primaryMuscle,
       machine: ex.sourceMachine ?? equipmentRequired[0] ?? "Bodyweight",
@@ -321,13 +328,20 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     };
   }));
 
+  const loggedSetCount = await db.get<{ count: number }>(
+    `SELECT COUNT(*) as count FROM WorkoutSet ws JOIN WorkoutExercise we ON we.id = ws.workoutExerciseId WHERE we.workoutId = ? AND ws.completed = 1`,
+    existingWorkout.id
+  );
   return res.json({
     workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
+    generatorVersion: existingWorkout.generatorVersion ?? null,
+    equipmentMode: existingWorkout.equipmentMode ?? "USER_EQUIPMENT",
+    needsRegeneration: existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
+    canRegenerate: existingWorkout.status === "pending" && (loggedSetCount?.count ?? 0) === 0,
     exercises: exercisesWithEquip.map((exercise, idx) => ({
       workoutExerciseId: exercise.workoutExerciseId,
       exerciseId: exercise.exerciseId,
-      name: exercise.name,
-      exerciseName: exercise.name,
+      exerciseName: exercise.exerciseName,
       primaryMuscle: exercise.primaryMuscle,
       muscle: exercise.muscle,
       machine: exercise.machine,
@@ -343,6 +357,20 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     })),
     summary: null, // No summary for existing workout
   });
+  }
+
+  if (existingWorkout) {
+    const loggedSetCount = await db.get<{ count: number }>(
+      `SELECT COUNT(*) as count FROM WorkoutSet ws JOIN WorkoutExercise we ON we.id = ws.workoutExerciseId WHERE we.workoutId = ? AND ws.completed = 1`,
+      existingWorkout.id
+    );
+    if (existingWorkout.status !== "pending") {
+      return res.status(409).json({ error: "Only an uncompleted workout can be replaced." });
+    }
+    if ((loggedSetCount?.count ?? 0) > 0) {
+      return res.status(409).json({ error: "This workout has logged sets and cannot be regenerated without affecting your history." });
+    }
+    await db.run(`UPDATE Workout SET status = 'superseded' WHERE id = ? AND status = 'pending'`, existingWorkout.id);
   }
 
   const recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
@@ -372,8 +400,8 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const ts = nowIso();
   const workoutExerciseIds: string[] = [];
   await db.run(
-    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?)`,
-    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex
+    `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex, equipmentMode, equipmentSnapshot, generatorVersion) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?)`,
+    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
   );
   if (state)
     await db.run(`UPDATE WorkoutPlanState SET activeWorkoutId = ? WHERE userId = ?`, workoutId, userId);
@@ -384,7 +412,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       `INSERT INTO WorkoutExercise (id, workoutId, exerciseId, orderIndex, targetSets, repRangeLow, repRangeHigh, status, replacedFromId, painReported, sourceExerciseName, sourceMuscle, sourcePrimaryMuscle, sourceMachine)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, 0, ?, ?, ?, ?)`,
       id, workoutId, exercise.exerciseId, idx, exercise.sets, exercise.repRangeLow, exercise.repRangeHigh,
-      exercise.name, exercise.muscle, exercise.primaryMuscle, exercise.machine
+      exercise.exerciseName, exercise.muscle, exercise.primaryMuscle, exercise.machine
     );
   }
 
@@ -398,8 +426,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     exercises: exercises.map((exercise, idx) => ({
       workoutExerciseId: workoutExerciseIds[idx],
       exerciseId: exercise.exerciseId,
-      name: exercise.name,
-      exerciseName: exercise.name,
+      exerciseName: exercise.exerciseName,
       primaryMuscle: exercise.primaryMuscle,
       muscle: exercise.muscle,
       machine: exercise.machine,
@@ -435,8 +462,7 @@ workoutRouter.get("/exercises-for-next", async (req: AuthedRequest, res) => {
   });
   const normalizedExercises = preview.exercises.map((ex) => ({
     exerciseId: ex.exerciseId,
-    name: ex.name,
-    exerciseName: ex.name,
+    exerciseName: ex.exerciseName,
     primaryMuscle: ex.primaryMuscle,
     muscle: ex.muscle,
     machine: ex.machine,
@@ -472,7 +498,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     workout = await db.get<any>(
-      `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? ORDER BY createdAt DESC LIMIT 1`,
+      `SELECT * FROM Workout WHERE userId = ? AND createdAt >= ? AND status != 'superseded' ORDER BY createdAt DESC LIMIT 1`,
       userId, startOfDay.toISOString()
     );
   }
@@ -498,11 +524,14 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
   }
   // Helper function to serialize exercise consistently
   function serializeExercise(exercise: any, equipmentRequired: string[], requiresEquipment: boolean) {
+    const exerciseName = exercise.sourceExerciseName || exercise.exerciseName;
+    if (typeof exerciseName !== "string" || exerciseName.trim() === "") {
+      throw new Error(`Workout exercise ${exercise.id} has no persisted exercise name.`);
+    }
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
-      name: exercise.sourceExerciseName ?? exercise.name,
-      exerciseName: exercise.sourceExerciseName ?? exercise.name,
+      exerciseName,
       primaryMuscle: exercise.sourcePrimaryMuscle ?? exercise.primaryMuscle,
       muscle: exercise.sourceMuscle ?? exercise.primaryMuscle,
       machine: exercise.sourceMachine ?? equipmentRequired[0] ?? "Bodyweight",
@@ -529,15 +558,17 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     const requiresEquipment = exercise.sourceMachine
       ? normalizeExerciseValue(exercise.sourceMachine) !== "bodyweight"
       : equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight";
-    // Use exercise.name (from the Exercise table via JOIN) or fallback to exerciseName alias
-    const exerciseName = exercise.name || exercise.exerciseName;
-    return serializeExercise({ ...exercise, name: exerciseName }, equipmentRequired, requiresEquipment);
+    return serializeExercise(exercise, equipmentRequired, requiresEquipment);
   }));
   return res.json({
     id: workout.id,
     focus: workout.focus,
     status: workout.status,
     durationMin: workout.durationMin,
+    generatorVersion: workout.generatorVersion ?? null,
+    equipmentMode: workout.equipmentMode ?? "USER_EQUIPMENT",
+    needsRegeneration: workout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
+    canRegenerate: workout.status === "pending" && loggedSets.length === 0,
     exercises: exercisesWithEquip,
   });
 });
@@ -627,8 +658,8 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const parsed = replaceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
   const { workoutExerciseId, reason } = parsed.data;
-  const workout = await db.get<{ userId: string; status: string }>(
-    `SELECT userId,status FROM Workout WHERE id = ?`, req.params.id);
+  const workout = await db.get<{ userId: string; status: string; equipmentMode?: string; equipmentSnapshot?: string }>(
+    `SELECT userId,status,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== req.userId)
     return res.status(404).json({ error: "Workout not found" });
   if (workout.status === "completed")
@@ -669,16 +700,20 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     }
   }
 
-  const candidates = await loadSubstituteCandidates(db, base.id);
-  const usedRows = await db.all<{ exerciseId: string }>(
-    `SELECT exerciseId FROM WorkoutExercise WHERE workoutId = ?`, req.params.id);
-  const usedIds = new Set(usedRows.map((row) => row.exerciseId));
   const usedNames = await db.all<{ name: string }>(
-    `SELECT e.name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ?`, req.params.id);
+    `SELECT COALESCE(we.sourceExerciseName,e.name) as name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ?`, req.params.id);
+  let snapshotEquipmentIds: string[] = [];
+  try {
+    const parsedSnapshot = JSON.parse(workout.equipmentSnapshot ?? "[]");
+    if (Array.isArray(parsedSnapshot)) snapshotEquipmentIds = parsedSnapshot.filter((id): id is string => typeof id === "string");
+  } catch { /* legacy workouts fall back to saved equipment */ }
   const availableEquipmentIds = new Set(equipmentRows.map((row) => row.equipmentId));
+  snapshotEquipmentIds.forEach((id) => availableEquipmentIds.add(id));
+  const fullGym = workout.equipmentMode === "FULL_GYM";
   const csvAlternatives = exerciseRecommendationService.getCsvAlternatives(
     [base.primaryMuscle], usedNames.map((row) => row.name));
   const allEquipmentRows = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
+  if (fullGym) allEquipmentRows.forEach((row) => availableEquipmentIds.add(row.id));
   const equipmentIdByAlias = new Map<string, string>();
   for (const row of allEquipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
   const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
@@ -693,14 +728,18 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   for (const exercise of csvAlternatives) {
     const machineKey = normalizeExerciseValue(exercise.machine);
     const isBodyweight = machineKey === "bodyweight";
-    const equipmentId = equipmentIdByAlias.get(machineKey);
-    if (!isBodyweight && !equipmentId) continue;
+    let equipmentId = equipmentIdByAlias.get(machineKey);
+    if (!isBodyweight && !equipmentId && fullGym) {
+      equipmentId = `full-gym:${machineKey}`;
+      availableEquipmentIds.add(equipmentId);
+    }
+    if (!isBodyweight && (!equipmentId || !availableEquipmentIds.has(equipmentId))) continue;
     const id = `csv-source-${exercise.sourceIndex}`;
     csvCandidateById.set(id, exercise);
     csvCandidates.push({
       id,
       name: exercise.exercise,
-      primaryMuscle: exercise.primaryMuscle,
+      primaryMuscle: base.primaryMuscle,
       secondaryMuscles: "",
       movementPattern: "",
       difficulty: "",
@@ -712,53 +751,48 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     });
   }
 
-  const freshCandidates = candidates.filter((candidate) => !usedIds.has(candidate.id));
-  const substitute = pickSubstitute(
-    base, [...freshCandidates, ...csvCandidates], availableEquipmentIds);
+  const substitute = pickSubstitute(base, csvCandidates, availableEquipmentIds);
   if (!substitute)
     return res.status(422).json({
       error: `No performable substitute found for "${base.name}" with your current equipment. Consider adding equipment or skipping this exercise.`,
       requiresEquipment: baseRequiresEquipment,
     });
 
-  let persistedSubstitute = substitute;
   const csvExercise = csvCandidateById.get(substitute.id);
-  if (csvExercise) {
-    const persisted = await ensureExerciseRows(db, [csvExercise]);
-    const exerciseRecord = persisted.get(csvExercise.sourceIndex);
-    if (!exerciseRecord) throw new Error(`Could not persist CSV substitute "${csvExercise.exercise}".`);
-    const loaded = await loadExerciseWithLinks(db, exerciseRecord.id);
-    if (!loaded) throw new Error(`Could not load CSV substitute "${csvExercise.exercise}".`);
-    persistedSubstitute = loaded;
-  }
+  if (!csvExercise) throw new Error("Selected replacement was not sourced from the bundled exercise CSV.");
+  const persisted = await ensureExerciseRows(db, [csvExercise]);
+  const exerciseRecord = persisted.get(csvExercise.sourceIndex);
+  if (!exerciseRecord) throw new Error(`Could not persist CSV substitute "${csvExercise.exercise}".`);
+  const persistedSubstitute = await loadExerciseWithLinks(db, exerciseRecord.id);
+  if (!persistedSubstitute) throw new Error(`Could not load CSV substitute "${csvExercise.exercise}".`);
 
   await db.run(
     `UPDATE WorkoutExercise
-     SET exerciseId = ?, replacedFromId = ?, status = 'replaced', targetSets = ?, repRangeLow = ?, repRangeHigh = ?,
-         sourceExerciseName = NULL, sourceMuscle = NULL, sourcePrimaryMuscle = NULL, sourceMachine = NULL
+     SET exerciseId = ?, replacedFromId = ?, status = 'replaced',
+         sourceExerciseName = ?, sourceMuscle = ?, sourcePrimaryMuscle = ?, sourceMachine = ?
      WHERE id = ?`,
-    persistedSubstitute.id, exerciseRow.exerciseId, persistedSubstitute.defaultSets, persistedSubstitute.repRangeLow, persistedSubstitute.repRangeHigh, workoutExerciseId
+    persistedSubstitute.id, exerciseRow.exerciseId, csvExercise.exercise, csvExercise.muscle,
+    base.primaryMuscle, csvExercise.machine, workoutExerciseId
   );
-  const reasonText = reason === "pain"
-    ? "you reported discomfort on the original movement"
-    : reason === "no_equipment"
-      ? "that equipment isn't available to you right now"
-      : "you asked for a change";
-  const explanation = await getAiProvider().explainSubstitution({
-    originalExercise: base.name,
-    substituteExercise: persistedSubstitute.name,
-    reason: reasonText,
-  });
+  const explanation = `Swapped ${base.name} for ${csvExercise.exercise}.`;
   return res.json({
-    replaced: { from: base.name, to: persistedSubstitute.name },
+    workoutExerciseId,
+    replaced: { from: base.name, to: csvExercise.exercise },
     exercise: {
       exerciseId: persistedSubstitute.id,
-      name: persistedSubstitute.name,
-      primaryMuscle: persistedSubstitute.primaryMuscle,
+      exerciseName: csvExercise.exercise,
+      primaryMuscle: base.primaryMuscle,
+      muscle: csvExercise.muscle,
+      machine: csvExercise.machine,
       instructions: persistedSubstitute.instructions,
-      sets: persistedSubstitute.defaultSets,
-      repRangeLow: persistedSubstitute.repRangeLow,
-      repRangeHigh: persistedSubstitute.repRangeHigh,
+      targetSets: exerciseRow.targetSets,
+      repRangeLow: exerciseRow.repRangeLow,
+      repRangeHigh: exerciseRow.repRangeHigh,
+      equipmentRequired: [csvExercise.machine],
+      equipmentName: csvExercise.machine,
+      requiresEquipment: normalizeExerciseValue(csvExercise.machine) !== "bodyweight",
+      status: "replaced",
+      completedSets: [],
     },
     explanation,
   });
