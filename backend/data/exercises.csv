@@ -1,0 +1,117 @@
+exercise,machine,muscle
+Bicep Curl,Dumbbell,Biceps
+Hammer Curl,Dumbbell,"Biceps, Brachialis, Forearms"
+Shoulder Press,Dumbbell,"Shoulders, Triceps"
+Lateral Raise,Dumbbell,Side Delts
+Front Raise,Dumbbell,Front Delts
+Rear Delt Fly,Dumbbell,"Rear Delts, Upper Back"
+Chest Press,Dumbbell,"Chest, Triceps, Front Delts"
+Dumbbell Fly,Dumbbell,Chest
+Dumbbell Row,Dumbbell,"Lats, Upper Back, Biceps"
+Goblet Squat,Dumbbell,"Quadriceps, Glutes"
+Dumbbell Lunges,Dumbbell,"Quadriceps, Glutes, Hamstrings"
+Romanian Deadlift,Dumbbell,"Hamstrings, Glutes, Lower Back"
+Dumbbell Shrug,Dumbbell,Traps
+Overhead Tricep Extension,Dumbbell,Triceps
+Tricep Kickback,Dumbbell,Triceps
+Wrist Curl,Dumbbell,Forearms
+Barbell Bench Press,Barbell,"Chest, Triceps, Front Delts"
+Incline Barbell Bench Press,Barbell,"Upper Chest, Triceps, Front Delts"
+Decline Barbell Bench Press,Barbell,"Lower Chest, Triceps"
+Barbell Overhead Press,Barbell,"Shoulders, Triceps"
+Barbell Row,Barbell,"Lats, Upper Back, Biceps"
+Deadlift,Barbell,"Glutes, Hamstrings, Back, Traps"
+Romanian Deadlift,Barbell,"Hamstrings, Glutes, Lower Back"
+Barbell Squat,Barbell,"Quadriceps, Glutes, Hamstrings"
+Front Squat,Barbell,"Quadriceps, Glutes, Core"
+Barbell Lunge,Barbell,"Quadriceps, Glutes, Hamstrings"
+Barbell Hip Thrust,Barbell,"Glutes, Hamstrings"
+Barbell Shrug,Barbell,Traps
+Barbell Curl,Barbell,Biceps
+Close-Grip Bench Press,Barbell,"Triceps, Chest"
+Skull Crusher,Barbell,Triceps
+Barbell Wrist Curl,Barbell,Forearms
+Lat Pulldown,Lat Pulldown Machine,"Lats, Biceps, Upper Back"
+Seated Cable Row,Cable Machine,"Lats, Rhomboids, Biceps"
+Cable Chest Fly,Cable Machine,Chest
+Cable Crossover,Cable Machine,Chest
+Cable Bicep Curl,Cable Machine,Biceps
+Cable Tricep Pushdown,Cable Machine,Triceps
+Cable Overhead Tricep Extension,Cable Machine,Triceps
+Cable Lateral Raise,Cable Machine,Side Delts
+Cable Face Pull,Cable Machine,"Rear Delts, Traps, Upper Back"
+Cable Crunch,Cable Machine,Abdominals
+Cable Woodchop,Cable Machine,"Obliques, Core"
+Cable Pull-Through,Cable Machine,"Glutes, Hamstrings"
+Cable Kickback,Cable Machine,Glutes
+Cable Leg Extension,Cable Machine,Quadriceps
+Chest Press,Chest Press Machine,"Chest, Triceps, Front Delts"
+Incline Chest Press,Incline Chest Press Machine,"Upper Chest, Triceps, Front Delts"
+Pec Deck Fly,Pec Deck Machine,Chest
+Reverse Pec Deck,Reverse Pec Deck Machine,"Rear Delts, Upper Back"
+Shoulder Press,Shoulder Press Machine,"Shoulders, Triceps"
+Lateral Raise,Lateral Raise Machine,Side Delts
+Lat Pulldown,Lat Pulldown Machine,"Lats, Biceps, Upper Back"
+Assisted Pull-Up,Assisted Pull-Up Machine,"Lats, Biceps, Upper Back"
+Seated Row,Seated Row Machine,"Lats, Rhomboids, Biceps"
+High Row,High Row Machine,"Lats, Upper Back, Biceps"
+Low Row,Low Row Machine,"Lats, Mid Back, Biceps"
+Preacher Curl,Preacher Curl Machine,Biceps
+Bicep Curl,Bicep Curl Machine,Biceps
+Tricep Extension,Tricep Extension Machine,Triceps
+Dip,Assisted Dip Machine,"Triceps, Chest, Front Delts"
+Leg Press,Leg Press Machine,"Quadriceps, Glutes, Hamstrings"
+Hack Squat,Hack Squat Machine,"Quadriceps, Glutes"
+Leg Extension,Leg Extension Machine,Quadriceps
+Leg Curl,Leg Curl Machine,Hamstrings
+Seated Leg Curl,Seated Leg Curl Machine,Hamstrings
+Lying Leg Curl,Lying Leg Curl Machine,Hamstrings
+Hip Abduction,Hip Abduction Machine,"Gluteus Medius, Gluteus Minimus"
+Hip Adduction,Hip Adduction Machine,Adductors
+Calf Raise,Calf Raise Machine,Calves
+Glute Kickback,Glute Kickback Machine,Glutes
+Hip Thrust,Hip Thrust Machine,"Glutes, Hamstrings"
+Back Extension,Back Extension Machine,"Lower Back, Glutes, Hamstrings"
+Ab Crunch,Ab Crunch Machine,Abdominals
+Rotary Torso,Rotary Torso Machine,"Obliques, Core"
+Pull-Up,Pull-Up Bar,"Lats, Biceps, Upper Back"
+Chin-Up,Pull-Up Bar,"Biceps, Lats, Upper Back"
+Hanging Leg Raise,Pull-Up Bar,"Lower Abs, Hip Flexors"
+Push-Up,Bodyweight,"Chest, Triceps, Front Delts"
+Diamond Push-Up,Bodyweight,"Triceps, Chest"
+Dips,Dip Station,"Triceps, Chest, Front Delts"
+Bodyweight Squat,Bodyweight,"Quadriceps, Glutes"
+Walking Lunges,Bodyweight,"Quadriceps, Glutes, Hamstrings"
+Glute Bridge,Bodyweight,"Glutes, Hamstrings"
+Plank,Bodyweight,"Core, Abdominals"
+Mountain Climbers,Bodyweight,"Core, Shoulders, Hip Flexors"
+Kettlebell Swing,Kettlebell,"Glutes, Hamstrings, Core"
+Kettlebell Goblet Squat,Kettlebell,"Quadriceps, Glutes"
+Kettlebell Clean,Kettlebell,"Shoulders, Traps, Glutes, Hamstrings"
+Kettlebell Snatch,Kettlebell,"Shoulders, Glutes, Hamstrings"
+Kettlebell Row,Kettlebell,"Lats, Upper Back, Biceps"
+Kettlebell Press,Kettlebell,"Shoulders, Triceps"
+Kettlebell Romanian Deadlift,Kettlebell,"Hamstrings, Glutes"
+Sled Push,Sled,"Quadriceps, Glutes, Calves"
+Sled Pull,Sled,"Glutes, Hamstrings, Back"
+Battle Rope Waves,Battle Rope,"Shoulders, Arms, Core"
+Battle Rope Slams,Battle Rope,"Shoulders, Arms, Core"
+Farmer Walk,Trap Bar / Dumbbells,"Traps, Forearms, Core, Legs"
+Treadmill Walk,Treadmill,"Calves, Quadriceps, Glutes"
+Treadmill Run,Treadmill,"Quadriceps, Hamstrings, Glutes, Calves"
+Incline Treadmill Walk,Treadmill,"Glutes, Hamstrings, Calves"
+Cycling,Stationary Bike,"Quadriceps, Hamstrings, Calves"
+Spin Cycling,Spin Bike,"Quadriceps, Hamstrings, Glutes"
+Rowing,Rowing Machine,"Back, Legs, Biceps, Core"
+Stair Climbing,Stair Climber,"Glutes, Quadriceps, Calves"
+Elliptical,Elliptical Machine,"Quadriceps, Glutes, Hamstrings, Calves"
+Ab Wheel Rollout,Ab Wheel,"Abdominals, Core, Shoulders"
+Resistance Band Curl,Resistance Band,Biceps
+Resistance Band Row,Resistance Band,"Lats, Upper Back, Biceps"
+Resistance Band Chest Press,Resistance Band,"Chest, Triceps"
+Resistance Band Lateral Raise,Resistance Band,Side Delts
+Resistance Band Pull-Apart,Resistance Band,"Rear Delts, Upper Back"
+Resistance Band Tricep Extension,Resistance Band,Triceps
+Resistance Band Squat,Resistance Band,"Quadriceps, Glutes"
+Resistance Band Glute Kickback,Resistance Band,Glutes
+Resistance Band Leg Curl,Resistance Band,Hamstrings

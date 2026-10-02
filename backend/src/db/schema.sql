@@ -212,7 +212,11 @@ CREATE TABLE IF NOT EXISTS WorkoutExercise (
   repRangeHigh INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   replacedFromId TEXT,
-  painReported INTEGER NOT NULL DEFAULT 0
+  painReported INTEGER NOT NULL DEFAULT 0,
+  sourceExerciseName TEXT,
+  sourceMuscle TEXT,
+  sourcePrimaryMuscle TEXT,
+  sourceMachine TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_we_workout ON WorkoutExercise(workoutId);
 

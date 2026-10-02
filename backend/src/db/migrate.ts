@@ -133,6 +133,14 @@ db.exec(schema)
     }
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex)`);
 
+    for (const column of ["sourceExerciseName", "sourceMuscle", "sourcePrimaryMuscle", "sourceMachine"]) {
+      try {
+        await db.exec(`ALTER TABLE WorkoutExercise ADD COLUMN ${column} TEXT`);
+      } catch {
+        // Snapshot column already exists.
+      }
+    }
+
     /*
      * Stores completed workout-plan cycles.
      *

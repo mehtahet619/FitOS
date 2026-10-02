@@ -953,9 +953,9 @@ function renderWorkout(workout, plan) {
   const duration = Number(workout.durationMin) || 0;
   const planName = plan?.activePlan?.structureLabel || plan?.activePlan || "";
   const nextPlanWorkout = plan?.nextWorkout?.label;
-  const equipmentLine = (exercise) => exercise.requiresEquipment
+  const equipmentLine = (exercise) => exercise.machine || (exercise.requiresEquipment
     ? (exercise.equipmentRequired || []).join(", ") || exercise.equipmentName || "Gym equipment"
-    : "Bodyweight";
+    : "Bodyweight");
 
   $("workout-focus-label").textContent = `${workout.focus} · ${duration} min`;
   const completedWorkout = workout.status === "completed";
@@ -971,7 +971,7 @@ function renderWorkout(workout, plan) {
         <section class="workout-next-card" aria-live="polite">
           <div class="workout-next-top"><span class="workout-eyebrow">UP NEXT</span><span>Exercise ${activeIndex + 1} of ${progress.length}</span></div>
           <h2>${escapeWorkoutText(exercise.name)}</h2>
-          <div class="workout-tags"><span>${escapeWorkoutText(exercise.primaryMuscle || "Full body")}</span><span>${escapeWorkoutText(equipment)}</span></div>
+          <div class="workout-tags"><span>Muscle: ${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")}</span><span>Machine: ${escapeWorkoutText(equipment)}</span></div>
           <div class="workout-target"><strong>${active.targetSets} sets</strong><span>${low}–${high} reps each</span><span>Set ${active.nextSetNumber} of ${active.targetSets}</span></div>
           ${exercise.instructions ? `<p class="workout-instructions">${escapeWorkoutText(exercise.instructions)}</p>` : ""}
           <div class="workout-set-log">
@@ -1003,7 +1003,7 @@ function renderWorkout(workout, plan) {
       : "";
     return `<article class="workout-exercise-row ${stateClass}">
       <span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>
-      <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.name)}</strong><span>${escapeWorkoutText(exercise.primaryMuscle || "Full body")} · ${setLabel} · ${repLabel}</span></div>
+      <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.name)}</strong><span>${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")} · ${escapeWorkoutText(equipmentLine(exercise))} · ${setLabel} · ${repLabel}</span></div>
       <span class="workout-exercise-state">${stateLabel}</span>${swapButton}
     </article>`;
   }).join("");

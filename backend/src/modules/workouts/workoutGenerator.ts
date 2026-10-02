@@ -1,11 +1,7 @@
+import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
-import {
-  loadExerciseWithLinks,
-  loadSubstituteCandidates,
-  isPerformable,
-  pickSubstitute,
-  ExerciseWithLinks,
-} from "../exercises/substitutionEngine";
+import { normalizeExerciseValue } from "./exerciseCsvRepository";
+import { exerciseRecommendationService } from "./exerciseRecommendation";
 
 export interface GeneratedExercise {
   exerciseId: string;
@@ -20,6 +16,8 @@ export interface GeneratedExercise {
   originalExerciseName?: string;
   equipmentRequired: string[]; // equipment names required for this exercise
   requiresEquipment: boolean; // true if exercise needs gym equipment, false for bodyweight
+  muscle: string;
+  machine: string;
 }
 
 export type EquipmentMode = "USER_EQUIPMENT" | "SCANNED" | "FULL_GYM";
@@ -76,6 +74,85 @@ async function getAvailableEquipmentIds(database: DatabaseLike, userId: string):
   return new Set(rows.map((r) => r.equipmentId));
 }
 
+async function getEquipmentAliases(database: DatabaseLike, equipmentIds: Set<string>): Promise<string[]> {
+  if (equipmentIds.size === 0) return [];
+  const rows = await database.all<{ name: string; alias: string | null }>(
+    `SELECT e.name, ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id
+     WHERE e.id IN (${[...equipmentIds].map(() => "?").join(",")})`,
+    ...equipmentIds
+  );
+  return [...new Set(rows.flatMap((row) => [row.name, row.alias].filter((value): value is string => Boolean(value))))];
+}
+
+function stableCsvId(prefix: string, value: string): string {
+  return `${prefix}-${createHash("sha256").update(normalizeExerciseValue(value)).digest("hex").slice(0, 32)}`;
+}
+
+/** Persist only the selected CSV rows into the existing Exercise relation so
+ * WorkoutExercise and workout history keep their current foreign-key model. */
+async function ensureExerciseRows(
+  database: DatabaseLike,
+  selected: ReturnType<typeof exerciseRecommendationService.getRecommendedExercises>["exercises"]
+): Promise<Map<number, string>> {
+  const existingRows = await database.all<{ id: string; name: string }>(`SELECT id,name FROM Exercise`);
+  const byNormalizedName = new Map(existingRows.map((row) => [normalizeExerciseValue(row.name), row.id]));
+  const equipmentRows = await database.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
+  const aliasRows = await database.all<{ equipmentId: string; alias: string }>(`SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
+  const equipmentIdByAlias = new Map<string, string>();
+  for (const row of equipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
+  for (const row of aliasRows) {
+    const key = normalizeExerciseValue(row.alias);
+    if (!equipmentIdByAlias.has(key)) equipmentIdByAlias.set(key, row.equipmentId);
+  }
+
+  const ids = new Map<number, string>();
+  const createdAt = new Date().toISOString();
+  for (const exercise of selected) {
+    const nameKey = normalizeExerciseValue(exercise.exercise);
+    let exerciseId = byNormalizedName.get(nameKey);
+    const machineKey = normalizeExerciseValue(exercise.machine);
+    let equipmentId = equipmentIdByAlias.get(machineKey);
+    if (!equipmentId) {
+      const existingMachine = equipmentRows.find((row) => normalizeExerciseValue(row.name) === machineKey);
+      equipmentId = existingMachine?.id ?? stableCsvId("csv-equipment", exercise.machine);
+      if (!existingMachine) {
+        await database.run(
+          `INSERT INTO Equipment (id,name,normalizedName,category,isCustom) VALUES (?,?,?, 'csv', 0) ON CONFLICT(name) DO NOTHING`,
+          equipmentId, exercise.machine, machineKey
+        );
+        const persistedMachine = await database.get<{ id: string }>(`SELECT id FROM Equipment WHERE lower(name)=lower(?)`, exercise.machine);
+        if (!persistedMachine) throw new Error(`Could not persist CSV equipment value "${exercise.machine}".`);
+        equipmentId = persistedMachine.id;
+        equipmentRows.push({ id: equipmentId, name: exercise.machine });
+      }
+      equipmentIdByAlias.set(machineKey, equipmentId);
+    }
+
+    if (!exerciseId) {
+      const categories = exercise.muscleCategories;
+      exerciseId = stableCsvId("csv-exercise", exercise.exercise);
+      await database.run(
+        `INSERT INTO Exercise (id,name,primaryMuscle,secondaryMuscles,movementPattern,difficulty,defaultSets,repRangeLow,repRangeHigh,instructions,requiresEquipment,createdAt)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO NOTHING`,
+        exerciseId, exercise.exercise, exercise.primaryMuscle,
+        categories.filter((muscle) => normalizeExerciseValue(muscle) !== normalizeExerciseValue(exercise.primaryMuscle)).join(","),
+        "csv_recommendation", "beginner", 3, 8, 12, "", normalizeExerciseValue(exercise.machine) === "bodyweight" ? 0 : 1, createdAt
+      );
+      const persistedExercise = await database.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name)=lower(?)`, exercise.exercise);
+      if (!persistedExercise) throw new Error(`Could not persist CSV exercise value "${exercise.exercise}".`);
+      exerciseId = persistedExercise.id;
+      byNormalizedName.set(nameKey, exerciseId);
+    }
+
+    await database.run(
+      `INSERT INTO ExerciseEquipment (id,exerciseId,equipmentId) VALUES (?,?,?) ON CONFLICT(exerciseId,equipmentId) DO NOTHING`,
+      stableCsvId("csv-exercise-equipment", `${exercise.exercise}|${exercise.machine}`), exerciseId, equipmentId
+    );
+    ids.set(exercise.sourceIndex, exerciseId);
+  }
+  return ids;
+}
+
 /**
  * Conservative progressive overload: look at the most recent completed sets
  * for this exercise. If the user hit the top of their rep range across all
@@ -123,89 +200,55 @@ export async function generateWorkout(
   focus: string,
   durationMin: number,
   options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[] }
-): Promise<{ focus: string; exercises: GeneratedExercise[] }> {
+): Promise<{ focus: string; exercises: GeneratedExercise[]; requestedExerciseCount: number; availableExerciseCount: number; limitedByDataset: boolean }> {
   const unitMuscles = options?.lockToMuscles?.length ? options.lockToMuscles : musclesForFocus(focus);
   const equipmentMode = options?.equipmentMode ?? "USER_EQUIPMENT";
 
   let availableEquipmentIds: Set<string>;
   if (equipmentMode === "FULL_GYM") {
-    // In FULL_GYM mode, all equipment is available
-    const allEquipment = await database.all<{ id: string }>(`SELECT id FROM Equipment`);
-    availableEquipmentIds = new Set(allEquipment.map((e) => e.id));
+    availableEquipmentIds = new Set();
   } else if (equipmentMode === "SCANNED") {
     availableEquipmentIds = new Set(options?.scannedEquipmentIds ?? []);
   } else {
     availableEquipmentIds = await getAvailableEquipmentIds(database, userId);
   }
+  const availableEquipment = equipmentMode === "FULL_GYM"
+    ? []
+    : await getEquipmentAliases(database, availableEquipmentIds);
+  if (equipmentMode === "USER_EQUIPMENT") availableEquipment.push("Bodyweight");
 
-  // History may influence freshness/order inside a split, but it must never
-  // widen a plan step to a different primary target.
-  const musclesForWorkout = [...unitMuscles];
+  const result = exerciseRecommendationService.getRecommendedExercises({
+    targetMuscles: unitMuscles,
+    sessionDurationMinutes: durationMin,
+    availableEquipment,
+    equipmentMode,
+  });
+  const exerciseIds = await ensureExerciseRows(database, result.exercises);
+  const generated = await Promise.all(result.exercises.map(async (exercise): Promise<GeneratedExercise> => {
+    const exerciseId = exerciseIds.get(exercise.sourceIndex);
+    if (!exerciseId) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
+    return {
+      exerciseId,
+      name: exercise.exercise,
+      primaryMuscle: exercise.primaryMuscle,
+      instructions: "",
+      sets: 3,
+      repRangeLow: 8,
+      repRangeHigh: 12,
+      suggestedWeightKg: await suggestNextWeight(database, userId, exerciseId),
+      wasSubstituted: false,
+      equipmentRequired: [exercise.machine],
+      requiresEquipment: normalizeExerciseValue(exercise.machine) !== "bodyweight",
+      muscle: exercise.muscle,
+      machine: exercise.machine,
+    };
+  }));
 
-  // Roughly 1 exercise per 9 min of session time, capped sensibly.
-  const targetExerciseCount = Math.max(3, Math.min(8, Math.round(durationMin / 9)));
-  const perMuscle = Math.max(1, Math.ceil(targetExerciseCount / musclesForWorkout.length));
-
-  const generated: GeneratedExercise[] = [];
-
-  for (const muscle of musclesForWorkout) {
-    const rows = await database.all<{ id: string }>(`SELECT id FROM Exercise WHERE lower(primaryMuscle) = lower(?)`, muscle);
-    const poolMappedResults = await Promise.all(rows.map((r) => loadExerciseWithLinks(database, r.id)));
-    const poolMapped: ExerciseWithLinks[] = poolMappedResults.filter(
-      (e): e is ExerciseWithLinks => e !== null
-    );
-
-    const directlyPerformable = poolMapped.filter((ex) =>
-      isPerformable(ex.requiredEquipmentIds, availableEquipmentIds)
-    );
-
-    let chosen: { exercise: ExerciseWithLinks; wasSubstituted: boolean; originalExerciseName?: string }[] = [];
-
-    if (directlyPerformable.length >= perMuscle) {
-      chosen = directlyPerformable.slice(0, perMuscle).map((exercise) => ({ exercise, wasSubstituted: false }));
-    } else {
-      chosen = directlyPerformable.map((exercise) => ({ exercise, wasSubstituted: false }));
-      const notPerformable = poolMapped.filter(
-        (ex) => !isPerformable(ex.requiredEquipmentIds, availableEquipmentIds)
-      );
-
-      for (const base of notPerformable) {
-        if (chosen.length >= perMuscle) break;
-        const candidates = (await loadSubstituteCandidates(database, base.id)).filter((candidate) =>
-          unitMuscles.includes(candidate.primaryMuscle)
-        );
-        const substitute = pickSubstitute(base, candidates, availableEquipmentIds);
-        if (substitute && !chosen.some((c) => c.exercise.id === substitute.id)) {
-          chosen.push({ exercise: substitute, wasSubstituted: true, originalExerciseName: base.name });
-        }
-      }
-    }
-
-    for (const { exercise, wasSubstituted, originalExerciseName } of chosen) {
-      const suggestedWeightKg = await suggestNextWeight(database, userId, exercise.id);
-      // Get equipment names for this exercise
-      const equipRows = await database.all<{ name: string }>(
-        `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
-        exercise.id
-      );
-      const equipmentRequired = equipRows.map((r) => r.name);
-      const requiresEquipment = exercise.requiredEquipmentIds.length > 0;
-      generated.push({
-        exerciseId: exercise.id,
-        name: exercise.name,
-        primaryMuscle: exercise.primaryMuscle,
-        instructions: exercise.instructions,
-        sets: exercise.defaultSets,
-        repRangeLow: exercise.repRangeLow,
-        repRangeHigh: exercise.repRangeHigh,
-        suggestedWeightKg,
-        wasSubstituted,
-        originalExerciseName,
-        equipmentRequired,
-        requiresEquipment,
-      });
-    }
-  }
-
-  return { focus, exercises: generated.slice(0, targetExerciseCount) };
+  return {
+    focus,
+    exercises: generated,
+    requestedExerciseCount: result.requestedCount,
+    availableExerciseCount: result.availableCount,
+    limitedByDataset: result.limitedByDataset,
+  };
 }
