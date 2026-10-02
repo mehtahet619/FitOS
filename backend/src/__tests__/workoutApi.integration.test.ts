@@ -7,7 +7,7 @@ import { CsvExerciseRecommendationService } from "../modules/workouts/exerciseRe
 
 type Row = Record<string, any>;
 
-function makeDatabase(plan: Row) {
+function makeDatabase(plan: Row, sessionMinutes = 60) {
   const state: {
     exercises: Row[];
     equipment: Row[];
@@ -59,18 +59,24 @@ function makeDatabase(plan: Row) {
             primaryMuscle: state.exercises.find((ex) => ex.id === row.exerciseId)?.primaryMuscle,
             instructions: state.exercises.find((ex) => ex.id === row.exerciseId)?.instructions })) as unknown as T[];
       }
-      if (sql.includes("SELECT ws.workoutExerciseId, ws.setNumber")) return [];
+      if (sql.includes("SELECT ws.workoutExerciseId, ws.setNumber")) {
+        const exerciseIds = new Set(state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => row.id));
+        return state.sets.filter((row) => row.completed && exerciseIds.has(row.workoutExerciseId)) as unknown as T[];
+      }
       throw new Error(`Unexpected integration-test query: ${sql}`);
     },
     async get<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {
-      if (sql.includes("SELECT * FROM UserProfile")) return { sessionMinutes: 60 } as unknown as T;
+      if (sql.includes("SELECT * FROM UserProfile")) return { sessionMinutes } as unknown as T;
       if (sql.includes("WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)")) {
         return state.workouts.find((row) => row.id === params[0] && row.userId === params[1] && (row.cycleId === params[2] || row.cycleId == null) && row.status !== "superseded") as T | undefined;
       }
       if (sql.includes("WHERE userId = ? AND cycleId = ? AND planStepIndex = ?")) {
         return state.workouts.find((row) => row.userId === params[0] && row.cycleId === params[1] && row.planStepIndex === params[2] && row.status !== "superseded") as T | undefined;
       }
-      if (sql.includes("SELECT COUNT(*) as count FROM WorkoutSet")) return { count: 0 } as unknown as T;
+      if (sql.includes("SELECT COUNT(*) as count FROM WorkoutSet")) {
+        const exerciseIds = new Set(state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => row.id));
+        return { count: state.sets.filter((row) => row.completed && exerciseIds.has(row.workoutExerciseId)).length } as unknown as T;
+      }
       if (sql.includes("SELECT userId,status,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?")) {
         return state.workouts.find((row) => row.id === params[0]) as T | undefined;
       }
@@ -292,6 +298,116 @@ describe("workout API CSV flow", () => {
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(refreshed.workout.id);
       expect(current.needsRegeneration).toBe(false);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("replaces a same-step legacy workout with the CSV result while preserving logged sets", async () => {
+    const sampleCsv = [
+      "exercise,machine,muscle",
+      "Barbell Row,Barbell,Back",
+      "Lat Pulldown,Lat Pulldown,Back",
+      "Dumbbell Row,Dumbbells,Back",
+      "Cable Row,Cable Machine,Back",
+      "Bench Press,Barbell,Chest",
+    ].join("\n");
+    const service = new CsvExerciseRecommendationService(new CsvExerciseRepository("legacy-refresh.csv", () => sampleCsv));
+    const legacyId = "legacy-current-step";
+    const planState = {
+      currentIndex: 0, cycleId: "current-cycle", cycleStatus: "IN_PROGRESS", activeWorkoutId: legacyId,
+      units: [{ key: "back", label: "Back", muscles: ["back"] }],
+    };
+    const { db, state } = makeDatabase(planState, 59);
+    const selectedEquipment = ["Barbell", "Lat Pulldown", "Dumbbells"];
+    state.equipment = selectedEquipment.map((name) => ({ id: `equipment-${name}`, name }));
+    state.workouts.push({
+      id: legacyId, userId: "integration-user", focus: "Back", status: "pending", durationMin: 59,
+      planStepIndex: 0, cycleId: "current-cycle", generatorVersion: null, equipmentMode: "USER_EQUIPMENT",
+      equipmentSnapshot: JSON.stringify(selectedEquipment.map((name) => `equipment-${name}`)),
+    });
+    state.exercises.push({
+      id: "legacy-chest-exercise", name: "Legacy Chest Press", primaryMuscle: "Chest", defaultSets: 3,
+      repRangeLow: 8, repRangeHigh: 12, instructions: "",
+    });
+    state.workoutExercises.push({
+      id: "legacy-workout-slot", workoutId: legacyId, exerciseId: "legacy-chest-exercise", orderIndex: 0,
+      targetSets: 3, repRangeLow: 8, repRangeHigh: 12, status: "pending",
+      sourceExerciseName: "Legacy Chest Press", sourceMuscle: "Chest", sourcePrimaryMuscle: "Chest", sourceMachine: "Barbell",
+    });
+    const preservedSet = {
+      id: "legacy-logged-set", workoutExerciseId: "legacy-workout-slot", setNumber: 1,
+      weightKg: 20, reps: 10, completed: true,
+    };
+    state.sets.push(preservedSet);
+
+    vi.doMock("../db/client", () => ({ db, nowIso: () => "2026-10-02T00:00:00.000Z" }));
+    vi.doMock("../common/auth", () => ({ requireAuth: (req: any, _res: any, next: () => void) => { req.userId = "integration-user"; next(); } }));
+    vi.doMock("../modules/workouts/plan", () => ({
+      canSwitchWorkoutPlan: async () => true,
+      getActiveWorkoutPlan: async () => null,
+      getCompletedWorkoutUnits: async () => [],
+      getCycleHistory: async () => [],
+      getCurrentCycle: async () => null,
+      getNextRequiredWorkout: async () => null,
+      getPlanState: async () => state.plan,
+      getRecentlyTrainedMuscles: async () => [],
+      getRemainingWorkoutUnits: async () => [],
+      getTodayWorkoutDecision: async () => ({ nextUnit: null, remainingUnits: [] }),
+      getWorkoutHistory: async () => [],
+      listAvailableStructures: () => [],
+      completedUnits: () => [],
+      nextUnit: (current: any) => current?.units?.[current.currentIndex] ?? null,
+      remainingUnits: () => [],
+      serializePlanSnapshot: () => ({}),
+      startNewWorkoutCycle: async () => ({}),
+      switchWorkoutPlan: async () => ({}),
+      completeWorkout: async () => ({}),
+      PLAN_LABELS: {},
+    }));
+    vi.doMock("../modules/workouts/exerciseRecommendation", () => ({ exerciseRecommendationService: service }));
+
+    const { workoutRouter } = await import("../modules/workouts/routes.js");
+    const app = express();
+    app.use(express.json());
+    app.use("/workouts", workoutRouter);
+    const server = app.listen(0);
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port.");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const legacyResponse = await fetch(`${baseUrl}/workouts/today`);
+      expect(legacyResponse.status).toBe(200);
+      const legacy = await legacyResponse.json() as any;
+      expect(legacy).toMatchObject({ needsRegeneration: true, canRegenerate: true, generatorVersion: null });
+      expect(legacy.availableEquipmentNames).toEqual(selectedEquipment);
+      expect(legacy.exercises[0].completedSets).toHaveLength(1);
+
+      const generateResponse = await fetch(`${baseUrl}/workouts/generate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          replaceExisting: true,
+          equipmentMode: "USER_EQUIPMENT",
+          availableEquipmentNames: selectedEquipment,
+        }),
+      });
+      expect(generateResponse.status).toBe(201);
+      const generated = await generateResponse.json() as any;
+      expect(generated.workout.durationMin).toBe(59);
+      expect(generated.exercises).toHaveLength(3);
+      expect(generated.exercises.every((exercise: any) => exercise.muscle === "Back" && exercise.machine !== "Bodyweight")).toBe(true);
+      expect(state.workouts.find((workout) => workout.id === legacyId)?.status).toBe("superseded");
+      expect(state.workoutExercises.find((exercise) => exercise.id === "legacy-workout-slot")).toBeDefined();
+      expect(state.sets).toContain(preservedSet);
+      expect(state.plan.activeWorkoutId).toBe(generated.workout.id);
+
+      const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
+      expect(current.id).toBe(generated.workout.id);
+      expect(current.needsRegeneration).toBe(false);
+      expect(current.exercises).toHaveLength(3);
+      expect(current.exercises.every((exercise: any) => exercise.muscle === "Back")).toBe(true);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }

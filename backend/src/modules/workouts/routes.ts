@@ -36,6 +36,13 @@ export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
 const CSV_WORKOUT_GENERATOR_VERSION = "csv-v1";
 
+function belongsToCurrentPlanStep(workout: any, state: any, planStepIndex: number): boolean {
+  if (!workout || !state) return false;
+  if (workout.cycleId && workout.cycleId !== state.cycleId) return false;
+  if (workout.planStepIndex != null && Number(workout.planStepIndex) !== planStepIndex) return false;
+  return true;
+}
+
 workoutRouter.get("/plan/structures", async (_req, res) => {
   return res.json({ structures: listAvailableStructures() });
 });
@@ -323,6 +330,9 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       state.activeWorkoutId, userId, state.cycleId
     )
     : undefined;
+  if (existingWorkout && !belongsToCurrentPlanStep(existingWorkout, state, currentPlanStepIndex)) {
+    existingWorkout = undefined;
+  }
   if (!existingWorkout) {
     existingWorkout = await db.get<any>(
       `SELECT * FROM Workout WHERE userId = ? AND cycleId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
@@ -364,16 +374,12 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     };
   }));
 
-  const loggedSetCount = await db.get<{ count: number }>(
-    `SELECT COUNT(*) as count FROM WorkoutSet ws JOIN WorkoutExercise we ON we.id = ws.workoutExerciseId WHERE we.workoutId = ? AND ws.completed = 1`,
-    existingWorkout.id
-  );
   return res.json({
     workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
     generatorVersion: existingWorkout.generatorVersion ?? null,
     equipmentMode: existingWorkout.equipmentMode ?? "USER_EQUIPMENT",
     needsRegeneration: existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
-    canRegenerate: existingWorkout.status === "pending" && (loggedSetCount?.count ?? 0) === 0,
+    canRegenerate: existingWorkout.status === "pending" && existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
     exercises: exercisesWithEquip.map((exercise, idx) => ({
       workoutExerciseId: exercise.workoutExerciseId,
       exerciseId: exercise.exerciseId,
@@ -403,10 +409,10 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     if (existingWorkout.status !== "pending") {
       return res.status(409).json({ error: "Only an uncompleted workout can be replaced." });
     }
-    if ((loggedSetCount?.count ?? 0) > 0) {
+    const isLegacyWorkout = existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION;
+    if ((loggedSetCount?.count ?? 0) > 0 && !isLegacyWorkout) {
       return res.status(409).json({ error: "This workout has logged sets and cannot be regenerated without affecting your history." });
     }
-    await db.run(`UPDATE Workout SET status = 'superseded' WHERE id = ? AND status = 'pending'`, existingWorkout.id);
   }
 
   const recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
@@ -457,8 +463,6 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex, cycleId, equipmentMode, equipmentSnapshot, generatorVersion) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?, ?)`,
     workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex, state.cycleId, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
   );
-  if (state)
-    await db.run(`UPDATE WorkoutPlanState SET activeWorkoutId = ? WHERE userId = ?`, workoutId, userId);
   for (const [idx, exercise] of exercises.entries()) {
     const id = uuidv4();
     workoutExerciseIds.push(id);
@@ -469,6 +473,13 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       exercise.exerciseName, exercise.muscle, exercise.primaryMuscle, exercise.machine
     );
   }
+  if (existingWorkout) {
+    // Archive the old row only after the replacement exists. Its exercise and
+    // set rows remain untouched, so previously logged work is preserved.
+    await db.run(`UPDATE Workout SET status = 'superseded' WHERE id = ? AND status = 'pending'`, existingWorkout.id);
+  }
+  if (state)
+    await db.run(`UPDATE WorkoutPlanState SET activeWorkoutId = ? WHERE userId = ?`, workoutId, userId);
   console.info(JSON.stringify(generationTrace));
 
   // The selection is fully local and deterministic; no AI/provider is part of generation.
@@ -545,6 +556,9 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       state.activeWorkoutId, userId, state.cycleId
     )
     : undefined;
+  if (workout && state && !belongsToCurrentPlanStep(workout, state, currentPlanStepIndex)) {
+    workout = undefined;
+  }
   if (!workout && state) {
     workout = await db.get<any>(
       `SELECT * FROM Workout WHERE userId = ? AND cycleId = ? AND planStepIndex = ? AND status = 'pending' ORDER BY createdAt DESC LIMIT 1`,
@@ -608,6 +622,21 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       : equipmentRequired.length > 0 && equipmentRequired[0] !== "Bodyweight";
     return serializeExercise(exercise, equipmentRequired, requiresEquipment);
   }));
+  let equipmentSnapshotIds: string[] = [];
+  try {
+    const snapshot = typeof workout.equipmentSnapshot === "string"
+      ? JSON.parse(workout.equipmentSnapshot)
+      : workout.equipmentSnapshot;
+    if (Array.isArray(snapshot)) equipmentSnapshotIds = snapshot.filter((id): id is string => typeof id === "string");
+  } catch {
+    equipmentSnapshotIds = [];
+  }
+  const equipmentSnapshotNames = equipmentSnapshotIds.length
+    ? (await db.all<{ id: string; name: string }>(
+      `SELECT id,name FROM Equipment WHERE id IN (${equipmentSnapshotIds.map(() => "?").join(",")})`,
+      ...equipmentSnapshotIds
+    )).map((item) => item.name)
+    : [];
   return res.json({
     id: workout.id,
     focus: workout.focus,
@@ -616,8 +645,11 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     cycleId: workout.cycleId ?? state?.cycleId ?? null,
     generatorVersion: workout.generatorVersion ?? null,
     equipmentMode: workout.equipmentMode ?? "USER_EQUIPMENT",
+    availableEquipmentNames: equipmentSnapshotNames,
     needsRegeneration: workout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
-    canRegenerate: workout.status === "pending" && loggedSets.length === 0,
+    // Legacy pending workouts can be explicitly refreshed even after logging;
+    // the old workout and its set/history rows are retained as superseded.
+    canRegenerate: workout.status === "pending" && workout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
     exercises: exercisesWithEquip,
   });
 });
