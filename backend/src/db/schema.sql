@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS Workout (
   createdAt TEXT NOT NULL,
   completedAt TEXT,
   planStepIndex INTEGER,
+  cycleId TEXT,
   equipmentMode TEXT NOT NULL DEFAULT 'USER_EQUIPMENT',
   equipmentSnapshot TEXT NOT NULL DEFAULT '[]',
   generatorVersion TEXT

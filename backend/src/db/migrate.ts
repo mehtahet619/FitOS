@@ -132,6 +132,7 @@ db.exec(schema)
       // Column already exists
     }
     for (const [column, definition] of [
+      ["cycleId", "TEXT"],
       ["equipmentMode", "TEXT NOT NULL DEFAULT 'USER_EQUIPMENT'"],
       ["equipmentSnapshot", "TEXT NOT NULL DEFAULT '[]'"],
       ["generatorVersion", "TEXT"],
@@ -143,6 +144,8 @@ db.exec(schema)
       }
     }
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_workout_user_cycle_step ON Workout(userId, planStepIndex)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_workout_cycle_step_context ON Workout(userId, cycleId, planStepIndex)`);
+    await db.exec(`UPDATE Workout SET cycleId = (SELECT cycleId FROM WorkoutPlanState WHERE WorkoutPlanState.activeWorkoutId = Workout.id) WHERE cycleId IS NULL AND EXISTS (SELECT 1 FROM WorkoutPlanState WHERE WorkoutPlanState.activeWorkoutId = Workout.id)`);
 
     for (const column of ["sourceExerciseName", "sourceMuscle", "sourcePrimaryMuscle", "sourceMachine"]) {
       try {

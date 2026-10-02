@@ -876,13 +876,18 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
     buildButton.textContent = "Building your workout...";
     feedback.className = "";
     feedback.textContent = "";
+    let failedDuring = "saving today's equipment";
     try {
       await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(selected) });
-      await Api.post("/workouts/generate", { equipmentMode: "USER_EQUIPMENT" });
+      failedDuring = "generating your workout";
+      await Api.post("/workouts/generate", {
+        equipmentMode: "USER_EQUIPMENT",
+        availableEquipmentNames: Array.from(selected),
+      });
       await loadWorkout();
     } catch (error) {
       feedback.className = "banner banner-error";
-      feedback.textContent = error.message || "Could not build a workout from this equipment.";
+      feedback.textContent = `${failedDuring}: ${error.message || "Could not build a workout from this equipment."}`;
       buildButton.disabled = false;
       buildButton.textContent = "Show my exercises";
     }

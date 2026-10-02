@@ -7,23 +7,41 @@ import { CsvExerciseRecommendationService } from "../modules/workouts/exerciseRe
 
 type Row = Record<string, any>;
 
-function makeDatabase() {
+function makeDatabase(plan: Row) {
   const state: {
     exercises: Row[];
     equipment: Row[];
+    equipmentAliases: Row[];
+    userEquipment: Row[];
     links: Row[];
     workouts: Row[];
     workoutExercises: Row[];
     sets: Row[];
-  } = { exercises: [], equipment: [], links: [], workouts: [], workoutExercises: [], sets: [] };
+    plan: Row;
+  } = { exercises: [], equipment: [], equipmentAliases: [], userEquipment: [], links: [], workouts: [], workoutExercises: [], sets: [], plan };
 
   const db: DatabaseLike = {
     async all<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
-      if (sql.includes("SELECT equipmentId FROM UserEquipment")) return [];
-      if (sql.includes("SELECT e.name, ea.alias FROM Equipment")) return [];
+      if (sql.includes("SELECT equipmentId FROM UserEquipment")) return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => ({ equipmentId: row.equipmentId })) as unknown as T[];
+      if (sql.includes("SELECT ue.equipmentId,e.name FROM UserEquipment")) return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => ({ equipmentId: row.equipmentId, name: state.equipment.find((equipment) => equipment.id === row.equipmentId)?.name })) as unknown as T[];
+      if (sql.includes("SELECT e.id,e.name,ea.alias FROM Equipment")) {
+        return state.equipment.flatMap((equipment) => {
+          const aliases = state.equipmentAliases.filter((alias) => alias.equipmentId === equipment.id);
+          return aliases.length ? aliases.map((alias) => ({ id: equipment.id, name: equipment.name, alias: alias.alias })) : [{ id: equipment.id, name: equipment.name, alias: null }];
+        }) as unknown as T[];
+      }
+      if (sql.includes("SELECT e.name, ea.alias FROM Equipment")) {
+        return state.equipment.filter((equipment) => params.includes(equipment.id)).flatMap((equipment) => {
+          const aliases = state.equipmentAliases.filter((alias) => alias.equipmentId === equipment.id);
+          return aliases.length ? aliases.map((alias) => ({ name: equipment.name, alias: alias.alias })) : [{ name: equipment.name, alias: null }];
+        }) as unknown as T[];
+      }
+      if (sql.includes("SELECT e.* FROM Equipment e JOIN UserEquipment")) {
+        return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => state.equipment.find((equipment) => equipment.id === row.equipmentId)).filter(Boolean) as T[];
+      }
       if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return state.exercises as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return state.equipment as T[];
-      if (sql.includes("SELECT equipmentId,alias FROM EquipmentAlias")) return [];
+      if (sql.includes("SELECT equipmentId,alias FROM EquipmentAlias")) return state.equipmentAliases as unknown as T[];
       if (sql.includes("SELECT weightKg, reps FROM WorkoutHistory")) return [];
       if (sql.includes("SELECT equipmentId FROM ExerciseEquipment WHERE exerciseId = ?")) {
         return state.links.filter((row) => row.exerciseId === params[0]).map((row) => ({ equipmentId: row.equipmentId })) as unknown as T[];
@@ -46,8 +64,11 @@ function makeDatabase() {
     },
     async get<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {
       if (sql.includes("SELECT * FROM UserProfile")) return { sessionMinutes: 60 } as unknown as T;
-      if (sql.includes("SELECT * FROM Workout WHERE userId = ?")) {
-        return state.workouts.find((row) => row.userId === params[0] && row.planStepIndex === params[1] && row.status !== "superseded") as T | undefined;
+      if (sql.includes("WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)")) {
+        return state.workouts.find((row) => row.id === params[0] && row.userId === params[1] && (row.cycleId === params[2] || row.cycleId == null) && row.status !== "superseded") as T | undefined;
+      }
+      if (sql.includes("WHERE userId = ? AND cycleId = ? AND planStepIndex = ?")) {
+        return state.workouts.find((row) => row.userId === params[0] && row.cycleId === params[1] && row.planStepIndex === params[2] && row.status !== "superseded") as T | undefined;
       }
       if (sql.includes("SELECT COUNT(*) as count FROM WorkoutSet")) return { count: 0 } as unknown as T;
       if (sql.includes("SELECT userId,status,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?")) {
@@ -56,6 +77,7 @@ function makeDatabase() {
       if (sql.includes("SELECT userId,status FROM Workout WHERE id = ?")) return state.workouts.find((row) => row.id === params[0]) as T | undefined;
       if (sql.includes("SELECT * FROM Workout WHERE id = ?")) return state.workouts.find((row) => row.id === params[0]) as T | undefined;
       if (sql.includes("SELECT * FROM WorkoutExercise WHERE id = ?")) return state.workoutExercises.find((row) => row.id === params[0]) as T | undefined;
+      if (sql.includes("SELECT * FROM Equipment WHERE name = ?")) return state.equipment.find((row) => row.name === params[0]) as T | undefined;
       if (sql.includes("SELECT id FROM Equipment WHERE lower(name)=lower(?)")) return state.equipment.find((row) => row.name.toLowerCase() === String(params[0]).toLowerCase()) as T | undefined;
       if (sql.includes("SELECT id FROM Exercise WHERE lower(name)=lower(?)")) return state.exercises.find((row) => row.name.toLowerCase() === String(params[0]).toLowerCase()) as T | undefined;
       if (sql.includes("SELECT * FROM Exercise WHERE id = ?")) return state.exercises.find((row) => row.id === params[0]) as T | undefined;
@@ -82,8 +104,8 @@ function makeDatabase() {
       } else if (sql.includes("INSERT INTO Workout (")) {
         state.workouts.push({
           id: params[0], userId: params[1], focus: params[2], status: "pending", durationMin: params[3],
-          createdAt: params[4], planStepIndex: params[5], equipmentMode: params[6], equipmentSnapshot: params[7],
-          generatorVersion: params[8],
+          createdAt: params[4], planStepIndex: params[5], cycleId: params[6], equipmentMode: params[7], equipmentSnapshot: params[8],
+          generatorVersion: params[9],
         });
       } else if (sql.includes("INSERT INTO WorkoutExercise (")) {
         state.workoutExercises.push({
@@ -92,7 +114,11 @@ function makeDatabase() {
           sourceExerciseName: params[7], sourceMuscle: params[8], sourcePrimaryMuscle: params[9], sourceMachine: params[10],
         });
       } else if (sql.includes("UPDATE WorkoutPlanState SET activeWorkoutId")) {
-        // Plan-state advancement is deliberately outside workout generation.
+        state.plan.activeWorkoutId = params[0];
+      } else if (sql.includes("DELETE FROM UserEquipment WHERE userId = ?")) {
+        state.userEquipment = state.userEquipment.filter((row) => row.userId !== params[0]);
+      } else if (sql.includes("INSERT INTO UserEquipment (")) {
+        state.userEquipment.push({ id: params[0], userId: params[1], equipmentId: params[2] });
       } else if (sql.includes("UPDATE WorkoutExercise")) {
         const row = state.workoutExercises.find((exercise) => exercise.id === params[6]);
         if (row) Object.assign(row, {
@@ -124,14 +150,27 @@ describe("workout API CSV flow", () => {
   it("persists canonical CSV names and swaps only the requested slot without changing its programming", async () => {
     const sampleCsv = [
       "exercise,machine,muscle",
-      "Barbell Bench Press,Barbell,Chest",
-      "Incline Dumbbell Press,Dumbbell,Chest",
-      "Cable Chest Fly,Cable Machine,Chest",
-      "Dumbbell Bench Press,Dumbbell,Chest",
+      "Barbell Row,Barbell,Back",
+      "Lat Pulldown,Lat Pulldown,Back",
+      "Dumbbell Row,Dumbbells,Back",
+      "Cable Row,Cable Machine,Back",
+      "Seated Cable Row,Cable Machine,Back",
+      "Bodyweight Row,Bodyweight,Back",
+      "Bench Press,Barbell,Chest",
     ].join("\n");
     const service = new CsvExerciseRecommendationService(new CsvExerciseRepository("integration.csv", () => sampleCsv));
-    const { db, state } = makeDatabase();
-    const planState = { currentIndex: 0, cycleStatus: "IN_PROGRESS", units: [{ key: "chest", label: "Chest", muscles: ["chest"] }] };
+    const planState = {
+      currentIndex: 0, cycleId: "current-cycle", cycleStatus: "IN_PROGRESS", activeWorkoutId: null,
+      units: [{ key: "back", label: "Back", muscles: ["back"] }],
+    };
+    const { db, state } = makeDatabase(planState);
+    const selectedEquipment = ["Lat Pulldown", "Dumbbells", "Cable Machine"];
+    state.equipment = selectedEquipment.concat("Barbell").map((name) => ({ id: `equipment-${name}`, name }));
+    const oldCycleWorkout = {
+      id: "old-cycle-back-session", userId: "integration-user", focus: "Back", status: "pending",
+      durationMin: 60, planStepIndex: 0, cycleId: "previous-cycle", createdAt: "2026-09-01T00:00:00.000Z",
+    };
+    state.workouts.push(oldCycleWorkout);
 
     vi.doMock("../db/client", () => ({ db, nowIso: () => "2026-10-02T00:00:00.000Z" }));
     vi.doMock("../common/auth", () => ({ requireAuth: (req: any, _res: any, next: () => void) => { req.userId = "integration-user"; next(); } }));
@@ -142,14 +181,14 @@ describe("workout API CSV flow", () => {
       getCycleHistory: async () => [],
       getCurrentCycle: async () => null,
       getNextRequiredWorkout: async () => null,
-      getPlanState: async () => planState,
+      getPlanState: async () => state.plan,
       getRecentlyTrainedMuscles: async () => [],
       getRemainingWorkoutUnits: async () => [],
       getTodayWorkoutDecision: async () => ({ nextUnit: null, remainingUnits: [] }),
       getWorkoutHistory: async () => [],
       listAvailableStructures: () => [],
       completedUnits: () => [],
-      nextUnit: () => ({ key: "chest", label: "Chest", muscles: ["chest"] }),
+      nextUnit: (state: any) => state?.units?.[state.currentIndex] ?? null,
       remainingUnits: () => [],
       serializePlanSnapshot: () => ({}),
       startNewWorkoutCycle: async () => ({}),
@@ -160,8 +199,10 @@ describe("workout API CSV flow", () => {
     vi.doMock("../modules/workouts/exerciseRecommendation", () => ({ exerciseRecommendationService: service }));
 
     const { workoutRouter } = await import("../modules/workouts/routes.js");
+    const { equipmentRouter } = await import("../modules/equipment/routes.js");
     const app = express();
     app.use(express.json());
+    app.use("/", equipmentRouter);
     app.use("/workouts", workoutRouter);
     const server = app.listen(0);
     await new Promise<void>((resolve) => server.once("listening", resolve));
@@ -170,17 +211,42 @@ describe("workout API CSV flow", () => {
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
     try {
+      const staleCycleResponse = await fetch(`${baseUrl}/workouts/today`);
+      expect(staleCycleResponse.status).toBe(404);
+
+      const equipmentResponse = await fetch(`${baseUrl}/user/equipment`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ equipmentNames: selectedEquipment }),
+      });
+      expect(equipmentResponse.status).toBe(200);
+      expect(state.userEquipment.map((row) => row.equipmentId).sort()).toEqual(
+        selectedEquipment.map((name) => `equipment-${name}`).sort(),
+      );
+
       const generateResponse = await fetch(`${baseUrl}/workouts/generate`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ equipmentMode: "FULL_GYM" }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ equipmentMode: "USER_EQUIPMENT", availableEquipmentNames: selectedEquipment }),
       });
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
       const csvNames = new Set(sampleCsv.split("\n").slice(1).map((line) => line.split(",")[0]));
       expect(generated.exercises).toHaveLength(3);
+      expect(generated.availableExerciseCount).toBe(4);
       expect(generated.exercises.every((exercise: any) => csvNames.has(exercise.exerciseName))).toBe(true);
-      expect(generated.exercises.every((exercise: any) => exercise.exerciseName && exercise.machine && exercise.muscle)).toBe(true);
+      expect(generated.workout.durationMin).toBe(60);
+      expect(generated.workout.cycleId).toBe("current-cycle");
+      expect(generated.exercises.every((exercise: any) => exercise.exerciseName && exercise.machine && exercise.muscle === "Back")).toBe(true);
+      expect(generated.exercises.every((exercise: any) => selectedEquipment.includes(exercise.machine))).toBe(true);
+      expect(generated.exercises.some((exercise: any) => exercise.machine === "Barbell")).toBe(false);
+      expect(generated.exercises.every((exercise: any) => exercise.targetSets === 3)).toBe(true);
+      expect(state.workoutExercises.map((exercise) => exercise.sourceExerciseName).sort()).toEqual(
+        generated.exercises.map((exercise: any) => exercise.exerciseName).sort(),
+      );
+      expect(oldCycleWorkout.status).toBe("pending");
 
       const before = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
+      expect(before.id).toBe(generated.workout.id);
+      expect(before.cycleId).toBe("current-cycle");
       expect(before.exercises.map((exercise: any) => exercise.exerciseName)).toEqual(generated.exercises.map((exercise: any) => exercise.exerciseName));
       const original = before.exercises.map((exercise: any) => ({
         workoutExerciseId: exercise.workoutExerciseId, exerciseName: exercise.exerciseName,
@@ -215,13 +281,14 @@ describe("workout API CSV flow", () => {
 
       const refreshResponse = await fetch(`${baseUrl}/workouts/generate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ equipmentMode: "FULL_GYM", replaceExisting: true }),
+        body: JSON.stringify({ equipmentMode: "USER_EQUIPMENT", availableEquipmentNames: selectedEquipment, replaceExisting: true }),
       });
       expect(refreshResponse.status).toBe(201);
       const refreshed = await refreshResponse.json() as any;
       expect(refreshed.workout.id).not.toBe(before.id);
       expect(state.workouts.find((workout) => workout.id === before.id)?.status).toBe("superseded");
       expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)).toHaveLength(3);
+      expect(oldCycleWorkout.status).toBe("pending");
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(refreshed.workout.id);
       expect(current.needsRegeneration).toBe(false);
