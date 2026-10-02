@@ -93,9 +93,15 @@ function stableCsvId(prefix: string, value: string): string {
 async function ensureExerciseRows(
   database: DatabaseLike,
   selected: ReturnType<typeof exerciseRecommendationService.getRecommendedExercises>["exercises"]
-): Promise<Map<number, string>> {
-  const existingRows = await database.all<{ id: string; name: string }>(`SELECT id,name FROM Exercise`);
-  const byNormalizedName = new Map(existingRows.map((row) => [normalizeExerciseValue(row.name), row.id]));
+): Promise<Map<number, { id: string; sets: number; repRangeLow: number; repRangeHigh: number }>> {
+  const existingRows = await database.all<{
+    id: string;
+    name: string;
+    defaultSets: number;
+    repRangeLow: number;
+    repRangeHigh: number;
+  }>(`SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise`);
+  const byNormalizedName = new Map(existingRows.map((row) => [normalizeExerciseValue(row.name), row]));
   const equipmentRows = await database.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
   const aliasRows = await database.all<{ equipmentId: string; alias: string }>(`SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
   const equipmentIdByAlias = new Map<string, string>();
@@ -105,11 +111,11 @@ async function ensureExerciseRows(
     if (!equipmentIdByAlias.has(key)) equipmentIdByAlias.set(key, row.equipmentId);
   }
 
-  const ids = new Map<number, string>();
+  const ids = new Map<number, { id: string; sets: number; repRangeLow: number; repRangeHigh: number }>();
   const createdAt = new Date().toISOString();
   for (const exercise of selected) {
     const nameKey = normalizeExerciseValue(exercise.exercise);
-    let exerciseId = byNormalizedName.get(nameKey);
+    let exerciseRecord = byNormalizedName.get(nameKey);
     const machineKey = normalizeExerciseValue(exercise.machine);
     let equipmentId = equipmentIdByAlias.get(machineKey);
     if (!equipmentId) {
@@ -128,9 +134,9 @@ async function ensureExerciseRows(
       equipmentIdByAlias.set(machineKey, equipmentId);
     }
 
-    if (!exerciseId) {
+    if (!exerciseRecord) {
       const categories = exercise.muscleCategories;
-      exerciseId = stableCsvId("csv-exercise", exercise.exercise);
+      const exerciseId = stableCsvId("csv-exercise", exercise.exercise);
       await database.run(
         `INSERT INTO Exercise (id,name,primaryMuscle,secondaryMuscles,movementPattern,difficulty,defaultSets,repRangeLow,repRangeHigh,instructions,requiresEquipment,createdAt)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO NOTHING`,
@@ -140,15 +146,26 @@ async function ensureExerciseRows(
       );
       const persistedExercise = await database.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name)=lower(?)`, exercise.exercise);
       if (!persistedExercise) throw new Error(`Could not persist CSV exercise value "${exercise.exercise}".`);
-      exerciseId = persistedExercise.id;
-      byNormalizedName.set(nameKey, exerciseId);
+      exerciseRecord = {
+        id: persistedExercise.id,
+        name: exercise.exercise,
+        defaultSets: 3,
+        repRangeLow: 8,
+        repRangeHigh: 12,
+      };
+      byNormalizedName.set(nameKey, exerciseRecord);
     }
 
     await database.run(
       `INSERT INTO ExerciseEquipment (id,exerciseId,equipmentId) VALUES (?,?,?) ON CONFLICT(exerciseId,equipmentId) DO NOTHING`,
-      stableCsvId("csv-exercise-equipment", `${exercise.exercise}|${exercise.machine}`), exerciseId, equipmentId
+      stableCsvId("csv-exercise-equipment", `${exercise.exercise}|${exercise.machine}`), exerciseRecord.id, equipmentId
     );
-    ids.set(exercise.sourceIndex, exerciseId);
+    ids.set(exercise.sourceIndex, {
+      id: exerciseRecord.id,
+      sets: exerciseRecord.defaultSets || 3,
+      repRangeLow: exerciseRecord.repRangeLow || 8,
+      repRangeHigh: exerciseRecord.repRangeHigh || 12,
+    });
   }
   return ids;
 }
@@ -225,17 +242,17 @@ export async function generateWorkout(
   });
   const exerciseIds = await ensureExerciseRows(database, result.exercises);
   const generated = await Promise.all(result.exercises.map(async (exercise): Promise<GeneratedExercise> => {
-    const exerciseId = exerciseIds.get(exercise.sourceIndex);
-    if (!exerciseId) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
+    const exerciseRecord = exerciseIds.get(exercise.sourceIndex);
+    if (!exerciseRecord) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
     return {
-      exerciseId,
+      exerciseId: exerciseRecord.id,
       name: exercise.exercise,
       primaryMuscle: exercise.primaryMuscle,
       instructions: "",
-      sets: 3,
-      repRangeLow: 8,
-      repRangeHigh: 12,
-      suggestedWeightKg: await suggestNextWeight(database, userId, exerciseId),
+      sets: exerciseRecord.sets,
+      repRangeLow: exerciseRecord.repRangeLow,
+      repRangeHigh: exerciseRecord.repRangeHigh,
+      suggestedWeightKg: await suggestNextWeight(database, userId, exerciseRecord.id),
       wasSubstituted: false,
       equipmentRequired: [exercise.machine],
       requiresEquipment: normalizeExerciseValue(exercise.machine) !== "bodyweight",

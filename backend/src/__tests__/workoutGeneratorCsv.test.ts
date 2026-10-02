@@ -12,7 +12,7 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
       queries.push(sql);
       if (sql.includes("SELECT equipmentId FROM UserEquipment")) return [];
       if (sql.includes("SELECT e.name, ea.alias FROM Equipment")) return [];
-      if (sql.includes("SELECT id,name FROM Exercise")) return exercises as T[];
+      if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return exercises as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return equipment as T[];
       if (sql.includes("SELECT equipmentId,alias FROM EquipmentAlias")) return aliases as T[];
       if (sql.includes("SELECT weightKg, reps FROM WorkoutHistory")) return [];
@@ -35,7 +35,10 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
       }
       if (sql.includes("INSERT INTO Exercise (")) {
         if (!exercises.some((row) => row.name.toLowerCase() === String(params[1]).toLowerCase())) {
-          exercises.push({ id: params[0], name: params[1], primaryMuscle: params[2] });
+          exercises.push({
+            id: params[0], name: params[1], primaryMuscle: params[2],
+            defaultSets: params[6], repRangeLow: params[7], repRangeHigh: params[8],
+          });
         }
       }
       return { changes: 1 };
@@ -76,5 +79,22 @@ describe("CSV recommendations inside workout generation", () => {
     });
     expect(first.exercises.map((exercise) => exercise.name)).toEqual(second.exercises.map((exercise) => exercise.name));
     expect(first.exercises.every((exercise) => /back|biceps/i.test(exercise.muscle))).toBe(true);
+  });
+
+  it.each([
+    [30, 2, 6],
+    [45, 2, 6],
+    [59, 3, 9],
+    [60, 3, 9],
+    [90, 4, 12],
+    [120, 5, 15],
+  ])("generates a practical Chest workout for %i minutes", async (minutes, exerciseCount, workingSets) => {
+    const { db } = memoryDatabase();
+    const result = await generateWorkout(db, "realistic-volume-user", "Chest", minutes, {
+      lockToMuscles: ["chest"],
+      equipmentMode: "FULL_GYM",
+    });
+    expect(result.exercises).toHaveLength(exerciseCount);
+    expect(result.exercises.reduce((total, exercise) => total + exercise.sets, 0)).toBe(workingSets);
   });
 });
