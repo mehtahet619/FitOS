@@ -226,6 +226,7 @@ workoutRouter.post("/plan/start-cycle", async (req: AuthedRequest, res) => {
 
 const generateSchema = z.object({
   focus: z.string().optional(),
+  durationMinutes: z.number().int().min(15).max(180).optional(),
   dayIndex: z.number().int().min(0).optional(),
   equipmentMode: z.enum(["SCANNED", "FULL_GYM", "USER_EQUIPMENT"]).optional(),
   availableEquipmentNames: z.array(z.string().trim().min(1)).optional(),
@@ -240,6 +241,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
 
   const parsed = generateSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: "Invalid workout generation options." });
+  const durationMinutes = parsed.data.durationMinutes ?? profile.sessionMinutes;
   const state = await getPlanState(db, userId);
   const requiredUnit = state ? nextUnit(state) : undefined;
 
@@ -425,7 +427,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     );
   }
 
-  const generation = await generateWorkout(db, userId, focus, profile.sessionMinutes, {
+  const generation = await generateWorkout(db, userId, focus, durationMinutes, {
     lockToMuscles: requiredUnit.muscles,
     equipmentMode,
     scannedEquipmentIds,
@@ -441,7 +443,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     event: "workout_generation",
     cycleId: state.cycleId,
     targetMuscles: requiredUnit.muscles,
-    sessionDurationMinutes: profile.sessionMinutes,
+    sessionDurationMinutes: durationMinutes,
     equipmentMode,
     availableEquipment: availableEquipmentForLog,
     csvCandidateCount: generation.availableExerciseCount,
@@ -461,7 +463,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const workoutExerciseIds: string[] = [];
   await db.run(
     `INSERT INTO Workout (id, userId, workoutPlanId, focus, status, durationMin, createdAt, completedAt, planStepIndex, cycleId, equipmentMode, equipmentSnapshot, generatorVersion) VALUES (?, ?, NULL, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?, ?)`,
-    workoutId, userId, focus, profile.sessionMinutes, ts, currentPlanStepIndex, state.cycleId, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
+    workoutId, userId, focus, durationMinutes, ts, currentPlanStepIndex, state.cycleId, equipmentMode, JSON.stringify(equipmentSnapshot), CSV_WORKOUT_GENERATOR_VERSION
   );
   for (const [idx, exercise] of exercises.entries()) {
     const id = uuidv4();
@@ -485,7 +487,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   // The selection is fully local and deterministic; no AI/provider is part of generation.
   const summary = null;
   return res.status(201).json({
-    workout: { id: workoutId, focus, durationMin: profile.sessionMinutes, status: "pending", cycleId: state.cycleId },
+    workout: { id: workoutId, focus, durationMin: durationMinutes, status: "pending", cycleId: state.cycleId },
     requestedExerciseCount: generation.requestedExerciseCount,
     availableExerciseCount: generation.availableExerciseCount,
     limitedByDataset: generation.limitedByDataset,
