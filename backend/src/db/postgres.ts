@@ -70,6 +70,7 @@ const camelCaseColumns: Record<string, string> = {
   startedat: "startedAt",
   primarymuscle: "primaryMuscle",
   exercisename: "exerciseName",
+  familykey: "familyKey",
   sourceexercisename: "sourceExerciseName",
   sourcemuscle: "sourceMuscle",
   sourceprimarymuscle: "sourcePrimaryMuscle",

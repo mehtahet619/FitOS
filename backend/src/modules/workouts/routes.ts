@@ -30,7 +30,7 @@ import {
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
-import { exerciseRecommendationService } from "./exerciseRecommendation";
+import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -810,11 +810,18 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
 
   const usedNames = await db.all<{ name: string }>(
     `SELECT COALESCE(we.sourceExerciseName,e.name) as name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ?`, req.params.id);
+  const swapHistory = await db.all<{ familyKey: string }>(
+    `SELECT familyKey FROM WorkoutExerciseSwapHistory WHERE workoutExerciseId = ?`, workoutExerciseId);
+  const excludedFamilyKeys = new Set([
+    ...swapHistory.map((row) => row.familyKey),
+    ...usedNames.map((row) => exerciseFamilyKey(row.name)),
+  ]);
   const csvAlternatives = exerciseRecommendationService.getSwapAlternatives(
     exerciseRow.sourceExerciseName || base.name,
     baseMachine,
     base.primaryMuscle,
     usedNames.map((row) => row.name),
+    excludedFamilyKeys,
   );
   const equipmentIdByAlias = new Map<string, string>();
   for (const row of allEquipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
@@ -850,6 +857,8 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     });
 
   const csvExercise = nextAlternative.exercise;
+  const previousFamilyKey = exerciseFamilyKey(exerciseRow.sourceExerciseName || base.name);
+  const nextFamilyKey = exerciseFamilyKey(csvExercise.exercise);
   const persisted = await ensureExerciseRows(db, [csvExercise]);
   const exerciseRecord = persisted.get(csvExercise.sourceIndex);
   if (!exerciseRecord) throw new Error(`Could not persist CSV substitute "${csvExercise.exercise}".`);
@@ -864,6 +873,13 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     persistedSubstitute.id, exerciseRow.exerciseId, csvExercise.exercise, csvExercise.muscle,
     base.primaryMuscle, csvExercise.machine, workoutExerciseId
   );
+  const swappedAt = nowIso();
+  for (const [familyKey, exerciseName] of [[previousFamilyKey, exerciseRow.sourceExerciseName || base.name], [nextFamilyKey, csvExercise.exercise]]) {
+    await db.run(
+      `INSERT INTO WorkoutExerciseSwapHistory (workoutExerciseId,familyKey,exerciseName,createdAt) VALUES (?,?,?,?) ON CONFLICT(workoutExerciseId,familyKey) DO NOTHING`,
+      workoutExerciseId, familyKey, exerciseName, swappedAt,
+    );
+  }
   const explanation = `Swapped ${base.name} for ${csvExercise.exercise}.`;
   return res.json({
     workoutExerciseId,

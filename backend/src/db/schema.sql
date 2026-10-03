@@ -224,6 +224,15 @@ CREATE TABLE IF NOT EXISTS WorkoutExercise (
 );
 CREATE INDEX IF NOT EXISTS idx_we_workout ON WorkoutExercise(workoutId);
 
+CREATE TABLE IF NOT EXISTS WorkoutExerciseSwapHistory (
+  workoutExerciseId TEXT NOT NULL REFERENCES WorkoutExercise(id) ON DELETE CASCADE,
+  familyKey TEXT NOT NULL,
+  exerciseName TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  PRIMARY KEY (workoutExerciseId, familyKey)
+);
+CREATE INDEX IF NOT EXISTS idx_we_swap_history_slot ON WorkoutExerciseSwapHistory(workoutExerciseId);
+
 CREATE TABLE IF NOT EXISTS WorkoutSet (
   id TEXT PRIMARY KEY,
   workoutExerciseId TEXT NOT NULL REFERENCES WorkoutExercise(id),

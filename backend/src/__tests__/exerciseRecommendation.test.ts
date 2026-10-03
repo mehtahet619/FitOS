@@ -7,6 +7,7 @@ import {
 import {
   CsvExerciseRecommendationService,
   exerciseCountForDuration,
+  exerciseFamilyKey,
 } from "../modules/workouts/exerciseRecommendation";
 
 const csvPath = path.resolve(__dirname, "../../data/exercises.csv");
@@ -150,6 +151,50 @@ describe("bundled CSV exercise recommendations", () => {
         result.exercises.map((exercise) => exercise.exercise),
       ).size,
     ).toBe(3);
+    expect(new Set(result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise))).size).toBe(3);
+  });
+
+  it("normalizes equipment and superficial lat-pulldown variations into deterministic families", () => {
+    const pulldownFamily = exerciseFamilyKey("Lat Pulldown");
+    for (const variation of [
+      "Wide-Grip Lat Pulldown",
+      "Close-Grip Lat Pulldown",
+      "Neutral-Grip Lat Pulldown",
+      "Single-Arm Lat Pulldown",
+      "Cable Lat Pulldown",
+      "Lat Pulldown Machine",
+    ]) {
+      expect(exerciseFamilyKey(variation)).toBe(pulldownFamily);
+    }
+    expect(exerciseFamilyKey("Straight-Arm Pulldown")).not.toBe(pulldownFamily);
+    expect(exerciseFamilyKey("Dumbbell Pullover")).toBe(exerciseFamilyKey("Machine Pullover"));
+    expect(exerciseFamilyKey("Assisted Pull Up")).toBe(exerciseFamilyKey("Wide Grip Chin Up"));
+  });
+
+  it("returns at most one exact CSV alternative per movement family", () => {
+    const familyService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("families.csv", () => [
+        "exercise,machine,muscle,time_taken_1_set,targeted_muscle",
+        'Lat Pulldown,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Wide Grip Lat Pulldown,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Close Grip Lat Pulldown,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Assisted Pull Up,Pull-up Bar,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Wide Grip Assisted Pull Up,Pull-up Bar,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Straight-Arm Pulldown,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+        'Dumbbell Pullover,Dumbbells,Back,20-40 sec,"Latissimus Dorsi, Teres Major"',
+      ].join("\n")),
+    );
+
+    const alternatives = familyService.getSwapAlternatives("Lat Pulldown", "Cable Machine", "Back");
+
+    expect(alternatives.map((exercise) => exercise.exercise)).toEqual([
+      "Assisted Pull Up",
+      "Straight-Arm Pulldown",
+      "Dumbbell Pullover",
+    ]);
+    expect(new Set(alternatives.map((exercise) => exerciseFamilyKey(exercise.exercise))).size).toBe(alternatives.length);
+    expect(alternatives.every((exercise) => exercise.timeTakenOneSet === "20-40 sec")).toBe(true);
+    expect(alternatives.every((exercise) => exercise.targetedMuscle === "Latissimus Dorsi, Teres Major")).toBe(true);
   });
 
   it("uses only exact targeted-muscle and one-set-duration matches for swaps", () => {
