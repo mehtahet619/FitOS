@@ -8,6 +8,11 @@ export interface CsvExercise {
   machine: string;
   muscle: string;
   muscleCategories: string[];
+  /** Dataset's exact one-set duration string, retained without interpretation. */
+  timeTakenOneSet: string;
+  /** Dataset's exact targeted-muscle cell and parsed individual values. */
+  targetedMuscle: string;
+  targetedMuscles: string[];
 }
 
 export function normalizeExerciseValue(value: string): string {
@@ -89,6 +94,8 @@ export function parseExerciseCsv(source: string): CsvExercise[] {
   for (const required of ["exercise", "machine", "muscle"]) {
     if (!indexes.has(required)) throw new Error(`Bundled exercise CSV is missing the required "${required}" column.`);
   }
+  const timeIndex = indexes.get("time taken 1 set");
+  const targetedMuscleIndex = indexes.get("targeted muscle");
 
   const exercises: CsvExercise[] = [];
   for (const [recordIndex, record] of records.slice(1).entries()) {
@@ -111,7 +118,22 @@ export function parseExerciseCsv(source: string): CsvExercise[] {
     if (muscleCategories.length === 0) {
       throw new Error(`Bundled exercise CSV record ${recordIndex + 2} has no muscle categories.`);
     }
-    exercises.push({ sourceIndex: recordIndex + 2, exercise, machine, muscle, muscleCategories });
+    const timeTakenOneSet = timeIndex === undefined ? "" : record[timeIndex].trim();
+    const targetedMuscle = targetedMuscleIndex === undefined ? "" : record[targetedMuscleIndex].trim();
+    const targetedMuscles = [...new Map(
+      targetedMuscle.split(",").map((value) => value.trim()).filter(Boolean)
+        .map((value) => [normalizeExerciseValue(value), value] as const)
+    ).values()];
+    exercises.push({
+      sourceIndex: recordIndex + 2,
+      exercise,
+      machine,
+      muscle,
+      muscleCategories,
+      timeTakenOneSet,
+      targetedMuscle,
+      targetedMuscles,
+    });
   }
   if (exercises.length === 0) throw new Error("Bundled exercise CSV contains no exercise records.");
   return exercises;

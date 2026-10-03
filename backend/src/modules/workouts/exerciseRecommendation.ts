@@ -29,7 +29,20 @@ export interface ExerciseRecommendationResult {
 
 export interface ExerciseRecommendationService {
   getRecommendedExercises(input: ExerciseRecommendationInput): ExerciseRecommendationResult;
-  getCsvAlternatives(targetMuscles: string[], excludedExerciseNames?: Iterable<string>): RecommendedExercise[];
+  getSwapAlternatives(
+    currentExerciseName: string,
+    currentMachine: string,
+    slotPrimaryMuscle: string,
+    excludedExerciseNames?: Iterable<string>,
+  ): RecommendedExercise[];
+}
+
+function exactDatasetValue(value: string): string {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
+}
+
+function targetedMuscleKey(values: string[]): string {
+  return [...new Set(values.map(normalizeExerciseValue).filter(Boolean))].sort().join("|");
 }
 
 export function exerciseCountForDuration(minutes: number): number {
@@ -135,27 +148,44 @@ function selectWithCoverage(
 export class CsvExerciseRecommendationService implements ExerciseRecommendationService {
   constructor(private readonly repository: CsvExerciseRepository = csvExerciseRepository) {}
 
-  getCsvAlternatives(targetMuscles: string[], excludedExerciseNames: Iterable<string> = []): RecommendedExercise[] {
-    const targetKeys = new Set(targetMuscles.map(normalizeExerciseValue).filter(Boolean));
+  getSwapAlternatives(
+    currentExerciseName: string,
+    currentMachine: string,
+    slotPrimaryMuscle: string,
+    excludedExerciseNames: Iterable<string> = [],
+  ): RecommendedExercise[] {
+    const nameKey = normalizeExerciseValue(currentExerciseName);
+    const machineKey = normalizeExerciseValue(currentMachine);
     const excludedNames = new Set([...excludedExerciseNames].map(normalizeExerciseValue).filter(Boolean));
-    if (targetKeys.size === 0) return [];
+    if (!nameKey || !machineKey || !slotPrimaryMuscle) return [];
 
-    const uniqueCandidates = new Map<string, RecommendedExercise>();
-    for (const row of this.repository.getAll()) {
-      const matchingMuscles = row.muscleCategories.filter((muscle) => {
-        const categoryKey = normalizeExerciseValue(muscle);
-        const categoryWords = new Set(categoryKey.split(" "));
-        return [...targetKeys].some((target) => {
-          if (categoryKey === target) return true;
-          return target.split(" ").some((word) => categoryWords.has(word));
-        });
-      });
+    const rows = this.repository.getAll();
+    const currentRow = rows.find((row) =>
+      normalizeExerciseValue(row.exercise) === nameKey
+      && normalizeExerciseValue(row.machine) === machineKey,
+    );
+    if (!currentRow || !currentRow.timeTakenOneSet || currentRow.targetedMuscles.length === 0) return [];
+
+    const targetKey = targetedMuscleKey(currentRow.targetedMuscles);
+    const durationKey = exactDatasetValue(currentRow.timeTakenOneSet);
+    const matchingRows = rows.filter((row) =>
+      targetedMuscleKey(row.targetedMuscles) === targetKey
+      && exactDatasetValue(row.timeTakenOneSet) === durationKey,
+    );
+    const currentIndex = matchingRows.findIndex((row) => row.sourceIndex === currentRow.sourceIndex);
+    if (currentIndex < 0) return [];
+
+    // Walk the uploaded dataset in a stable cycle from the current row. Since
+    // the current workout names are excluded, a slot advances to the next
+    // valid row each time it is swapped without repeating early.
+    const candidates: RecommendedExercise[] = [];
+    for (let offset = 1; offset < matchingRows.length; offset += 1) {
+      const row = matchingRows[(currentIndex + offset) % matchingRows.length];
       const exerciseKey = normalizeExerciseValue(row.exercise);
-      if (matchingMuscles.length === 0 || excludedNames.has(exerciseKey) || uniqueCandidates.has(exerciseKey)) continue;
-      const exactTargetCategory = matchingMuscles.find((muscle) => targetKeys.has(normalizeExerciseValue(muscle)));
-      uniqueCandidates.set(exerciseKey, { ...row, primaryMuscle: exactTargetCategory ?? matchingMuscles[0] });
+      if (excludedNames.has(exerciseKey)) continue;
+      candidates.push({ ...row, primaryMuscle: slotPrimaryMuscle });
     }
-    return [...uniqueCandidates.values()];
+    return candidates;
   }
 
   getRecommendedExercises(input: ExerciseRecommendationInput): ExerciseRecommendationResult {

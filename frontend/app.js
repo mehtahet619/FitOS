@@ -602,6 +602,16 @@ function renderGeneratedWorkout(generated, plan) {
   }, plan);
 }
 
+function isWorkoutDurationValid(input) {
+  return Number.isInteger(input.valueAsNumber) && input.valueAsNumber >= 15 && input.valueAsNumber <= 180;
+}
+
+function showWorkoutDurationError(input, feedback) {
+  feedback.className = "banner banner-error";
+  feedback.textContent = "Choose how many minutes you have today (15–180).";
+  input.focus();
+}
+
 function renderLegacyWorkoutRefresh(workout, plan) {
   const el = $("workout-content");
   const focus = plan?.nextWorkout?.label || workout.focus || "today's plan";
@@ -616,18 +626,24 @@ function renderLegacyWorkoutRefresh(workout, plan) {
   el.innerHTML = `
     <section class="card">
       <div class="card-label">Refresh today's workout</div>
-      <p class="card-sub">FitOS will build your ${escapeWorkoutText(focus)} session for ${escapeWorkoutText(muscles)}, using your saved session duration and today's equipment.${completedSetCount ? ` ${completedSetCount} logged set${completedSetCount === 1 ? " stays" : "s stay"} in your history.` : ""}</p>
+      <p class="card-sub">FitOS will build your ${escapeWorkoutText(focus)} session for ${escapeWorkoutText(muscles)}, using the duration you choose today and today's equipment.${completedSetCount ? ` ${completedSetCount} logged set${completedSetCount === 1 ? " stays" : "s stay"} in your history.` : ""}</p>
+      <div class="field"><label for="refresh-workout-duration">How long can you train today? (minutes)</label><input id="refresh-workout-duration" type="number" min="15" max="180" step="1" placeholder="Choose today's duration" required /></div>
       <button class="btn btn-primary" id="refresh-plan-workout">Build workout for this plan</button>
       <div id="refresh-plan-workout-feedback" aria-live="polite"></div>
     </section>
   `;
   const button = $("refresh-plan-workout");
+  const durationInput = $("refresh-workout-duration");
   button.addEventListener("click", async () => {
+    if (!isWorkoutDurationValid(durationInput)) {
+      showWorkoutDurationError(durationInput, $("refresh-plan-workout-feedback"));
+      return;
+    }
     button.disabled = true;
     button.textContent = "Building your workout…";
     try {
       const equipmentMode = workout.equipmentMode || "USER_EQUIPMENT";
-      const request = { focus, replaceExisting: true, equipmentMode };
+      const request = { focus, durationMinutes: durationInput.valueAsNumber, replaceExisting: true, equipmentMode };
       if (Array.isArray(workout.availableEquipmentNames)) {
         if (equipmentMode === "SCANNED") request.detectedEquipmentNames = workout.availableEquipmentNames;
         if (equipmentMode === "USER_EQUIPMENT") request.availableEquipmentNames = workout.availableEquipmentNames;
@@ -848,6 +864,20 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   const description = document.createElement("div");
   description.className = "card-sub";
   description.textContent = `Choose the machines and equipment available for ${plan.nextWorkout.label}. FitOS will only recommend exercises you can do with these choices.`;
+  const durationField = document.createElement("div");
+  durationField.className = "field";
+  const durationLabel = document.createElement("label");
+  durationLabel.htmlFor = "workout-duration-minutes";
+  durationLabel.textContent = "How long can you train today? (minutes)";
+  const durationInput = document.createElement("input");
+  durationInput.id = "workout-duration-minutes";
+  durationInput.type = "number";
+  durationInput.min = "15";
+  durationInput.max = "180";
+  durationInput.step = "1";
+  durationInput.placeholder = "Choose today's duration";
+  durationInput.required = true;
+  durationField.append(durationLabel, durationInput);
   const chipGroup = document.createElement("div");
   chipGroup.className = "chip-group equipment-picker-options";
   const selectionSummary = document.createElement("div");
@@ -859,7 +889,7 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   buildButton.textContent = "Show my exercises";
   buildButton.disabled = true;
   selectionSummary.textContent = "Loading your equipment...";
-  card.append(heading, description, chipGroup, selectionSummary, feedback, buildButton);
+  card.append(heading, description, durationField, chipGroup, selectionSummary, feedback, buildButton);
   parent.appendChild(card);
 
   let equipment;
@@ -932,6 +962,10 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   buildButton.disabled = false;
 
   buildButton.addEventListener("click", async () => {
+    if (!isWorkoutDurationValid(durationInput)) {
+      showWorkoutDurationError(durationInput, feedback);
+      return;
+    }
     buildButton.disabled = true;
     buildButton.textContent = "Building your workout...";
     feedback.className = "";
@@ -940,6 +974,7 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
     try {
       const generated = await Api.post("/workouts/generate", {
         focus: plan.nextWorkout.label,
+        durationMinutes: durationInput.valueAsNumber,
         equipmentMode: "USER_EQUIPMENT",
         availableEquipmentNames: Array.from(selected),
       });
@@ -1063,14 +1098,24 @@ function renderWorkout(workout, plan) {
   const active = activeIndex >= 0 ? progress[activeIndex] : null;
   const workoutName = escapeWorkoutText(workout.focus || "Strength workout");
   const duration = Number(workout.durationMin) || 0;
+  const completedWorkout = workout.status === "completed";
   const planName = plan?.activePlan?.structureLabel || plan?.activePlan || "";
   const nextPlanWorkout = plan?.nextWorkout?.label;
   const equipmentLine = (exercise) => exercise.machine || (exercise.requiresEquipment
     ? (exercise.equipmentRequired || []).join(", ") || exercise.equipmentName || "Gym equipment"
     : "Bodyweight");
+  const canChangeDuration = !completedWorkout && loggedSets === 0 && Boolean(plan?.nextWorkout);
+  const changeDurationPanel = canChangeDuration
+    ? `<section class="card workout-duration-card">
+        <div class="card-label">Change today's session length</div>
+        <p class="card-sub">Choose how long you have. FitOS will rebuild this ${escapeWorkoutText(workout.focus || "workout")} exercise list to fit that time. You can change it until you log your first set.</p>
+        <div class="field"><label for="active-workout-duration">Available time today (minutes)</label><input id="active-workout-duration" type="number" min="15" max="180" step="1" placeholder="Choose today's duration" required /></div>
+        <button class="btn btn-outline" id="change-workout-duration">Update workout duration</button>
+        <div id="change-workout-duration-feedback" aria-live="polite"></div>
+      </section>`
+    : "";
 
   $("workout-focus-label").textContent = `${workout.focus} · ${duration} min`;
-  const completedWorkout = workout.status === "completed";
   const activeExerciseCard = active
     ? (() => {
       const exercise = active.exercise;
@@ -1129,6 +1174,7 @@ function renderWorkout(workout, plan) {
       <div class="workout-session-meta">${duration} min <span>·</span> ${progress.length} exercises <span>·</span> ${loggedSets}/${totalSets} sets</div>
       <div class="workout-progress-track" role="progressbar" aria-label="Workout set progress" aria-valuemin="0" aria-valuemax="${totalSets}" aria-valuenow="${loggedSets}"><span style="width:${progressPercent}%"></span></div>
     </section>
+    ${changeDurationPanel}
     ${activeExerciseCard}
     <section class="workout-exercise-list">
       <div class="workout-list-heading"><div><span class="workout-eyebrow">YOUR WORKOUT</span><h3>Exercise order</h3></div><span>${progress.length} movements</span></div>
@@ -1137,6 +1183,42 @@ function renderWorkout(workout, plan) {
     ${completedWorkout && plan ? renderActivePlanCard(plan) : ""}
     ${!completedWorkout ? `<div class="workout-finish-note">You can finish early. Sets you haven't logged won't be added to your training history.</div><button class="btn btn-primary" id="complete-workout-btn">Finish workout</button>` : ""}
   `;
+
+  const changeDurationButton = $("change-workout-duration");
+  if (changeDurationButton) {
+    const durationInput = $("active-workout-duration");
+    const feedback = $("change-workout-duration-feedback");
+    changeDurationButton.addEventListener("click", async () => {
+      if (!isWorkoutDurationValid(durationInput)) {
+        showWorkoutDurationError(durationInput, feedback);
+        return;
+      }
+      changeDurationButton.disabled = true;
+      changeDurationButton.textContent = "Updating workout…";
+      feedback.className = "";
+      feedback.textContent = "";
+      try {
+        const equipmentMode = workout.equipmentMode || "USER_EQUIPMENT";
+        const request = {
+          focus: plan.nextWorkout.label,
+          durationMinutes: durationInput.valueAsNumber,
+          replaceExisting: true,
+          equipmentMode,
+        };
+        if (Array.isArray(workout.availableEquipmentNames)) {
+          if (equipmentMode === "SCANNED") request.detectedEquipmentNames = workout.availableEquipmentNames;
+          if (equipmentMode === "USER_EQUIPMENT") request.availableEquipmentNames = workout.availableEquipmentNames;
+        }
+        const generated = await Api.post("/workouts/generate", request);
+        renderGeneratedWorkout(generated, plan);
+      } catch (error) {
+        feedback.className = "banner banner-error";
+        feedback.textContent = error.message || "Could not update the workout duration.";
+        changeDurationButton.disabled = false;
+        changeDurationButton.textContent = "Update workout duration";
+      }
+    });
+  }
 
   const logSetButton = $("log-workout-set");
   if (logSetButton && active) {
