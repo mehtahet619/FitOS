@@ -155,14 +155,14 @@ describe("workout API CSV flow", () => {
 
   it("persists canonical CSV names and swaps only the requested slot without changing its programming", async () => {
     const sampleCsv = [
-      "exercise,machine,muscle",
-      "Barbell Row,Barbell,Back",
-      "Lat Pulldown,Lat Pulldown,Back",
-      "Dumbbell Row,Dumbbells,Back",
-      "Cable Row,Cable Machine,Back",
-      "Seated Cable Row,Cable Machine,Back",
-      "Bodyweight Row,Bodyweight,Back",
-      "Bench Press,Barbell,Chest",
+      "exercise,machine,muscle,time_taken_1_set,targeted_muscle",
+      'Barbell Row,Barbell,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Lat Pulldown,Lat Pulldown,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Dumbbell Row,Dumbbells,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Cable Row,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Seated Cable Row,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Bodyweight Row,Bodyweight,Back,25-45 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Bench Press,Barbell,Chest,20-40 sec,"Pectoralis Major, Triceps Brachii"',
     ].join("\n");
     const service = new CsvExerciseRecommendationService(new CsvExerciseRepository("integration.csv", () => sampleCsv));
     const planState = {

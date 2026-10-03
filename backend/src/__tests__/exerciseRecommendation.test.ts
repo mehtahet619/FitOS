@@ -152,29 +152,33 @@ describe("bundled CSV exercise recommendations", () => {
     ).toBe(3);
   });
 
-  it("returns same-target CSV swap alternatives and excludes exercises already in the workout", () => {
-    const swapService =
-      new CsvExerciseRecommendationService(
-        new CsvExerciseRepository("swap.csv", () =>
-          [
-            "exercise,machine,muscle",
-            "Barbell Bench Press,Barbell,Chest",
-            "Cable Chest Fly,Cable Machine,Chest",
-            "Lat Pulldown,Cable Machine,Back",
-          ].join("\n"),
-        ),
-      );
-
-    const alternatives = swapService.getCsvAlternatives(
-      ["Chest"],
-      [" BARBELL bench press "],
+  it("uses only exact targeted-muscle and one-set-duration matches for swaps", () => {
+    const swapService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("swap.csv", () => [
+        "exercise,machine,muscle,time_taken_1_set,targeted_muscle",
+        'Barbell Curl,Barbell,Biceps,20-40 sec,"Biceps Brachii, Brachialis"',
+        'Cable Curl,Cable Machine,Biceps,20-40 sec,"Biceps Brachii, Brachialis"',
+        'Hammer Curl,Dumbbells,"Biceps, Brachialis, Forearms",20-40 sec,"Brachioradialis, Biceps Brachii, Brachialis"',
+        'Slow Cable Curl,Cable Machine,Biceps,25-45 sec,"Biceps Brachii, Brachialis"',
+        'Preacher Curl,Preacher Curl Machine,Biceps,20-40 sec,"Brachialis, Biceps Brachii"',
+        'Concentration Curl,Dumbbells,Biceps,20-40 sec,"Biceps Brachii, Brachialis"',
+      ].join("\n")),
     );
 
-    expect(
-      alternatives.map((exercise) => exercise.exercise),
-    ).toEqual(["Cable Chest Fly"]);
+    const alternatives = swapService.getSwapAlternatives(
+      "Barbell Curl",
+      "Barbell",
+      "Biceps",
+      [" BARBELL curl ", "Cable Curl"],
+    );
 
-    expect(alternatives[0].primaryMuscle).toBe("Chest");
+    expect(alternatives.map((exercise) => exercise.exercise)).toEqual([
+      "Preacher Curl",
+      "Concentration Curl",
+    ]);
+    expect(alternatives.every((exercise) => exercise.timeTakenOneSet === "20-40 sec")).toBe(true);
+    expect(alternatives.every((exercise) => exercise.targetedMuscles.join("|") === "Brachialis|Biceps Brachii" || exercise.targetedMuscles.join("|") === "Biceps Brachii|Brachialis")).toBe(true);
+    expect(alternatives.every((exercise) => exercise.primaryMuscle === "Biceps")).toBe(true);
   });
 
   it("matches normalized target text and uses CSV categories such as Upper Back", () => {
