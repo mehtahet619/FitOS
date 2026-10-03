@@ -1,6 +1,7 @@
 import {
   CsvExercise,
   CsvExerciseRepository,
+  csvExerciseAlternativesRepository,
   csvExerciseRepository,
   normalizeExerciseValue,
 } from "./exerciseCsvRepository";
@@ -144,7 +145,18 @@ function selectWithCoverage(
 }
 
 export class CsvExerciseRecommendationService implements ExerciseRecommendationService {
-  constructor(private readonly repository: CsvExerciseRepository = csvExerciseRepository) {}
+  private readonly alternativesRepository: CsvExerciseRepository;
+
+  constructor(
+    private readonly repository: CsvExerciseRepository = csvExerciseRepository,
+    alternativesRepository?: CsvExerciseRepository,
+  ) {
+    // Tests and embedded callers that supply an in-memory repository keep a
+    // self-contained fixture. The production service reads swaps exclusively
+    // from the curated 50k alternatives dataset.
+    this.alternativesRepository = alternativesRepository
+      ?? (repository === csvExerciseRepository ? csvExerciseAlternativesRepository : repository);
+  }
 
   getSwapAlternatives(
     currentExerciseName: string,
@@ -158,34 +170,49 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     const excludedNames = new Set([...excludedExerciseNames].map(normalizeExerciseValue).filter(Boolean));
     if (!nameKey || !machineKey || !slotPrimaryMuscle) return [];
 
-    const rows = this.repository.getAll();
-    const currentRow = rows.find((row) =>
-      normalizeExerciseValue(row.exercise) === nameKey
-      && normalizeExerciseValue(row.machine) === machineKey,
-    );
-    if (!currentRow || !currentRow.timeTakenOneSet || currentRow.targetedMuscles.length === 0) return [];
-
-    const targetKey = targetedMuscleKey(currentRow.targetedMuscles);
-    const durationKey = exactDatasetValue(currentRow.timeTakenOneSet);
     const excludedFamilies = new Set([...excludedFamilyKeys].map(normalizeExerciseValue).filter(Boolean));
-    excludedFamilies.add(exerciseFamilyKey(currentRow.exercise));
-    const matchingRows = rows.filter((row) =>
-      targetedMuscleKey(row.targetedMuscles) === targetKey
-      && exactDatasetValue(row.timeTakenOneSet) === durationKey,
+    const currentFamily = exerciseFamilyKey(currentExerciseName);
+    excludedFamilies.add(currentFamily);
+    const alternativesRows = this.alternativesRepository.getAll();
+    const sourceAnchors = alternativesRows.filter((row) =>
+      row.alternativeRank === 1
+      && exerciseFamilyKey(row.exercise) === currentFamily
+      && row.alternativeGroupId
+      && row.targetedMuscles.length > 0
+      && row.timeTakenOneSet,
     );
-    const currentIndex = matchingRows.findIndex((row) => row.sourceIndex === currentRow.sourceIndex);
-    if (currentIndex < 0) return [];
+    // Prefer an exact dataset name/equipment match. Existing workouts can
+    // predate this dataset, so a deterministic family match is the migration
+    // bridge; the selected anchor and all alternatives still come only from
+    // the new CSV and share its exact targeted muscle and duration.
+    const sourceAnchor = [...sourceAnchors].sort((left, right) => {
+      const score = (row: CsvExercise) =>
+        (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
+        + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
+        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(slotPrimaryMuscle)) ? 1 : 0);
+      return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
+    })[0];
+    if (!sourceAnchor?.alternativeGroupId) return [];
 
-    // Walk source order stably, offering no more than one row from each
-    // unseen family. This stops CSV grip/stance/equipment variants from being
-    // presented as separate alternatives.
+    const targetKey = targetedMuscleKey(sourceAnchor.targetedMuscles);
+    const durationKey = exactDatasetValue(sourceAnchor.timeTakenOneSet);
+    const orderedCandidates = alternativesRows
+      .filter((row) => row.alternativeGroupId === sourceAnchor.alternativeGroupId
+        && (row.alternativeRank ?? 0) > 1
+        && targetedMuscleKey(row.targetedMuscles) === targetKey
+        && exactDatasetValue(row.timeTakenOneSet) === durationKey)
+      .sort((left, right) => (left.alternativeRank ?? 0) - (right.alternativeRank ?? 0));
+
+    // Rank 2–6 are the dataset's explicit substitutions. Keep that stable
+    // order while allowing at most one genuinely different movement family.
     const candidates: RecommendedExercise[] = [];
     const seenFamilies = new Set(excludedFamilies);
-    for (let offset = 1; offset < matchingRows.length; offset += 1) {
-      const row = matchingRows[(currentIndex + offset) % matchingRows.length];
+    const seenNames = new Set<string>();
+    for (const row of orderedCandidates) {
       const exerciseKey = normalizeExerciseValue(row.exercise);
       const familyKey = exerciseFamilyKey(row.exercise);
-      if (excludedNames.has(exerciseKey) || seenFamilies.has(familyKey)) continue;
+      if (excludedNames.has(exerciseKey) || seenNames.has(exerciseKey) || seenFamilies.has(familyKey)) continue;
+      seenNames.add(exerciseKey);
       seenFamilies.add(familyKey);
       candidates.push({ ...row, primaryMuscle: slotPrimaryMuscle });
     }
