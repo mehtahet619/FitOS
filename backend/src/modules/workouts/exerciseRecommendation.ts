@@ -167,8 +167,9 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
   ): RecommendedExercise[] {
     const nameKey = normalizeExerciseValue(currentExerciseName);
     const machineKey = normalizeExerciseValue(currentMachine);
+    const slotPrimaryMuscleKey = normalizeExerciseValue(slotPrimaryMuscle);
     const excludedNames = new Set([...excludedExerciseNames].map(normalizeExerciseValue).filter(Boolean));
-    if (!nameKey || !machineKey || !slotPrimaryMuscle) return [];
+    if (!nameKey || !machineKey || !slotPrimaryMuscleKey) return [];
 
     const excludedFamilies = new Set([...excludedFamilyKeys].map(normalizeExerciseValue).filter(Boolean));
     const currentFamily = exerciseFamilyKey(currentExerciseName);
@@ -189,19 +190,39 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       const score = (row: CsvExercise) =>
         (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
         + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
-        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(slotPrimaryMuscle)) ? 1 : 0);
+        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey) ? 1 : 0);
       return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
     })[0];
-    if (!sourceAnchor?.alternativeGroupId) return [];
+    const legacyAnchor = [...alternativesRows].filter((row) =>
+      exerciseFamilyKey(row.exercise) === currentFamily
+      && row.targetedMuscles.length > 0
+      && row.timeTakenOneSet,
+    ).sort((left, right) => {
+      const score = (row: CsvExercise) =>
+        (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
+        + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
+        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey) ? 1 : 0);
+      return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
+    })[0];
+    const selectedAnchor = sourceAnchor ?? legacyAnchor;
+    if (!selectedAnchor) return [];
 
-    const targetKey = targetedMuscleKey(sourceAnchor.targetedMuscles);
-    const durationKey = exactDatasetValue(sourceAnchor.timeTakenOneSet);
-    const orderedCandidates = alternativesRows
-      .filter((row) => row.alternativeGroupId === sourceAnchor.alternativeGroupId
-        && (row.alternativeRank ?? 0) > 1
-        && targetedMuscleKey(row.targetedMuscles) === targetKey
-        && exactDatasetValue(row.timeTakenOneSet) === durationKey)
-      .sort((left, right) => (left.alternativeRank ?? 0) - (right.alternativeRank ?? 0));
+    const targetKey = targetedMuscleKey(selectedAnchor.targetedMuscles);
+    const durationKey = exactDatasetValue(selectedAnchor.timeTakenOneSet);
+    const orderedCandidates = sourceAnchor?.alternativeGroupId
+      ? alternativesRows
+        .filter((row) => row.alternativeGroupId === sourceAnchor.alternativeGroupId
+          && (row.alternativeRank ?? 0) > 1
+          && targetedMuscleKey(row.targetedMuscles) === targetKey
+          && exactDatasetValue(row.timeTakenOneSet) === durationKey)
+        .sort((left, right) => (left.alternativeRank ?? 0) - (right.alternativeRank ?? 0))
+      : alternativesRows
+        .filter((row) => row.targetedMuscles.length > 0
+          && row.timeTakenOneSet
+          && row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey)
+          && targetedMuscleKey(row.targetedMuscles) === targetKey
+          && exactDatasetValue(row.timeTakenOneSet) === durationKey)
+        .sort((left, right) => left.sourceIndex - right.sourceIndex);
 
     // Rank 2–6 are the dataset's explicit substitutions. Keep that stable
     // order while allowing at most one genuinely different movement family.
