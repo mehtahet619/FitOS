@@ -45,6 +45,45 @@ function targetedMuscleKey(values: string[]): string {
   return [...new Set(values.map(normalizeExerciseValue).filter(Boolean))].sort().join("|");
 }
 
+const familyVariationPhrases = [
+  /\bstraight bar\b/g,
+  /\bt bar\b/g,
+  /\bpec deck\b/g,
+  /\b(?:wide|close|narrow|neutral|underhand|overhand|supinated|pronated|semi supinated) grip\b/g,
+  /\b(?:standard|wide|close|narrow|split|staggered) stance\b/g,
+  /\b(?:single|one) (?:arm|leg)\b/g,
+  /\b(?:controlled|slow|explosive) tempo\b/g,
+  /\b(?:eccentric emphasis|constant tension|full range|partial range)\b/g,
+  /\b(?:1 5|one and a half) reps?\b/g,
+  /\b(?:wide|close|narrow|neutral|underhand|overhand|supinated|pronated|semi supinated|standard|alternating|unilateral|bilateral|assisted|paused|pause|explosive|seated|standing|kneeling|lying|prone|supine|bent over|flat|low|mid|high|incline|decline)\b/g,
+  /\b(?:d|v|single|wide|close) handle\b/g,
+  /\b(?:low|mid|high) cable\b/g,
+];
+
+const familyEquipmentWords = new Set([
+  "barbell", "dumbbell", "dumbbells", "kettlebell", "kettlebells", "cable", "machine",
+  "selectorized", "smith", "band", "bands", "resistance", "bodyweight", "plate", "loaded",
+  "ez", "rope", "handle", "handles", "bar", "landmine",
+]);
+
+/**
+ * Deterministically reduce CSV name variants to a movement family. Equipment,
+ * grip, stance, tempo, and body-position labels do not create new families;
+ * meaningful movement descriptors such as "straight arm" and named patterns
+ * such as "pullover" are retained.
+ */
+export function exerciseFamilyKey(exerciseName: string): string {
+  let normalized = normalizeExerciseValue(exerciseName);
+  for (const phrase of familyVariationPhrases) normalized = normalized.replace(phrase, " ");
+  normalized = normalized
+    .replace(/\bpull down\b/g, "pulldown")
+    .replace(/\b(?:chin up|assisted pull up|assisted pullup)\b/g, "pullup")
+    .replace(/\bpull up\b/g, "pullup")
+    .replace(/\bchest fly\b/g, "fly");
+  const familyWords = normalized.split(" ").filter((word) => word && !familyEquipmentWords.has(word));
+  return familyWords.join(" ").replace(/\s+/g, " ").trim() || normalizeExerciseValue(exerciseName);
+}
+
 export function exerciseCountForDuration(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes <= 0) throw new Error("Session duration must be a positive number of minutes.");
   if (minutes <= 30) return 2;
@@ -55,52 +94,14 @@ export function exerciseCountForDuration(minutes: number): number {
   return 6;
 }
 
-type Candidate = { row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<string> };
-
-const variationWords = new Set([
-  "alternating", "controlled", "explosive", "grip", "narrow", "overhand", "paused",
-  "pause", "semi", "slow", "split", "staggered", "stance", "supinated", "tempo",
-  "underhand", "wide",
-]);
-
-/** Use only words present in the CSV name/equipment fields to spot close variants. */
-function exerciseNameSignature(candidate: Candidate): string[] {
-  const ignoredWords = new Set([
-    ...normalizeExerciseValue(candidate.row.machine).split(" "),
-    ...[...candidate.targetKeys].flatMap((target) => target.split(" ")),
-    ...variationWords,
-  ]);
-  const signature = normalizeExerciseValue(candidate.row.exercise)
-    .split(" ")
-    .filter((word) => word && !ignoredWords.has(word));
-  return signature.length > 0 ? [...new Set(signature)] : normalizeExerciseValue(candidate.row.exercise).split(" ");
-}
-
-function redundancyPenalty(candidate: Candidate, selectedSignatures: string[][]): number {
-  const signature = exerciseNameSignature(candidate);
-  let penalty = 0;
-  for (const selected of selectedSignatures) {
-    const sharedWords = signature.filter((word) => selected.includes(word)).length;
-    const similarity = (2 * sharedWords) / (signature.length + selected.length);
-    if (similarity >= 0.8) penalty += 2;
-    else if (similarity >= 0.5) penalty += 1;
-  }
-  return penalty;
-}
-
-function repeatedNameEndingPenalty(candidate: Candidate, selectedSignatures: string[][]): number {
-  const ending = exerciseNameSignature(candidate).at(-1);
-  if (!ending) return 0;
-  const priorCount = selectedSignatures.filter((signature) => signature.at(-1) === ending).length;
-  return priorCount >= 2 ? (priorCount - 1) * 3 : 0;
-}
+type Candidate = { row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<string>; familyKey: string };
 
 function selectWithCoverage(
   candidates: Candidate[],
   count: number,
 ): RecommendedExercise[] {
   const selected: RecommendedExercise[] = [];
-  const selectedSignatures: string[][] = [];
+  const selectedFamilies = new Set<string>();
   const coveredTargets = new Set<string>();
   const coveredCategories = new Set<string>();
   const usedMachines = new Set<string>();
@@ -113,9 +114,6 @@ function selectWithCoverage(
       const leftExactMatches = exactCategoryMatches(left);
       const rightExactMatches = exactCategoryMatches(right);
       if (leftExactMatches !== rightExactMatches) return rightExactMatches - leftExactMatches;
-      const leftFamilyPenalty = repeatedNameEndingPenalty(left, selectedSignatures);
-      const rightFamilyPenalty = repeatedNameEndingPenalty(right, selectedSignatures);
-      if (leftFamilyPenalty !== rightFamilyPenalty) return leftFamilyPenalty - rightFamilyPenalty;
       const newTargetCoverage = (candidate: typeof left) => candidate.matchingMuscles
         .filter((muscle) => !coveredTargets.has(normalizeExerciseValue(muscle))).length;
       const newCategoryCoverage = (candidate: typeof left) => candidate.row.muscleCategories
@@ -126,18 +124,18 @@ function selectWithCoverage(
       const leftCategories = newCategoryCoverage(left);
       const rightCategories = newCategoryCoverage(right);
       if (leftCategories !== rightCategories) return rightCategories - leftCategories;
-      const leftRedundancy = redundancyPenalty(left, selectedSignatures);
-      const rightRedundancy = redundancyPenalty(right, selectedSignatures);
-      if (leftRedundancy !== rightRedundancy) return leftRedundancy - rightRedundancy;
       const leftNewMachine = usedMachines.has(normalizeExerciseValue(left.row.machine)) ? 0 : 1;
       const rightNewMachine = usedMachines.has(normalizeExerciseValue(right.row.machine)) ? 0 : 1;
       if (leftNewMachine !== rightNewMachine) return rightNewMachine - leftNewMachine;
       return left.row.sourceIndex - right.row.sourceIndex;
     });
 
-    const [next] = remaining.splice(0, 1);
+    // Prefer a genuinely new movement family whenever one remains. Reuse a
+    // family only after all available families have been selected.
+    const firstNewFamily = remaining.findIndex((candidate) => !selectedFamilies.has(candidate.familyKey));
+    const [next] = remaining.splice(firstNewFamily >= 0 ? firstNewFamily : 0, 1);
     selected.push({ ...next.row, primaryMuscle: next.matchingMuscles[0] });
-    selectedSignatures.push(exerciseNameSignature(next));
+    selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
     next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
     usedMachines.add(normalizeExerciseValue(next.row.machine));
@@ -153,6 +151,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     currentMachine: string,
     slotPrimaryMuscle: string,
     excludedExerciseNames: Iterable<string> = [],
+    excludedFamilyKeys: Iterable<string> = [],
   ): RecommendedExercise[] {
     const nameKey = normalizeExerciseValue(currentExerciseName);
     const machineKey = normalizeExerciseValue(currentMachine);
@@ -168,6 +167,8 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
 
     const targetKey = targetedMuscleKey(currentRow.targetedMuscles);
     const durationKey = exactDatasetValue(currentRow.timeTakenOneSet);
+    const excludedFamilies = new Set([...excludedFamilyKeys].map(normalizeExerciseValue).filter(Boolean));
+    excludedFamilies.add(exerciseFamilyKey(currentRow.exercise));
     const matchingRows = rows.filter((row) =>
       targetedMuscleKey(row.targetedMuscles) === targetKey
       && exactDatasetValue(row.timeTakenOneSet) === durationKey,
@@ -175,14 +176,17 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     const currentIndex = matchingRows.findIndex((row) => row.sourceIndex === currentRow.sourceIndex);
     if (currentIndex < 0) return [];
 
-    // Walk the uploaded dataset in a stable cycle from the current row. Since
-    // the current workout names are excluded, a slot advances to the next
-    // valid row each time it is swapped without repeating early.
+    // Walk source order stably, offering no more than one row from each
+    // unseen family. This stops CSV grip/stance/equipment variants from being
+    // presented as separate alternatives.
     const candidates: RecommendedExercise[] = [];
+    const seenFamilies = new Set(excludedFamilies);
     for (let offset = 1; offset < matchingRows.length; offset += 1) {
       const row = matchingRows[(currentIndex + offset) % matchingRows.length];
       const exerciseKey = normalizeExerciseValue(row.exercise);
-      if (excludedNames.has(exerciseKey)) continue;
+      const familyKey = exerciseFamilyKey(row.exercise);
+      if (excludedNames.has(exerciseKey) || seenFamilies.has(familyKey)) continue;
+      seenFamilies.add(familyKey);
       candidates.push({ ...row, primaryMuscle: slotPrimaryMuscle });
     }
     return candidates;
@@ -209,7 +213,12 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
 
       const exerciseKey = normalizeExerciseValue(row.exercise);
-      if (!uniqueCandidates.has(exerciseKey)) uniqueCandidates.set(exerciseKey, { row, matchingMuscles, targetKeys });
+      if (!uniqueCandidates.has(exerciseKey)) uniqueCandidates.set(exerciseKey, {
+        row,
+        matchingMuscles,
+        targetKeys,
+        familyKey: exerciseFamilyKey(row.exercise),
+      });
     }
 
     const candidates = [...uniqueCandidates.values()];

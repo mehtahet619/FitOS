@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { CsvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
-import { CsvExerciseRecommendationService } from "../modules/workouts/exerciseRecommendation";
+import { CsvExerciseRecommendationService, exerciseFamilyKey } from "../modules/workouts/exerciseRecommendation";
 
 type Row = Record<string, any>;
 
@@ -17,8 +17,9 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
     workouts: Row[];
     workoutExercises: Row[];
     sets: Row[];
+    swapHistory: Row[];
     plan: Row;
-  } = { exercises: [], equipment: [], equipmentAliases: [], userEquipment: [], links: [], workouts: [], workoutExercises: [], sets: [], plan };
+  } = { exercises: [], equipment: [], equipmentAliases: [], userEquipment: [], links: [], workouts: [], workoutExercises: [], sets: [], swapHistory: [], plan };
 
   const db: DatabaseLike = {
     async all<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
@@ -51,6 +52,9 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       }
       if (sql.includes("SELECT COALESCE(we.sourceExerciseName,e.name) as name")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => ({ name: row.sourceExerciseName || state.exercises.find((ex) => ex.id === row.exerciseId)?.name })) as unknown as T[];
+      }
+      if (sql.includes("SELECT familyKey FROM WorkoutExerciseSwapHistory")) {
+        return state.swapHistory.filter((row) => row.workoutExerciseId === params[0]).map((row) => ({ familyKey: row.familyKey })) as unknown as T[];
       }
       if (sql.includes("SELECT we.*, e.name as exerciseName")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0])
@@ -131,6 +135,10 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
           exerciseId: params[0], replacedFromId: params[1], status: "replaced",
           sourceExerciseName: params[2], sourceMuscle: params[3], sourcePrimaryMuscle: params[4], sourceMachine: params[5],
         });
+      } else if (sql.includes("INSERT INTO WorkoutExerciseSwapHistory")) {
+        if (!state.swapHistory.some((row) => row.workoutExerciseId === params[0] && row.familyKey === params[1])) {
+          state.swapHistory.push({ workoutExerciseId: params[0], familyKey: params[1], exerciseName: params[2], createdAt: params[3] });
+        }
       } else if (sql.includes("UPDATE Workout SET status = 'superseded'")) {
         const row = state.workouts.find((workout) => workout.id === params[0]);
         if (row) row.status = "superseded";
@@ -161,6 +169,9 @@ describe("workout API CSV flow", () => {
       'Dumbbell Row,Dumbbells,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Cable Row,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Seated Cable Row,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Straight Arm Pulldown,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Dumbbell Pullover,Dumbbells,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Face Pull,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Bodyweight Row,Bodyweight,Back,25-45 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Bench Press,Barbell,Chest,20-40 sec,"Pectoralis Major, Triceps Brachii"',
     ].join("\n");
@@ -202,7 +213,10 @@ describe("workout API CSV flow", () => {
       completeWorkout: async () => ({}),
       PLAN_LABELS: {},
     }));
-    vi.doMock("../modules/workouts/exerciseRecommendation", () => ({ exerciseRecommendationService: service }));
+    vi.doMock("../modules/workouts/exerciseRecommendation", async (importOriginal) => ({
+      ...await importOriginal<typeof import("../modules/workouts/exerciseRecommendation")>(),
+      exerciseRecommendationService: service,
+    }));
 
     const { workoutRouter } = await import("../modules/workouts/routes.js");
     const { equipmentRouter } = await import("../modules/equipment/routes.js");
@@ -237,7 +251,8 @@ describe("workout API CSV flow", () => {
       const generated = await generateResponse.json() as any;
       const csvNames = new Set(sampleCsv.split("\n").slice(1).map((line) => line.split(",")[0]));
       expect(generated.exercises).toHaveLength(4);
-      expect(generated.availableExerciseCount).toBe(4);
+      expect(generated.availableExerciseCount).toBeGreaterThan(4);
+      expect(new Set(generated.exercises.map((exercise: any) => exerciseFamilyKey(exercise.exerciseName))).size).toBe(generated.exercises.length);
       expect(generated.exercises.every((exercise: any) => csvNames.has(exercise.exerciseName))).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
       expect(generated.workout.cycleId).toBe("current-cycle");
@@ -269,6 +284,13 @@ describe("workout API CSV flow", () => {
       const swapped = await swapResponse.json() as any;
       expect(swapped.workoutExerciseId).toBe(slot.workoutExerciseId);
       expect(swapped.exercise.exerciseName).not.toBe(slot.exerciseName);
+      expect(exerciseFamilyKey(swapped.exercise.exerciseName)).not.toBe(exerciseFamilyKey(slot.exerciseName));
+      expect(swapped.exercise.targetedMuscle).toBe("Latissimus Dorsi, Rhomboid Major");
+      expect(swapped.exercise.timeTakenOneSet).toBe("20-40 sec");
+      expect(selectedEquipment).toContain(swapped.exercise.machine);
+      expect(before.exercises.filter((exercise: any) => exercise.workoutExerciseId !== slot.workoutExerciseId).some(
+        (exercise: any) => exercise.exerciseName === swapped.exercise.exerciseName,
+      )).toBe(false);
 
       const after = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(after.exercises).toHaveLength(4);
@@ -284,6 +306,15 @@ describe("workout API CSV flow", () => {
         repRangeHigh: original[1].repRangeHigh,
       });
       expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
+      expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
+
+      const secondSwapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
+      });
+      expect(secondSwapResponse.status).toBe(422);
+      expect((await secondSwapResponse.json() as any).error).toMatch(/no dataset exercise matches/i);
+      expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
 
       const refreshResponse = await fetch(`${baseUrl}/workouts/generate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
