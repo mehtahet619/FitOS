@@ -92,11 +92,17 @@ const State = {
 const AuthState = {
   status: "AUTH_LOADING",
   user: null,
+  profileComplete: null,
   generation: 0,
-  authenticated(user) { this.status = "AUTHENTICATED"; this.user = user; this.generation += 1; },
+  authenticated(user) {
+    this.status = "AUTHENTICATED";
+    this.user = user;
+    this.profileComplete = user?.profileComplete === true;
+    this.generation += 1;
+  },
   unauthenticated() {
     if (this.status === "UNAUTHENTICATED") return;
-    this.status = "UNAUTHENTICATED"; this.user = null; this.generation += 1;
+    this.status = "UNAUTHENTICATED"; this.user = null; this.profileComplete = null; this.generation += 1;
     Api.clearTokens(); clearProtectedContent();
     if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
   },
@@ -141,9 +147,23 @@ async function routeCurrent() {
   }
   if (path === "/verify-email" || path === "/forgot-password" || path === "/reset-password") { showScreen(publicRoutes[path]); return; }
   if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
+  if (AuthState.profileComplete === false && path !== "/profile") {
+    navigate("/profile", true);
+    return;
+  }
   if (!routeTabs[path]) { navigate("/homepage", true); return; }
   $("main-app").style.display = "flex"; $("bottom-nav").style.display = "flex";
   if (path === "/profile" || path === "/settings") {
+    const needsProfile = AuthState.profileComplete === false;
+    $("onboarding-account").textContent = needsProfile
+      ? `Signed in as ${AuthState.user?.email || "your account"}. Complete your profile to continue.`
+      : AuthState.user?.email ? `Signed in as ${AuthState.user.email}.` : "";
+    banner($("onboarding-banner"), "info", needsProfile
+      ? "Finish setup before generating workouts. Your workout plan and equipment selections will remain saved."
+      : "");
+    if (needsProfile && !$("ob-name").value && AuthState.user?.name) {
+      $("ob-name").value = AuthState.user.name;
+    }
     showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
     void loadEquipmentChips().catch((error) => banner($("onboarding-banner"), "error", error.message || "Could not load equipment."));
     return;
@@ -373,6 +393,8 @@ $("onboarding-submit").addEventListener("click", async () => {
 /* ---------------- Main app / tab nav ---------------- */
 function enterMainApp() {
   if (AuthState.status !== "AUTHENTICATED") return;
+  AuthState.profileComplete = true;
+  if (AuthState.user) AuthState.user.profileComplete = true;
   $("screen-auth").classList.remove("active");
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
@@ -387,7 +409,7 @@ document.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-logout]");
   if (!target) return;
   try { await Api.post("/auth/logout", {}); } catch { /* local sign-out still completes */ }
-  AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; Api.clearTokens(); clearProtectedContent(); navigate("/login", true);
+  AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; AuthState.profileComplete = null; Api.clearTokens(); clearProtectedContent(); navigate("/login", true);
 });
 
 function switchTab(tab, updateUrl = true) {
@@ -548,7 +570,10 @@ async function loadWorkout() {
     let workout;
     try {
       workout = await Api.get("/workouts/today");
-    } catch (_) { workout = null; }
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+      workout = null;
+    }
     if (workout) {
       if (workout.needsRegeneration && workout.canRegenerate) {
         renderLegacyWorkoutRefresh(workout, plan);
@@ -836,9 +861,20 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
       .map((item) => item.name)
       .filter((name) => name !== "No Equipment"));
   } catch (error) {
+    selectionSummary.textContent = "Equipment could not be loaded.";
     feedback.className = "banner banner-error";
     feedback.textContent = error.message || "Could not load your equipment list.";
     buildButton.disabled = true;
+    const retryButton = document.createElement("button");
+    retryButton.type = "button";
+    retryButton.className = "btn btn-outline";
+    retryButton.textContent = "Retry loading equipment";
+    retryButton.addEventListener("click", () => {
+      retryButton.disabled = true;
+      retryButton.textContent = "Retrying…";
+      void loadWorkout();
+    });
+    card.appendChild(retryButton);
     return;
   }
 
@@ -887,16 +923,29 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
     buildButton.textContent = "Building your workout...";
     feedback.className = "";
     feedback.textContent = "";
-    let failedDuring = "saving today's equipment";
+    let failedDuring = "generating your workout";
     try {
-      await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(selected) });
-      failedDuring = "generating your workout";
-      await Api.post("/workouts/generate", {
+      const generated = await Api.post("/workouts/generate", {
         equipmentMode: "USER_EQUIPMENT",
         availableEquipmentNames: Array.from(selected),
       });
-      await loadWorkout();
+      if (!generated?.workout || !Array.isArray(generated.exercises) || generated.exercises.length === 0) {
+        throw new Error("The API did not return a workout to display. Please try again.");
+      }
+      renderWorkout({
+        ...generated.workout,
+        exercises: generated.exercises.map((exercise) => ({
+          ...exercise,
+          status: "pending",
+          completedSets: [],
+        })),
+      }, plan);
     } catch (error) {
+      if (error?.status === 400 && error.message?.includes("Complete onboarding")) {
+        AuthState.profileComplete = false;
+        navigate("/profile", true);
+        return;
+      }
       feedback.className = "banner banner-error";
       feedback.textContent = `${failedDuring}: ${error.message || "Could not build a workout from this equipment."}`;
       buildButton.disabled = false;

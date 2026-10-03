@@ -15,4 +15,28 @@ describe("PostgreSQL adapter", () => {
       totalCalories: 320,
     });
   });
+
+  it("normalizes workout keys needed by the production today-workout response", () => {
+    expect(normalizePostgresRow({
+      planstepindex: 2,
+      equipmentmode: "USER_EQUIPMENT",
+      equipmentsnapshot: "[]",
+      generatorversion: "csv-v1",
+      exercisename: "Lat Pulldown",
+      sourceexercisename: "Close Grip Lat Pulldown",
+      sourcemuscle: "back",
+      sourceprimarymuscle: "Back",
+      sourcemachine: "Cable Machine",
+    })).toEqual({
+      planStepIndex: 2,
+      equipmentMode: "USER_EQUIPMENT",
+      equipmentSnapshot: "[]",
+      generatorVersion: "csv-v1",
+      exerciseName: "Lat Pulldown",
+      sourceExerciseName: "Close Grip Lat Pulldown",
+      sourceMuscle: "back",
+      sourcePrimaryMuscle: "Back",
+      sourceMachine: "Cable Machine",
+    });
+  });
 });
