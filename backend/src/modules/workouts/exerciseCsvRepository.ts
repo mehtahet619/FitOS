@@ -13,6 +13,10 @@ export interface CsvExercise {
   /** Dataset's exact targeted-muscle cell and parsed individual values. */
   targetedMuscle: string;
   targetedMuscles: string[];
+  /** Present in the curated alternatives dataset; all six rows share a group. */
+  alternativeGroupId?: string;
+  /** Rank 1 is the source exercise; ranks 2–6 are its five alternatives. */
+  alternativeRank?: number;
 }
 
 export function normalizeExerciseValue(value: string): string {
@@ -96,6 +100,8 @@ export function parseExerciseCsv(source: string): CsvExercise[] {
   }
   const timeIndex = indexes.get("time taken 1 set");
   const targetedMuscleIndex = indexes.get("targeted muscle");
+  const alternativeGroupIndex = indexes.get("alternative group id");
+  const alternativeRankIndex = indexes.get("alternative rank");
 
   const exercises: CsvExercise[] = [];
   for (const [recordIndex, record] of records.slice(1).entries()) {
@@ -120,6 +126,8 @@ export function parseExerciseCsv(source: string): CsvExercise[] {
     }
     const timeTakenOneSet = timeIndex === undefined ? "" : record[timeIndex].trim();
     const targetedMuscle = targetedMuscleIndex === undefined ? "" : record[targetedMuscleIndex].trim();
+    const alternativeGroupId = alternativeGroupIndex === undefined ? undefined : record[alternativeGroupIndex].trim();
+    const alternativeRankValue = alternativeRankIndex === undefined ? undefined : Number(record[alternativeRankIndex]);
     const targetedMuscles = [...new Map(
       targetedMuscle.split(",").map((value) => value.trim()).filter(Boolean)
         .map((value) => [normalizeExerciseValue(value), value] as const)
@@ -133,6 +141,10 @@ export function parseExerciseCsv(source: string): CsvExercise[] {
       timeTakenOneSet,
       targetedMuscle,
       targetedMuscles,
+      ...(alternativeGroupId ? { alternativeGroupId } : {}),
+      ...(alternativeRankValue !== undefined && Number.isInteger(alternativeRankValue)
+        ? { alternativeRank: alternativeRankValue }
+        : {}),
     });
   }
   if (exercises.length === 0) throw new Error("Bundled exercise CSV contains no exercise records.");
@@ -161,3 +173,7 @@ export class CsvExerciseRepository {
 }
 
 export const csvExerciseRepository = new CsvExerciseRepository();
+
+export const csvExerciseAlternativesRepository = new CsvExerciseRepository(
+  path.resolve(__dirname, "../../../data/exercise_alternatives.csv"),
+);
