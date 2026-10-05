@@ -18,22 +18,25 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 
 ## Render deployment
 
-The repository includes a `render.yaml` blueprint for a paid, always-on
-Render web service and a managed PostgreSQL database. Set `FRONTEND_ORIGIN` to
-the deployed frontend URL. PostgreSQL migrations run as a pre-deploy step;
-normal server starts do not run seed scripts. Configure SMTP and Upstash Redis
-secrets in Render before enabling OTP registration.
+The repository includes a `render.yaml` blueprint for the Render web service.
+Set `FRONTEND_ORIGIN` to the deployed frontend URL. TiDB/MySQL migrations run
+as a pre-deploy step; normal server starts do not run seed scripts. Configure
+SMTP and Upstash Redis secrets in Render before enabling OTP registration.
 
-The API now selects PostgreSQL automatically when `DATABASE_URL` starts with
-`postgres://` or `postgresql://`. SQLite remains available for local
-development. OTP request limits use an atomic shared Upstash Redis token
+The API selects TiDB/MySQL automatically when `DATABASE_URL` starts with
+`mysql://`, PostgreSQL for `postgres://` or `postgresql://`, and SQLite remains
+available for local development. OTP request limits use an atomic shared Upstash Redis token
 bucket in production.
 
-The PostgreSQL pool adapter is available in `src/db/postgres.ts` and can be
-initialized independently with:
+```bash
+DATABASE_URL="mysql://..." npm run migrate:mysql
+```
+
+For the compiled production migration used by Render:
 
 ```bash
-DATABASE_URL="postgresql://..." npm run migrate:postgres
+npm run build
+DATABASE_URL="mysql://..." npm run migrate:mysql:prod
 ```
 
 

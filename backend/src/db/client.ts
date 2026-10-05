@@ -1,4 +1,5 @@
 import path from "path";
+import { MySqlDatabase, isMySqlUrl } from "./mysql";
 import { PostgresDatabase, isPostgresUrl } from "./postgres";
 import type { DatabaseLike } from "./types";
 
@@ -37,6 +38,7 @@ class SqliteDatabase implements DatabaseLike {
 
 function createDatabase(): DatabaseLike {
   if (isPostgresUrl()) return new PostgresDatabase();
+  if (isMySqlUrl()) return new MySqlDatabase();
 
   const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
   const dbPath = process.env.DATABASE_URL?.startsWith("file:")
