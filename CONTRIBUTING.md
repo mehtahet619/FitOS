@@ -2,7 +2,7 @@
 
 ## Pull request flow
 
-1. Open a pull request with a title matching `[TAG] description`.
+1. Open a pull request with a title matching `[TAG] description` or Conventional Commit format (for example `fix(auth): description`).
 2. GitHub Actions runs `lint`, `typecheck`, `test`, `build`, `codeql`, and `secretlint`.
 3. Danger posts one structured review comment covering results, PR size, tests, and sensitive paths.
 4. A clean PR can be auto-merged with squash when all required checks pass, no review threads remain unresolved, and no sensitive path is changed.
