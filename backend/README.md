@@ -125,22 +125,29 @@ DATABASE_URL="postgresql://..." npm run migrate:postgres
 
 ### Equipment Vision — Self-hosted open-source detector
 
-Production equipment detection uses a configurable self-hosted detector. The
-recommended deployment is an Ultralytics YOLO model exported to ONNX and served
-with ONNX Runtime. FitOS calls `POST /equipment/detect` on
-`EQUIPMENT_VISION_API_URL`; no hosted inference or paid CV API is required.
+Production equipment detection uses a local Ultralytics YOLO model. The model
+is loaded once by a persistent Python worker; camera frames are sent from the
+backend to that worker over stdin/stdout. No hosted inference or paid CV API is
+used.
 
 Configure:
 
 ```env
 EQUIPMENT_MODE="SCANNED"
-EQUIPMENT_VISION_API_URL="http://127.0.0.1:9000"
-EQUIPMENT_VISION_MODEL_ID="your-local-onnx-model"
+EQUIPMENT_VISION_MODEL_PATH="models/best.pt"
+EQUIPMENT_VISION_PYTHON="python3"
 EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"
 ```
 
-The local detector accepts `{ "imageBase64": "...", "modelId": "..." }` and
-returns `{ "predictions": [{ "class": "...", "confidence": 0.9 }] }`.
+Install the worker dependencies with `python3 -m pip install -r vision-requirements.txt`.
+If no model exists, the API returns `MODEL_NOT_CONFIGURED` and the UI shows
+“Model not configured” rather than reporting zero detections. To train/export:
+
+```bash
+yolo detect train data=path/to/data.yaml model=yolo11n.pt epochs=100
+yolo export model=runs/detect/train/weights/best.pt format=onnx
+cp runs/detect/train/weights/best.pt backend/models/best.pt
+```
 Detection only determines available equipment; target muscles and exercise
 selection remain owned by the existing workout-plan and CSV flow.
 

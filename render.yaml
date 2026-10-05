@@ -43,13 +43,11 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: EQUIPMENT_MODE
-        value: FULL_GYM
-      - key: EQUIPMENT_VISION_API_URL
-        value: https://serverless.roboflow.com
-      - key: EQUIPMENT_VISION_MODEL_ID
-        value: all-gym-equipment/2
-      - key: EQUIPMENT_VISION_API_KEY
-        sync: false
+        value: SCANNED
+      - key: EQUIPMENT_VISION_MODEL_PATH
+        value: /opt/render/project/src/backend/models/best.onnx
+      - key: EQUIPMENT_VISION_PYTHON
+        value: python3
       - key: EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD
         value: "0.50"
       - key: MAPS_PROVIDER

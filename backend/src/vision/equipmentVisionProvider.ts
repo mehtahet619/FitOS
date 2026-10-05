@@ -1,3 +1,8 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { createInterface } from "node:readline";
 import { db } from "../db/client";
 
 export interface EquipmentDetection {
@@ -52,34 +57,108 @@ async function canonicalEquipmentName(label: string): Promise<string | null> {
   const aliasRows = await db.all<{ alias: string; name: string }>(
     `SELECT ea.alias, e.name FROM EquipmentAlias ea JOIN Equipment e ON e.id = ea.equipmentId`
   ).catch(() => []);
-  const exactAlias = aliasRows.find((row) => normalize(row.alias) === normalized);
-  const exactMap = LABELS[normalized];
-  const resolved = exactAlias?.name ?? exactMap;
+  const resolved = aliasRows.find((row) => normalize(row.alias) === normalized)?.name ?? LABELS[normalized];
   if (!resolved) return null;
   const exactEquipment = await db.get<{ name: string }>(`SELECT name FROM Equipment WHERE lower(name) = lower(?)`, resolved);
   return exactEquipment?.name ?? null;
 }
 
-export class BestEquipmentVisionProvider implements EquipmentVisionProvider {
-  readonly modelId = process.env.EQUIPMENT_VISION_MODEL_ID || "all-gym-equipment/2";
-  private readonly apiUrl: string;
-  constructor(apiUrl = process.env.EQUIPMENT_VISION_API_URL || "") { this.apiUrl = apiUrl; }
+type RawPrediction = { class?: string; confidence?: number; x?: number; y?: number; width?: number; height?: number };
+type WorkerResponse = { id: string; predictions?: RawPrediction[]; error?: string };
 
-  getProviderName(): string { return `local-onnx:${this.modelId}`; }
+const projectRoot = resolve(__dirname, "../..");
+const defaultModelCandidates = [
+  process.env.EQUIPMENT_VISION_MODEL_PATH,
+  resolve(projectRoot, "models/best.pt"),
+  resolve(projectRoot, "models/best.onnx"),
+].filter((value): value is string => Boolean(value));
+
+export const missingModelError = `Equipment detection model not found. Set EQUIPMENT_VISION_MODEL_PATH or place best.pt/best.onnx in ${resolve(projectRoot, "models")}. Train/export with: yolo detect train data=path/to/data.yaml model=yolo11n.pt epochs=100; yolo export model=runs/detect/train/weights/best.pt format=onnx`;
+
+class LocalYoloProvider implements EquipmentVisionProvider {
+  private readonly modelPath = defaultModelCandidates.find(existsSync);
+  private worker: ChildProcessWithoutNullStreams | null = null;
+  private responses = new Map<string, (response: WorkerResponse) => void>();
+  private startup: Promise<void> | null = null;
+
+  getProviderName(): string { return `local-yolo:${this.modelPath ?? "not-configured"}`; }
+
+  async initialize(): Promise<void> {
+    if (this.startup) return this.startup;
+    this.startup = this.startWorker();
+    return this.startup;
+  }
+
+  private async startWorker(): Promise<void> {
+    if (!this.modelPath) {
+      console.error(`[CV] Model not configured: ${missingModelError}`);
+      return;
+    }
+    const script = resolve(__dirname, "local_yolo_worker.py");
+    this.worker = spawn(process.env.EQUIPMENT_VISION_PYTHON || "python3", [script, this.modelPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const lines = createInterface({ input: this.worker.stdout });
+    lines.on("line", (line) => {
+      try {
+        const response = JSON.parse(line) as WorkerResponse;
+        const resolveResponse = this.responses.get(response.id);
+        if (resolveResponse) {
+          this.responses.delete(response.id);
+          resolveResponse(response);
+        }
+      } catch (error) {
+        console.error("[CV] Invalid local worker response:", error);
+      }
+    });
+    this.worker.stderr.on("data", (data) => console.error(`[CV] Local model: ${String(data).trim()}`));
+    this.worker.on("exit", (code) => {
+      if (code !== 0) console.error(`[CV] Local model worker exited with code ${code}`);
+      this.worker = null;
+    });
+    await new Promise<void>((resolveReady, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Local YOLO worker startup timed out")), 30_000);
+      const onLine = (line: string) => {
+        if (!line.startsWith("__READY__")) return;
+        clearTimeout(timeout);
+        this.worker?.stdout.off("data", onData);
+        console.info(`[CV] Model loaded: ${this.modelPath}`);
+        resolveReady();
+      };
+      const onData = (data: Buffer) => data.toString().split("\n").forEach(onLine);
+      this.worker?.stdout.on("data", onData);
+      this.worker?.once("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+  }
 
   async detectEquipment(imageBase64: string) {
-    if (!this.apiUrl) return { configured: false, detections: [], provider: this.getProviderName(), error: "EQUIPMENT_VISION_API_URL is not configured" };
     const started = Date.now();
-    const modelId = this.modelId.replace(/^\/+|\/+$/g, "");
-    const response = await fetch(`${this.apiUrl.replace(/\/$/, "")}/detect`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageBase64: imageBase64.replace(/^data:image\/[^;]+;base64,/, ""), modelId }),
-      signal: AbortSignal.timeout(30_000),
+    await this.initialize();
+    if (!this.modelPath || !this.worker) {
+      return { configured: false, detections: [], provider: this.getProviderName(), error: missingModelError };
+    }
+    console.info("[CV] Frame received");
+    console.info("[CV] Running inference");
+    const id = randomUUID();
+    const response = await new Promise<WorkerResponse>((resolveResponse, reject) => {
+      const timeout = setTimeout(() => {
+        this.responses.delete(id);
+        reject(new Error("Local YOLO inference timed out"));
+      }, 30_000);
+      this.responses.set(id, (result) => {
+        clearTimeout(timeout);
+        resolveResponse(result);
+      });
+      this.worker?.stdin.write(`${JSON.stringify({ id, imageBase64 })}\n`, (error) => {
+        if (error) reject(error);
+      });
     });
-    if (!response.ok) throw new Error(`Vision API returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
-    const data = await response.json() as { predictions?: Array<{ class?: string; confidence?: number; x?: number; y?: number; width?: number; height?: number }> };
-    const raw = Array.isArray(data.predictions) ? data.predictions : [];
+    if (response.error) throw new Error(response.error);
+    const raw = response.predictions ?? [];
+    console.info(`[CV] Raw detections: ${raw.length}`);
     const threshold = getEquipmentModeConfig().confidenceThreshold;
     const parsed: EquipmentDetection[] = [];
     for (const prediction of raw) {
@@ -87,27 +166,28 @@ export class BestEquipmentVisionProvider implements EquipmentVisionProvider {
       if (!prediction.class || !Number.isFinite(confidence) || confidence < threshold) continue;
       const equipmentName = await canonicalEquipmentName(prediction.class);
       if (!equipmentName) continue;
-      const box = [prediction.x, prediction.y, prediction.width, prediction.height];
       parsed.push({
         equipmentName, confidence, rawLabel: prediction.class,
-        boundingBox: box.every((v) => Number.isFinite(v)) ? { x: prediction.x!, y: prediction.y!, width: prediction.width!, height: prediction.height! } : undefined,
+        boundingBox: [prediction.x, prediction.y, prediction.width, prediction.height].every((v) => Number.isFinite(v))
+          ? { x: prediction.x!, y: prediction.y!, width: prediction.width!, height: prediction.height! } : undefined,
       });
     }
-    // Detector-side NMS handles overlapping boxes. Collapse repeated class detections
-    // for the equipment-availability set, retaining the strongest observation.
+    console.info(`[CV] After confidence filtering: ${parsed.length}`);
     const unique = new Map<string, EquipmentDetection>();
     for (const detection of parsed) {
       const existing = unique.get(detection.equipmentName);
       if (!existing || detection.confidence > existing.confidence) unique.set(detection.equipmentName, detection);
     }
-    console.info(JSON.stringify({ event: "equipment_detection", provider: this.getProviderName(), rawDetections: raw.length, normalizedEquipment: [...new Set(parsed.map((d) => d.equipmentName))], filteredDetections: unique.size, latencyMs: Date.now() - started }));
+    console.info(`[CV] Normalized equipment: ${JSON.stringify([...unique.keys()])}`);
     return { configured: true, detections: [...unique.values()], provider: this.getProviderName(), latencyMs: Date.now() - started, rawDetectionCount: raw.length };
   }
 }
 
-export class MockEquipmentVisionProvider implements EquipmentVisionProvider {
-  async detectEquipment() { return { configured: false, detections: [], provider: "unconfigured", error: "EQUIPMENT_VISION_API_URL is not configured" }; }
-  getProviderName() { return "unconfigured"; }
+const localProvider = new LocalYoloProvider();
+export function initializeEquipmentVisionProvider(): Promise<void> { return localProvider.initialize(); }
+
+export function getEquipmentVisionProvider(): EquipmentVisionProvider {
+  return getEquipmentModeConfig().mode === "FULL_GYM" ? new FullGymEquipmentProvider() : localProvider;
 }
 
 export class FullGymEquipmentProvider implements EquipmentVisionProvider {
@@ -116,12 +196,4 @@ export class FullGymEquipmentProvider implements EquipmentVisionProvider {
     return { configured: true, detections: rows.map((row) => ({ equipmentName: row.name, confidence: 1, rawLabel: "full_gym_mode" })), provider: "full_gym" };
   }
   getProviderName() { return "full_gym"; }
-}
-
-export function getEquipmentVisionProvider(): EquipmentVisionProvider {
-  return getEquipmentModeConfig().mode === "FULL_GYM"
-    ? new FullGymEquipmentProvider()
-    : process.env.EQUIPMENT_VISION_API_URL
-      ? new BestEquipmentVisionProvider()
-      : new MockEquipmentVisionProvider();
 }
