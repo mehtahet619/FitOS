@@ -23,7 +23,7 @@ export type EquipmentMode = "SCANNED" | "FULL_GYM";
 
 export function getEquipmentModeConfig(): { mode: EquipmentMode; confidenceThreshold: number } {
   const rawMode = process.env.EQUIPMENT_MODE?.toUpperCase();
-  const mode: EquipmentMode = rawMode === "SCANNED" ? "SCANNED" : "FULL_GYM";
+  const mode: EquipmentMode = rawMode === "FULL_GYM" ? "FULL_GYM" : "SCANNED";
   const parsed = Number.parseFloat(process.env.EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD ?? "0.50");
   return { mode, confidenceThreshold: Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5 };
 }
@@ -62,19 +62,19 @@ async function canonicalEquipmentName(label: string): Promise<string | null> {
 
 export class BestEquipmentVisionProvider implements EquipmentVisionProvider {
   readonly modelId = process.env.EQUIPMENT_VISION_MODEL_ID || "all-gym-equipment/2";
-  private readonly apiUrl = process.env.EQUIPMENT_VISION_API_URL || "https://serverless.roboflow.com";
-  constructor(private readonly apiKey = process.env.EQUIPMENT_VISION_API_KEY || "") {}
+  private readonly apiUrl: string;
+  constructor(apiUrl = process.env.EQUIPMENT_VISION_API_URL || "") { this.apiUrl = apiUrl; }
 
-  getProviderName(): string { return `roboflow-universe:${this.modelId}`; }
+  getProviderName(): string { return `local-onnx:${this.modelId}`; }
 
   async detectEquipment(imageBase64: string) {
-    if (!this.apiKey) return { configured: false, detections: [], provider: this.getProviderName(), error: "EQUIPMENT_VISION_API_KEY is not configured" };
+    if (!this.apiUrl) return { configured: false, detections: [], provider: this.getProviderName(), error: "EQUIPMENT_VISION_API_URL is not configured" };
     const started = Date.now();
     const modelId = this.modelId.replace(/^\/+|\/+$/g, "");
-    const response = await fetch(`${this.apiUrl.replace(/\/$/, "")}/${modelId}`, {
+    const response = await fetch(`${this.apiUrl.replace(/\/$/, "")}/detect`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: imageBase64.replace(/^data:image\/[^;]+;base64,/, ""),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: imageBase64.replace(/^data:image\/[^;]+;base64,/, ""), modelId }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) throw new Error(`Vision API returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
@@ -106,7 +106,7 @@ export class BestEquipmentVisionProvider implements EquipmentVisionProvider {
 }
 
 export class MockEquipmentVisionProvider implements EquipmentVisionProvider {
-  async detectEquipment() { return { configured: false, detections: [], provider: "unconfigured", error: "EQUIPMENT_VISION_API_KEY is not configured" }; }
+  async detectEquipment() { return { configured: false, detections: [], provider: "unconfigured", error: "EQUIPMENT_VISION_API_URL is not configured" }; }
   getProviderName() { return "unconfigured"; }
 }
 
@@ -121,7 +121,7 @@ export class FullGymEquipmentProvider implements EquipmentVisionProvider {
 export function getEquipmentVisionProvider(): EquipmentVisionProvider {
   return getEquipmentModeConfig().mode === "FULL_GYM"
     ? new FullGymEquipmentProvider()
-    : process.env.EQUIPMENT_VISION_API_KEY
+    : process.env.EQUIPMENT_VISION_API_URL
       ? new BestEquipmentVisionProvider()
       : new MockEquipmentVisionProvider();
 }

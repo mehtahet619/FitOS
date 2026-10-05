@@ -47,6 +47,18 @@ async function main() {
   if (duplicateEmails.length) throw new Error("Cannot add normalized email uniqueness: duplicate accounts differing only by email case must be resolved first");
   await database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_email_normalized_unique ON "User"(LOWER(email))`);
   await database.exec(`
+    CREATE TABLE IF NOT EXISTS GymEquipmentProfile (
+      id TEXT PRIMARY KEY,
+      userId TEXT UNIQUE NOT NULL REFERENCES "User"(id),
+      equipmentJson TEXT NOT NULL DEFAULT '[]',
+      tourCompleted INTEGER NOT NULL DEFAULT 0,
+      lastScanAt TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    )
+  `);
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_gymequipmentprofile_user ON GymEquipmentProfile(userId)`);
+  await database.exec(`
     CREATE TABLE IF NOT EXISTS PendingRegistration (
       id TEXT PRIMARY KEY, userId TEXT REFERENCES "User"(id) ON DELETE CASCADE,
       email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, passwordHash TEXT NOT NULL,
