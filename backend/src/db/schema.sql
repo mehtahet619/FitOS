@@ -109,6 +109,17 @@ CREATE TABLE IF NOT EXISTS UserEquipment (
 );
 CREATE INDEX IF NOT EXISTS idx_userequipment_user ON UserEquipment(userId);
 
+CREATE TABLE IF NOT EXISTS GymEquipmentProfile (
+  id TEXT PRIMARY KEY,
+  userId TEXT UNIQUE NOT NULL REFERENCES User(id),
+  equipmentJson TEXT NOT NULL DEFAULT '[]',
+  tourCompleted INTEGER NOT NULL DEFAULT 0,
+  lastScanAt TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gymequipmentprofile_user ON GymEquipmentProfile(userId);
+
 CREATE TABLE IF NOT EXISTS Exercise (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,

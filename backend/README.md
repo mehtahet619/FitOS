@@ -123,7 +123,28 @@ DATABASE_URL="postgresql://..." npm run migrate:postgres
 
 ## Integrations
 
-### Equipment Vision — Roboflow Workflow (Recommended)
+### Equipment Vision — Self-hosted open-source detector
+
+Production equipment detection uses a configurable self-hosted detector. The
+recommended deployment is an Ultralytics YOLO model exported to ONNX and served
+with ONNX Runtime. FitOS calls `POST /equipment/detect` on
+`EQUIPMENT_VISION_API_URL`; no hosted inference or paid CV API is required.
+
+Configure:
+
+```env
+EQUIPMENT_MODE="SCANNED"
+EQUIPMENT_VISION_API_URL="http://127.0.0.1:9000"
+EQUIPMENT_VISION_MODEL_ID="your-local-onnx-model"
+EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"
+```
+
+The local detector accepts `{ "imageBase64": "...", "modelId": "..." }` and
+returns `{ "predictions": [{ "class": "...", "confidence": 0.9 }] }`.
+Detection only determines available equipment; target muscles and exercise
+selection remain owned by the existing workout-plan and CSV flow.
+
+### Legacy hosted workflow (not used by FitOS equipment detection)
 
 Integrates the Roboflow serverless workflow for real-time gym equipment detection from images.
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import { db } from "../../db/client";
+import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 
@@ -62,6 +62,59 @@ equipmentRouter.get("/user/equipment", requireAuth, async (req: AuthedRequest, r
     req.userId!
   );
   return res.json(result);
+});
+
+equipmentRouter.get("/gym-profile", requireAuth, async (req: AuthedRequest, res) => {
+  const profile = await db.get<any>(`SELECT * FROM GymEquipmentProfile WHERE userId = ?`, req.userId!);
+  if (!profile) return res.json({ gymTourCompleted: false, profileId: null, equipment: [], lastScanAt: null });
+  let equipment: unknown[] = [];
+  try { equipment = JSON.parse(profile.equipmentJson || "[]"); } catch { equipment = []; }
+  return res.json({ gymTourCompleted: Boolean(profile.tourCompleted), profileId: profile.id, equipment, lastScanAt: profile.lastScanAt });
+});
+
+const gymTourSchema = z.object({
+  completed: z.boolean(),
+  detections: z.array(z.object({
+    equipmentName: z.string().min(1),
+    confidence: z.number().min(0).max(1),
+    evidenceFrames: z.number().int().min(1),
+  })).max(200),
+});
+
+equipmentRouter.post("/gym-tour", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = gymTourSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid gym tour input" });
+  const reliable = parsed.data.detections
+    .filter((d) => d.confidence >= 0.5 && d.evidenceFrames >= 2)
+    .reduce((map, detection) => {
+      const current = map.get(detection.equipmentName);
+      if (!current || detection.confidence > current.confidence) map.set(detection.equipmentName, detection);
+      return map;
+    }, new Map<string, { equipmentName: string; confidence: number; evidenceFrames: number }>());
+  const names = [...reliable.keys()];
+  const userId = req.userId!;
+  const ts = nowIso();
+  const existing = await db.get<{ id: string }>(`SELECT id FROM GymEquipmentProfile WHERE userId = ?`, userId);
+  const profileId = existing?.id ?? uuidv4();
+
+  if (parsed.data.completed) {
+    await db.run(
+      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, createdAt, updatedAt)
+       VALUES (?, ?, ?, 1, ?, ?, ?)
+       ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, tourCompleted=1, lastScanAt=excluded.lastScanAt, updatedAt=excluded.updatedAt`,
+      profileId, userId, JSON.stringify(names), ts, ts, ts
+    );
+    await db.run(`DELETE FROM UserEquipment WHERE userId = ?`, userId);
+    for (const name of names) {
+      const equipment = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, name);
+      if (equipment) await db.run(
+        `INSERT INTO UserEquipment (id, userId, equipmentId) VALUES (?, ?, ?) ON CONFLICT(userId, equipmentId) DO NOTHING`,
+        uuidv4(), userId, equipment.id
+      );
+    }
+  }
+
+  return res.json({ profileId, gymTourCompleted: parsed.data.completed, equipment: names, lastScanAt: parsed.data.completed ? ts : null });
 });
 
 const confirmSchema = z.object({
@@ -141,7 +194,7 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
     return res.json({
       configured: false,
       message:
-        "No equipment-vision model is connected, so nothing was auto-detected. Set EQUIPMENT_VISION_API_KEY to enable camera-based detection.",
+        "No local equipment-vision model is connected, so nothing was auto-detected. Configure EQUIPMENT_VISION_API_URL for the self-hosted ONNX detector.",
       detections: [],
       suggestedExercises: [],
     });

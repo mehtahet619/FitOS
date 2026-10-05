@@ -1565,14 +1565,163 @@ async function loadGymScan() {
   const el = $("gym-scan-content");
   el.innerHTML = `<div class="empty-state">Loading…</div>`;
   try {
-    const [equipment, plan] = await Promise.all([
+    const [equipment, plan, profile] = await Promise.all([
       Api.get("/equipment"),
       Api.get("/workouts/plan"),
+      Api.get("/equipment/gym-profile"),
     ]);
-    renderGymScan(equipment, plan);
+    renderGymTour(equipment, plan, profile);
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
   }
+}
+
+function renderGymTour(equipment, plan, savedProfile) {
+  const el = $("gym-scan-content");
+  const equipmentNames = equipment.filter((item) => item.name !== "No Equipment").map((item) => item.name);
+  let profile = savedProfile;
+  let stream = null;
+  let running = false;
+  let paused = false;
+  let detectionInFlight = false;
+  let frameHandle = null;
+  const evidence = new Map();
+
+  const render = () => {
+    const profileReady = profile?.gymTourCompleted === true;
+    const known = Array.isArray(profile?.equipment) ? profile.equipment : [];
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-label">${profileReady ? "Gym equipment profile" : "One-time gym tour"}</div>
+        <p class="card-sub">${profileReady ? "Your saved equipment is used for workouts at this gym." : "Record the whole gym once so FitOS can build your equipment profile."}</p>
+        ${profileReady ? `
+          <div class="banner banner-success">Gym tour completed${profile.lastScanAt ? ` · ${new Date(profile.lastScanAt).toLocaleDateString()}` : ""}</div>
+          <div class="card-sub" style="margin-bottom:10px;">Are you at the same gym?</div>
+          <div class="btn-row"><button class="btn btn-mint" id="same-gym-yes">Yes, use saved equipment</button><button class="btn btn-outline" id="same-gym-no">No, start a new tour</button></div>
+          <button class="btn btn-outline" id="gym-tour-rescan" style="margin-top:10px;">Rescan Gym</button>
+          <div class="chip-group" style="margin-top:14px;">${known.map((name) => `<span class="pill">${name}</span>`).join("")}</div>
+        ` : `
+          <p style="margin:14px 0 0;">Start Gym Tour to continuously detect equipment while you move around the gym.</p>
+          <button class="btn btn-primary" id="gym-tour-start" style="margin-top:14px;">Start Gym Tour</button>
+        `}
+      </div>
+      <div id="gym-tour-workspace"></div>
+    `;
+    if (profileReady) {
+      $("same-gym-yes").addEventListener("click", () => {
+        $("gym-tour-workspace").innerHTML = `<div class="banner banner-success">Saved equipment profile selected for today's workout.</div>`;
+      });
+      $("same-gym-no").addEventListener("click", () => {
+        profile = { gymTourCompleted: false, equipment: [] };
+        render();
+        startTour();
+      });
+      $("gym-tour-rescan").addEventListener("click", () => {
+        profile = { gymTourCompleted: false, equipment: [] };
+        render();
+        startTour();
+      });
+    } else {
+      $("gym-tour-start").addEventListener("click", startTour);
+    }
+  };
+
+  const stopStream = () => {
+    running = false;
+    if (frameHandle) cancelAnimationFrame(frameHandle);
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+    stream = null;
+  };
+
+  const renderEvidence = (workspace, status) => {
+    const rows = [...evidence.entries()].sort((a, b) => b[1].confidence - a[1].confidence)
+      .map(([name, item]) => `<div class="exercise-row"><div><strong>${name}</strong><div class="exercise-meta">${Math.round(item.confidence * 100)}% confidence · ${item.frames} frames</div></div><span class="pill">${item.frames >= 2 ? "Reliable" : "Checking"}</span></div>`).join("");
+    workspace.querySelector("#gym-tour-detections").innerHTML = rows || `<div class="empty-state">Move around the gym to collect detections.</div>`;
+    workspace.querySelector("#gym-tour-count").textContent = `${evidence.size} equipment types detected`;
+    workspace.querySelector("#gym-tour-status").textContent = status;
+  };
+
+  const startTour = async () => {
+    const workspace = $("gym-tour-workspace");
+    workspace.innerHTML = `
+      <div class="card">
+        <div class="camera-panel" style="aspect-ratio:4/3;"><video id="gym-tour-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video><div class="camera-feedback" id="gym-tour-status" style="display:flex;align-items:center;justify-content:center;">Starting camera…</div></div>
+        <div class="btn-row"><button class="btn btn-mint" id="gym-tour-pause">Pause</button><button class="btn btn-outline" id="gym-tour-stop">Stop</button></div>
+        <div class="card-sub" id="gym-tour-count" style="margin-top:12px;">0 equipment types detected</div>
+        <div id="gym-tour-detections" style="margin-top:8px;"></div>
+      </div>
+    `;
+    const video = $("gym-tour-video");
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      running = true;
+      paused = false;
+      evidence.clear();
+      $("gym-tour-pause").addEventListener("click", () => {
+        paused = !paused;
+        $("gym-tour-pause").textContent = paused ? "Resume" : "Pause";
+        $("gym-tour-status").textContent = paused ? "Paused" : "Recording and detecting equipment…";
+      });
+      $("gym-tour-stop").addEventListener("click", () => finishTour(workspace));
+      const detectFrame = async () => {
+        if (!running) return;
+        if (!paused && !detectionInFlight && video.readyState === video.HAVE_ENOUGH_DATA) {
+          detectionInFlight = true;
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext("2d").drawImage(video, 0, 0);
+          try {
+            const result = await Api.post("/equipment/detect", { imageBase64: canvas.toDataURL("image/jpeg", 0.8).split(",")[1] });
+            for (const detection of result.detections || []) {
+              const current = evidence.get(detection.equipmentName) || { confidence: 0, frames: 0 };
+              current.frames += 1;
+              current.confidence = Math.max(current.confidence, Number(detection.confidence) || 0);
+              evidence.set(detection.equipmentName, current);
+            }
+            renderEvidence(workspace, "Recording and detecting equipment…");
+          } catch (error) {
+            renderEvidence(workspace, `Detection paused: ${error.message || "try another angle"}`);
+          } finally {
+            detectionInFlight = false;
+          }
+        }
+        frameHandle = requestAnimationFrame(detectFrame);
+      };
+      renderEvidence(workspace, "Recording and detecting equipment…");
+      detectFrame();
+    } catch (error) {
+      workspace.innerHTML = `<div class="banner banner-error">Camera permission denied. ${error.message || ""}</div>`;
+    }
+  };
+
+  const finishTour = async (workspace) => {
+    stopStream();
+    const reliable = [...evidence.entries()].filter(([, item]) => item.frames >= 2 && item.confidence >= 0.5);
+    workspace.innerHTML = `
+      <div class="card">
+        <div class="card-label">Gym tour analyzed</div>
+        <p class="card-sub">${reliable.length} equipment types have sufficient evidence.</p>
+        <div class="card-sub" style="margin:12px 0;">Are you done recording your whole gym?</div>
+        <div class="btn-row"><button class="btn btn-mint" id="gym-tour-done">Yes</button><button class="btn btn-outline" id="gym-tour-continue">No, continue recording</button></div>
+        <div class="chip-group" style="margin-top:14px;">${reliable.map(([name]) => `<span class="pill">${name}</span>`).join("") || "No reliable equipment yet."}</div>
+      </div>`;
+    $("gym-tour-done").addEventListener("click", async () => {
+      const button = $("gym-tour-done");
+      button.disabled = true;
+      try {
+        const saved = await Api.post("/equipment/gym-tour", { completed: true, detections: reliable.map(([equipmentName, item]) => ({ equipmentName, confidence: item.confidence, evidenceFrames: item.frames })) });
+        profile = saved;
+        render();
+      } catch (error) {
+        workspace.innerHTML = `<div class="banner banner-error">${error.message || "Could not save the gym profile."}</div>`;
+      }
+    });
+    $("gym-tour-continue").addEventListener("click", startTour);
+  };
+
+  render();
 }
 
 function renderGymScan(equipment, plan) {
