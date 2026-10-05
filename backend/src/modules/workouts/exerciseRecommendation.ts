@@ -171,6 +171,41 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     const excludedNames = new Set([...excludedExerciseNames].map(normalizeExerciseValue).filter(Boolean));
     if (!nameKey || !machineKey || !slotPrimaryMuscleKey) return [];
 
+    // A caller-supplied single repository is the legacy/test-fixture contract:
+    // those CSVs do not carry alternative_group_id/rank columns. Keep their
+    // exact-matching behavior while production uses the curated grouped file.
+    if (this.alternativesRepository === this.repository) {
+      const rows = this.repository.getAll();
+      const currentRow = rows.find((row) =>
+        normalizeExerciseValue(row.exercise) === nameKey
+        && normalizeExerciseValue(row.machine) === machineKey,
+      );
+      if (!currentRow || !currentRow.timeTakenOneSet || currentRow.targetedMuscles.length === 0) return [];
+      const targetKey = targetedMuscleKey(currentRow.targetedMuscles);
+      const durationKey = exactDatasetValue(currentRow.timeTakenOneSet);
+      const matchingRows = rows.filter((row) =>
+        targetedMuscleKey(row.targetedMuscles) === targetKey
+        && exactDatasetValue(row.timeTakenOneSet) === durationKey,
+      );
+      const currentIndex = matchingRows.findIndex((row) => row.sourceIndex === currentRow.sourceIndex);
+      if (currentIndex < 0) return [];
+
+      const seenFamilies = new Set([...excludedFamilyKeys].map(normalizeExerciseValue).filter(Boolean));
+      seenFamilies.add(exerciseFamilyKey(currentRow.exercise));
+      const seenNames = new Set<string>();
+      const legacyCandidates: RecommendedExercise[] = [];
+      for (let offset = 1; offset < matchingRows.length; offset += 1) {
+        const row = matchingRows[(currentIndex + offset) % matchingRows.length];
+        const exerciseKey = normalizeExerciseValue(row.exercise);
+        const familyKey = exerciseFamilyKey(row.exercise);
+        if (excludedNames.has(exerciseKey) || seenNames.has(exerciseKey) || seenFamilies.has(familyKey)) continue;
+        seenNames.add(exerciseKey);
+        seenFamilies.add(familyKey);
+        legacyCandidates.push({ ...row, primaryMuscle: slotPrimaryMuscle });
+      }
+      return legacyCandidates;
+    }
+
     const excludedFamilies = new Set([...excludedFamilyKeys].map(normalizeExerciseValue).filter(Boolean));
     const currentFamily = exerciseFamilyKey(currentExerciseName);
     excludedFamilies.add(currentFamily);

@@ -16,7 +16,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _height = TextEditingController();
   final _weight = TextEditingController();
   final _days = TextEditingController();
-  final _duration = TextEditingController();
   final _budget = TextEditingController();
   final _allergies = TextEditingController();
 
@@ -59,7 +58,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _submit() async {
-    if (_name.text.trim().isEmpty || _age.text.isEmpty || _height.text.isEmpty || _weight.text.isEmpty || _days.text.isEmpty || _duration.text.isEmpty) {
+    if (_name.text.trim().isEmpty || _age.text.isEmpty || _height.text.isEmpty || _weight.text.isEmpty || _days.text.isEmpty) {
       setState(() => _error = "Please fill in all fields.");
       return;
     }
@@ -77,7 +76,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         "fitnessLevel": _level,
         "primaryGoal": _goal,
         "daysPerWeek": int.parse(_days.text),
-        "sessionMinutes": int.parse(_duration.text),
         "dietaryPref": _diet,
         "allergies": _allergies.text.split(",").map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
         "foodLikes": [],
@@ -136,8 +134,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   Row(children: [
                     Expanded(child: TextField(controller: _days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Days / week"))),
-                    const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: _duration, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Session (min)"))),
                   ]),
                   const SizedBox(height: 12),
                   _dropdown("Dietary preference", _diet, const ["vegetarian", "vegan", "non_vegetarian", "eggetarian"], (v) => setState(() => _diet = v!)),

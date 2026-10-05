@@ -38,7 +38,19 @@
 <body>
 <div id="app">
 
-  <div id="screen-auth-loading" class="screen active auth-loading">Checking your session...</div>
+  <div id="screen-auth-loading" class="screen active auth-loading" aria-live="polite">
+    <div class="session-loader">
+      <div class="session-loader-mark" aria-hidden="true">
+        <span class="session-loader-ring"></span>
+        <span class="session-loader-bar session-loader-bar-one"></span>
+        <span class="session-loader-bar session-loader-bar-two"></span>
+        <span class="session-loader-bar session-loader-bar-three"></span>
+      </div>
+      <div class="session-loader-title">Checking your session</div>
+      <div class="session-loader-copy">Getting your next workout ready</div>
+      <div class="session-loader-progress" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
 
   <!-- ============ AUTH SCREEN ============ -->
   <div id="screen-auth" class="screen">
@@ -111,7 +123,6 @@
       </div>
       <div class="card-grid-2">
         <div class="field"><label>Days / week</label><input id="ob-days" type="number" placeholder="4" /></div>
-        <div class="field"><label>Session (min)</label><input id="ob-duration" type="number" placeholder="45" /></div>
       </div>
       <div class="field"><label>Dietary preference</label>
         <select id="ob-diet">

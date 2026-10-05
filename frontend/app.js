@@ -371,13 +371,12 @@ $("onboarding-submit").addEventListener("click", async () => {
     fitnessLevel: $("ob-level").value,
     primaryGoal: $("ob-goal").value,
     daysPerWeek: Number($("ob-days").value),
-    sessionMinutes: Number($("ob-duration").value),
     dietaryPref: $("ob-diet").value,
     allergies: $("ob-allergies").value.split(",").map((s) => s.trim()).filter(Boolean),
     foodLikes: [],
     dailyBudget: Number($("ob-budget").value || 0),
   };
-  if (!payload.name || !payload.age || !payload.heightCm || !payload.weightKg || !payload.daysPerWeek || !payload.sessionMinutes) {
+  if (!payload.name || !payload.age || !payload.heightCm || !payload.weightKg || !payload.daysPerWeek) {
     banner(bannerEl, "error", "Please fill in all fields.");
     return;
   }
@@ -662,7 +661,7 @@ function renderLegacyWorkoutRefresh(workout, plan) {
 
 function renderWorkoutScanButton() {
   const scanArea = $("workout-scan-area");
-  scanArea.innerHTML = `<button class="btn btn-outline" id="workout-scan-btn" style="margin-bottom:14px;">📷 Scan my equipment</button>`;
+  scanArea.innerHTML = `<button class="btn btn-outline" id="workout-scan-btn" style="margin-bottom:14px;">Scan my equipment</button>`;
   $("workout-scan-btn").addEventListener("click", () => {
     scanArea.innerHTML = "";
     startEquipmentScan("workout-scan-area", async (detectedNames) => {

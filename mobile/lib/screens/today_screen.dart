@@ -75,7 +75,7 @@ class _TodayScreenState extends State<TodayScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("🏋️ Today's Workout", style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text("Today's Workout", style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 plan != null
                     ? Text("${plan["focus"]}\n${plan["durationMin"]} min · ${plan["status"]}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))
