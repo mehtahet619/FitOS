@@ -158,7 +158,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 14),
-          OutlineButton(label: "📷 Scan my equipment", onPressed: _openScan),
+          OutlineButton(label: "Scan my equipment", onPressed: _openScan),
           const SizedBox(height: 14),
           if (_banner != null) _bannerIsError ? InfoBanner.error(_banner!) : InfoBanner.success(_banner!),
           if (_loading) const Center(child: CircularProgressIndicator()),
