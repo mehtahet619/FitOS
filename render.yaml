@@ -4,7 +4,6 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    preDeployCommand: npm run migrate:postgres:prod
     startCommand: npm start
     autoDeploy: false
     healthCheckPath: /health
@@ -13,9 +12,7 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: DATABASE_URL
-        fromDatabase:
-          name: adaptive-fit-db
-          property: connectionString
+        sync: false
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -72,9 +69,3 @@ services:
     envVars:
       - key: API_BASE_URL
         value: https://adaptive-fit-api.onrender.com
-
-databases:
-  - name: adaptive-fit-db
-    databaseName: adaptive_fit
-    user: adaptive_fit
-    plan: free
