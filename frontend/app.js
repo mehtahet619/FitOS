@@ -1637,7 +1637,9 @@ function renderGymTour(equipment, plan, savedProfile) {
     const rows = [...evidence.entries()].sort((a, b) => b[1].confidence - a[1].confidence)
       .map(([name, item]) => `<div class="exercise-row"><div><strong>${name}</strong><div class="exercise-meta">${Math.round(item.confidence * 100)}% confidence · ${item.frames} frames</div></div><span class="pill">${item.frames >= 2 ? "Reliable" : "Checking"}</span></div>`).join("");
     workspace.querySelector("#gym-tour-detections").innerHTML = rows || `<div class="empty-state">Move around the gym to collect detections.</div>`;
-    workspace.querySelector("#gym-tour-count").textContent = `${evidence.size} equipment types detected`;
+    workspace.querySelector("#gym-tour-count").textContent = status.startsWith("Model not configured")
+      ? "Model not configured"
+      : `${evidence.size} equipment types detected`;
     workspace.querySelector("#gym-tour-status").textContent = status;
   };
 
@@ -1647,7 +1649,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       <div class="card">
         <div class="camera-panel" style="aspect-ratio:4/3;"><video id="gym-tour-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video><div class="camera-feedback" id="gym-tour-status" style="display:flex;align-items:center;justify-content:center;">Starting camera…</div></div>
         <div class="btn-row"><button class="btn btn-mint" id="gym-tour-pause">Pause</button><button class="btn btn-outline" id="gym-tour-stop">Stop</button></div>
-        <div class="card-sub" id="gym-tour-count" style="margin-top:12px;">0 equipment types detected</div>
+        <div class="card-sub" id="gym-tour-count" style="margin-top:12px;">Waiting for local model…</div>
         <div id="gym-tour-detections" style="margin-top:8px;"></div>
       </div>
     `;
@@ -1674,6 +1676,11 @@ function renderGymTour(equipment, plan, savedProfile) {
           canvas.getContext("2d").drawImage(video, 0, 0);
           try {
             const result = await Api.post("/equipment/detect", { imageBase64: canvas.toDataURL("image/jpeg", 0.8).split(",")[1] });
+            if (result.error === "MODEL_NOT_CONFIGURED") {
+              renderEvidence(workspace, "Model not configured. Add a trained local YOLO model to the backend.");
+              stopStream();
+              return;
+            }
             for (const detection of result.detections || []) {
               const current = evidence.get(detection.equipmentName) || { confidence: 0, frames: 0 };
               current.frames += 1;

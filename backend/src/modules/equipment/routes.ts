@@ -112,6 +112,7 @@ equipmentRouter.post("/gym-tour", requireAuth, async (req: AuthedRequest, res) =
         uuidv4(), userId, equipment.id
       );
     }
+    console.info(`[CV] Gym profile updated: ${JSON.stringify(names)}`);
   }
 
   return res.json({ profileId, gymTourCompleted: parsed.data.completed, equipment: names, lastScanAt: parsed.data.completed ? ts : null });
@@ -193,9 +194,10 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
   if (!result.configured) {
     return res.json({
       configured: false,
-      message:
-        "No local equipment-vision model is connected, so nothing was auto-detected. Configure EQUIPMENT_VISION_API_URL for the self-hosted ONNX detector.",
+      error: "MODEL_NOT_CONFIGURED",
+      message: result.error,
       detections: [],
+      equipment: [],
       suggestedExercises: [],
     });
   }
@@ -205,6 +207,7 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
       configured: true,
       message: "No known equipment was recognized in that photo — try a clearer angle or better lighting.",
       detections: [],
+      equipment: [],
       suggestedExercises: [],
     });
   }
@@ -246,6 +249,10 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
   return res.json({
     configured: true,
     detections: result.detections,
+    equipment: result.detections.map((detection) => ({
+      name: detection.equipmentName,
+      confidence: detection.confidence,
+    })),
     suggestedExercises: suggested.slice(0, 6),
   });
 });

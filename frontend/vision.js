@@ -248,7 +248,7 @@ const VisionCoach = {
     try {
       const result = await Api.post("/equipment/detect", { imageBase64 });
       if (!result.configured) {
-        this.renderEquipmentState("AI vision model is not configured.", []);
+        this.renderEquipmentState("Model not configured. Add a trained local YOLO model to the backend.", []);
       } else {
         const detections = (result.detections || []).filter(
           (d) => Number(d.confidence) >= this.equipmentMinConfidence,

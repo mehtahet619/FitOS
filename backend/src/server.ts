@@ -15,6 +15,7 @@ import { progressRouter } from "./modules/progress/routes";
 import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
+import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -132,5 +133,6 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Adaptive Fit API listening on :${PORT}`);
+  void initializeEquipmentVisionProvider().catch((error) => console.error(`[CV] Model failed to load: ${error.message}`));
   void logOtpRuntimeDiagnostics();
 });
