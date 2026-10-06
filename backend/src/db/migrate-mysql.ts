@@ -75,6 +75,10 @@ export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []
 
   return sql
     .replace(
+      /(^|,)(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b(?=[^,)]*\bDEFAULT\b)/gim,
+      "$1$2$3$4$5$6VARCHAR(2000)"
+    )
+    .replace(
       /(^|,)(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b/gim,
       (match, prefix: string, whitespace: string, quote: string, column: string, closingQuote: string, separator: string) => (
         keyColumns.has(column.toLowerCase()) || isKeyColumn(column)
@@ -141,8 +145,8 @@ async function main(): Promise<void> {
     await executeMySqlStatement(database, `
       ALTER TABLE Workout ADD COLUMN IF NOT EXISTS planStepIndex INTEGER,
       ADD COLUMN IF NOT EXISTS cycleId TEXT,
-      ADD COLUMN IF NOT EXISTS equipmentMode TEXT NOT NULL DEFAULT 'USER_EQUIPMENT',
-      ADD COLUMN IF NOT EXISTS equipmentSnapshot TEXT NOT NULL DEFAULT '[]',
+      ADD COLUMN IF NOT EXISTS equipmentMode VARCHAR(2000) NOT NULL DEFAULT 'USER_EQUIPMENT',
+      ADD COLUMN IF NOT EXISTS equipmentSnapshot VARCHAR(2000) NOT NULL DEFAULT '[]',
       ADD COLUMN IF NOT EXISTS generatorVersion TEXT
     `);
     await executeMySqlStatement(database, `
@@ -152,7 +156,7 @@ async function main(): Promise<void> {
         ADD COLUMN IF NOT EXISTS sourcePrimaryMuscle TEXT,
         ADD COLUMN IF NOT EXISTS sourceMachine TEXT
     `);
-    await executeMySqlStatement(database, `ALTER TABLE NutritionRecommendation ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'general-nutrition'`);
+    await executeMySqlStatement(database, `ALTER TABLE NutritionRecommendation ADD COLUMN IF NOT EXISTS source VARCHAR(2000) NOT NULL DEFAULT 'general-nutrition'`);
     await executeMySqlStatement(database, `ALTER TABLE Equipment ADD COLUMN IF NOT EXISTS normalizedName TEXT, ADD COLUMN IF NOT EXISTS category TEXT`);
     await executeMySqlStatement(database, `ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT, ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
 

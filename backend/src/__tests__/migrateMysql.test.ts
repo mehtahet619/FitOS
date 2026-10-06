@@ -38,6 +38,20 @@ describe("MySQL migration schema execution", () => {
     expect(converted).toMatch(/familyKey VARCHAR\(191\)[\s\S]*workoutExerciseId VARCHAR\(191\)[\s\S]*email VARCHAR\(191\)[\s\S]*token VARCHAR\(191\)[\s\S]*name TEXT[\s\S]*createdAt TEXT/);
   });
 
+  it("converts TEXT columns with defaults while preserving default-free TEXT", () => {
+    const converted = toMysql(`
+      CREATE TABLE Example (
+        allergies TEXT NOT NULL DEFAULT '',
+        equipment TEXT DEFAULT '[]',
+        notes TEXT NOT NULL
+      );
+    `);
+
+    expect(converted).toContain("allergies VARCHAR(2000) NOT NULL DEFAULT ''");
+    expect(converted).toContain("equipment VARCHAR(2000) DEFAULT '[]'");
+    expect(converted).toContain("notes TEXT NOT NULL");
+  });
+
   it("translates SQLite autoincrement spelling", () => {
     expect(toMysql("CREATE TABLE Example (id INTEGER PRIMARY KEY AUTOINCREMENT)"))
       .toBe("CREATE TABLE Example (id INTEGER PRIMARY KEY AUTO_INCREMENT)");
