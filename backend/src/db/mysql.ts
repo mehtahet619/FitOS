@@ -32,6 +32,7 @@ export class MySqlDatabase implements DatabaseLike {
       connectTimeout: 5_000,
       enableKeepAlive: true,
       multipleStatements: true,
+      ssl: { rejectUnauthorized: true },
     });
   }
 
