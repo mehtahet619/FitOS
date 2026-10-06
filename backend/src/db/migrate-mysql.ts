@@ -49,11 +49,22 @@ function findKeyColumns(sql: string): Set<string> {
   for (const match of sql.matchAll(/\b(?:PRIMARY\s+KEY|UNIQUE|FOREIGN\s+KEY)\s*\(([^)]+)\)/gi)) {
     addColumns(match[1]);
   }
-  for (const match of sql.matchAll(/\b(?:CREATE\s+(?:UNIQUE\s+)?INDEX)\b[\s\S]*?\(([^)]+)\)/gi)) {
-    addColumns(match[1]);
+  const normalizedSql = sql.trimStart().toLowerCase();
+  if (normalizedSql.startsWith("create index ") || normalizedSql.startsWith("create unique index ")) {
+    const openingParenthesis = sql.indexOf("(");
+    const closingParenthesis = sql.indexOf(")", openingParenthesis + 1);
+    if (openingParenthesis !== -1 && closingParenthesis !== -1) {
+      addColumns(sql.slice(openingParenthesis + 1, closingParenthesis));
+    }
   }
-  for (const match of sql.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s+TEXT\b[\s\S]*?\bREFERENCES\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s*\(\s*`?([A-Za-z_][A-Za-z0-9_]*)`?/gi)) {
-    addColumns(`${match[1]},${match[2]}`);
+  for (const match of sql.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s+TEXT\b/gi)) {
+    const definitionEnd = sql.slice(match.index + match[0].length).search(/[,)]/);
+    const definition = sql.slice(
+      match.index + match[0].length,
+      definitionEnd === -1 ? sql.length : match.index + match[0].length + definitionEnd
+    );
+    const reference = definition.match(/\bREFERENCES\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s*\(\s*`?([A-Za-z_][A-Za-z0-9_]*)`?/i);
+    if (reference) addColumns(`${match[1]},${reference[1]}`);
   }
   return keyColumns;
 }
