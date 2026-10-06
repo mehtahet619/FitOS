@@ -26,7 +26,7 @@ export class MySqlDatabase implements DatabaseLike {
     }
 
     this.pool = createPool({
-      uri: connectionString,
+      uri: connectionString.replace(/^tidb:\/\//, "mysql://"),
       waitForConnections: true,
       connectionLimit: Number(process.env.MYSQL_POOL_MAX ?? 10),
       connectTimeout: 5_000,
@@ -103,5 +103,5 @@ class MySqlTransaction implements DatabaseLike {
 }
 
 export function isMySqlUrl(value = process.env.DATABASE_URL): boolean {
-  return Boolean(value?.startsWith("mysql://") || value?.startsWith("mysql2://"));
+  return Boolean(value?.startsWith("mysql://") || value?.startsWith("mysql2://") || value?.startsWith("tidb://"));
 }

@@ -1,7 +1,8 @@
 import path from "path";
-import { MySqlDatabase, isMySqlUrl } from "./mysql";
-import { PostgresDatabase, isPostgresUrl } from "./postgres";
+import { MySqlDatabase } from "./mysql";
+import { PostgresDatabase } from "./postgres";
 import type { DatabaseLike } from "./types";
+import { getDatabaseProvider } from "./provider";
 
 class SqliteDatabase implements DatabaseLike {
   constructor(private readonly database: { prepare(sql: string): { all(...params: unknown[]): unknown[]; get(...params: unknown[]): unknown; run(...params: unknown[]): { changes: number | bigint } }; exec(sql: string): void }) {}
@@ -37,8 +38,9 @@ class SqliteDatabase implements DatabaseLike {
 }
 
 function createDatabase(): DatabaseLike {
-  if (isPostgresUrl()) return new PostgresDatabase();
-  if (isMySqlUrl()) return new MySqlDatabase();
+  const provider = getDatabaseProvider();
+  if (provider === "postgres") return new PostgresDatabase();
+  if (provider === "mysql") return new MySqlDatabase();
 
   const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
   const dbPath = process.env.DATABASE_URL?.startsWith("file:")

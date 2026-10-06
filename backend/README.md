@@ -19,13 +19,16 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 ## Render deployment
 
 The repository includes a `render.yaml` blueprint for the Render web service.
-Set `FRONTEND_ORIGIN` to the deployed frontend URL. TiDB/MySQL migrations run
-as a pre-deploy step; normal server starts do not run seed scripts. Configure
+Set `FRONTEND_ORIGIN` to the deployed frontend URL. Render's free tier does
+not support pre-deploy commands, so apply the TiDB/MySQL schema from the
+backend shell before serving traffic. Normal server starts do not run seed
+scripts. Configure
 SMTP and Upstash Redis secrets in Render before enabling OTP registration.
 
-The API selects TiDB/MySQL automatically when `DATABASE_URL` starts with
-`mysql://`, PostgreSQL for `postgres://` or `postgresql://`, and SQLite remains
-available for local development. OTP request limits use an atomic shared Upstash Redis token
+The API selects TiDB/MySQL automatically for `mysql://`, `mysql2://`, or
+`tidb://` URLs, PostgreSQL for `postgres://` or `postgresql://`, and SQLite
+remains available only for local development. An unsupported `DATABASE_URL`
+scheme fails startup instead of silently using SQLite. OTP request limits use an atomic shared Upstash Redis token
 bucket in production.
 
 ```bash
@@ -37,6 +40,14 @@ For the compiled production migration used by Render:
 ```bash
 npm run build
 DATABASE_URL="mysql://..." npm run migrate:mysql:prod
+```
+
+The equivalent TiDB connection URL can use the `tidb://` scheme; the backend
+normalizes it for the MySQL driver:
+
+```bash
+npm run build
+DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 ```
 
 
