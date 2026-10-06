@@ -4,7 +4,6 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    preDeployCommand: npm run migrate:mysql:prod
     startCommand: npm start
     autoDeploy: false
     healthCheckPath: /health
