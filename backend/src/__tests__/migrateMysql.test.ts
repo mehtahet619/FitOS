@@ -18,8 +18,8 @@ describe("MySQL migration schema execution", () => {
     `);
 
     expect(statements).toEqual([
-      "CREATE TABLE IF NOT EXISTS `User` (id TEXT PRIMARY KEY)",
-      "CREATE TABLE IF NOT EXISTS Workout (id TEXT PRIMARY KEY)",
+      "CREATE TABLE IF NOT EXISTS `User` (id VARCHAR(191) PRIMARY KEY)",
+      "CREATE TABLE IF NOT EXISTS Workout (id VARCHAR(191) PRIMARY KEY)",
     ]);
   });
 
@@ -37,7 +37,7 @@ describe("MySQL migration schema execution", () => {
       CREATE UNIQUE INDEX idx_example_token ON Example(token);
     `);
     expect(converted).toContain("id VARCHAR(191) PRIMARY KEY");
-    expect(converted).toMatch(/familyKey VARCHAR\(191\)[\s\S]*workoutExerciseId VARCHAR\(191\)[\s\S]*email VARCHAR\(191\)[\s\S]*token VARCHAR\(191\)[\s\S]*name TEXT[\s\S]*createdAt TEXT/);
+    expect(converted).toMatch(/familyKey TEXT[\s\S]*workoutExerciseId VARCHAR\(191\)[\s\S]*email VARCHAR\(191\)[\s\S]*token VARCHAR\(191\)[\s\S]*name TEXT[\s\S]*createdAt TEXT/);
   });
 
   it("converts TEXT columns with defaults while preserving default-free TEXT", () => {
@@ -72,14 +72,28 @@ describe("MySQL migration schema execution", () => {
     expect(converted).toContain("passwordHash TEXT,");
   });
 
+  it("converts every schema key column away from TEXT and BLOB", () => {
+    const schema = fs.readFileSync(path.resolve(__dirname, "../db/schema.sql"), "utf8");
+    const converted = toMysql(schema);
+    const keyedColumnPattern = /(^|[,(\n])\s*`?([A-Za-z_][A-Za-z0-9_]*)`?\s+(?:TEXT|BLOB)\b[^,;)]*\b(?:PRIMARY\s+KEY|UNIQUE|KEY|INDEX|REFERENCES)\b/gi;
+
+    expect(converted).not.toMatch(keyedColumnPattern);
+    expect(converted).toMatch(/CREATE TABLE IF NOT EXISTS GymAttendance \([\s\S]*\bid VARCHAR\(191\) PRIMARY KEY/);
+  });
+
   it("converts a first column with a default on the same line", () => {
     expect(toMysql("CREATE TABLE Example (value TEXT NOT NULL DEFAULT '')"))
-      .toBe("CREATE TABLE Example (value VARCHAR(2000) NOT NULL DEFAULT '')");
+      .toBe("CREATE TABLE IF NOT EXISTS Example (value VARCHAR(2000) NOT NULL DEFAULT '')");
+  });
+
+  it("converts TEXT defaults containing commas without affecting later columns", () => {
+    expect(toMysql("CREATE TABLE Example (value TEXT NOT NULL DEFAULT 'a,b', notes TEXT NOT NULL)"))
+      .toBe("CREATE TABLE IF NOT EXISTS Example (value VARCHAR(2000) NOT NULL DEFAULT 'a,b', notes TEXT NOT NULL)");
   });
 
   it("translates SQLite autoincrement spelling", () => {
     expect(toMysql("CREATE TABLE Example (id INTEGER PRIMARY KEY AUTOINCREMENT)"))
-      .toBe("CREATE TABLE Example (id INTEGER PRIMARY KEY AUTO_INCREMENT)");
+      .toBe("CREATE TABLE IF NOT EXISTS Example (id INTEGER PRIMARY KEY AUTO_INCREMENT)");
   });
 
   it("carries standalone index columns back to their table declaration", () => {
@@ -91,5 +105,15 @@ describe("MySQL migration schema execution", () => {
       CREATE TABLE Example (id TEXT PRIMARY KEY, alias TEXT, name TEXT);
       CREATE INDEX idx_example_alias ON Example(alias);
     `)[0]).toContain("name TEXT");
+  });
+
+  it("uses external indexes to convert arbitrary column names", () => {
+    const statements = prepareMySqlSchema(`
+    CREATE TABLE Example (id TEXT PRIMARY KEY, name TEXT, notes TEXT);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_example_name ON Example(name);
+    `);
+    expect(statements[0]).toContain("name VARCHAR(191)");
+    expect(statements[0]).toContain("notes TEXT");
+    expect(statements[1]).toBe("CREATE UNIQUE INDEX idx_example_name ON Example(name)");
   });
 });

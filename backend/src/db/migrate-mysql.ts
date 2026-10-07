@@ -28,65 +28,127 @@ export function splitSqlStatements(sql: string): string[] {
   return statements;
 }
 
-function columnNames(columns: string): string[] {
-  return columns
-    .split(",")
-    .map((column) => column.match(/`?([A-Za-z_][A-Za-z0-9_]*)`?/)?.[1])
-    .filter((column): column is string => Boolean(column));
+function identifier(value: string): string {
+  return value.replace(/^[`"]|[`"]$/g, "").toLowerCase();
 }
 
-function isKeyColumn(column: string): boolean {
-  return /^(id|email|token|slug|code)$/i.test(column)
-    || /(?:Id|Key)$/i.test(column);
-}
-
-function findKeyColumns(sql: string): Set<string> {
-  const keyColumns = new Set<string>();
-  const addColumns = (columns: string): void => {
-    for (const column of columnNames(columns)) keyColumns.add(column.toLowerCase());
-  };
-
-  for (const match of sql.matchAll(/\b(?:PRIMARY\s+KEY|UNIQUE|FOREIGN\s+KEY)\s*\(([^)]+)\)/gi)) {
-    addColumns(match[1]);
-  }
-  const normalizedSql = sql.trimStart().toLowerCase();
-  if (normalizedSql.startsWith("create index ") || normalizedSql.startsWith("create unique index ")) {
-    const openingParenthesis = sql.indexOf("(");
-    const closingParenthesis = sql.indexOf(")", openingParenthesis + 1);
-    if (openingParenthesis !== -1 && closingParenthesis !== -1) {
-      addColumns(sql.slice(openingParenthesis + 1, closingParenthesis));
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: "'" | '"' | "`" | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote && value[index - 1] !== "\\") quote = undefined;
+    } else if (character === "'" || character === '"' || character === "`") {
+      quote = character;
+    } else if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+    } else if (character === "," && depth === 0) {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
     }
   }
-  for (const match of sql.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s+TEXT\b/gi)) {
-    const definitionEnd = sql.slice(match.index + match[0].length).search(/[,)]/);
-    const definition = sql.slice(
-      match.index + match[0].length,
-      definitionEnd === -1 ? sql.length : match.index + match[0].length + definitionEnd
-    );
-    const reference = definition.match(/\bREFERENCES\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s*\(\s*`?([A-Za-z_][A-Za-z0-9_]*)`?/i);
-    if (reference) addColumns(`${match[1]},${reference[1]}`);
+  parts.push(value.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+function tableName(sql: string): string | undefined {
+  return sql.match(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1];
+}
+
+function addColumns(target: Map<string, Set<string>>, table: string, columns: string): void {
+  const keyColumns = target.get(identifier(table)) ?? new Set<string>();
+  for (const column of splitTopLevel(columns)) {
+    const name = column.match(/`?([A-Za-z_][A-Za-z0-9_]*)`?/);
+    if (name) keyColumns.add(identifier(name[1]));
+  }
+  target.set(identifier(table), keyColumns);
+}
+
+function collectKeyColumns(statements: string[]): Map<string, Set<string>> {
+  const keyColumns = new Map<string, Set<string>>();
+  for (const statement of statements) {
+    const createTableMatch = statement.match(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?\s*/i);
+    const createTable = createTableMatch?.[1];
+    if (createTable && createTableMatch) {
+      const createTableEnd = (createTableMatch.index ?? 0) + createTableMatch[0].length;
+      const openingParenthesis = statement.indexOf("(", createTableEnd);
+      const closingParenthesis = statement.lastIndexOf(")");
+      if (openingParenthesis !== -1 && closingParenthesis > openingParenthesis) {
+        for (const definition of splitTopLevel(statement.slice(openingParenthesis + 1, closingParenthesis))) {
+          const localColumn = definition.match(/^`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1];
+          if (/\b(?:PRIMARY\s+KEY|UNIQUE|KEY|INDEX)\b/i.test(definition) && localColumn) {
+            const columns = definition.match(/\(([^()]*)\)/)?.[1];
+            addColumns(keyColumns, createTable, columns ?? localColumn);
+          }
+          for (const reference of definition.matchAll(/\bREFERENCES\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/gi)) {
+            if (localColumn) addColumns(keyColumns, createTable, localColumn);
+            addColumns(keyColumns, reference[1], reference[2]);
+          }
+        }
+      }
+    }
+
+    const index = statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/i);
+    if (index) addColumns(keyColumns, index[1], index[2]);
   }
   return keyColumns;
 }
 
-export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []): string {
-  const keyColumns = findKeyColumns(sql);
-  for (const column of additionalKeyColumns) keyColumns.add(column.toLowerCase());
+function replaceTextColumns(sql: string, keyColumns: Set<string>): string {
+  const textColumnPattern = /(^|[,(\n])(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b/gim;
+  return sql.replace(textColumnPattern, (match, prefix: string, whitespace: string, quote: string, column: string, closingQuote: string, separator: string, offset: number) => {
+    let quoteCharacter: "'" | '"' | "`" | undefined;
+    let parenthesisDepth = 0;
+    let hasDefault = false;
 
-  return sql
-    .replace(
-      /(^|[,(\n])(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b(?=[^,)]*\bDEFAULT\b)/gim,
-      "$1$2$3$4$5$6VARCHAR(2000)"
-    )
-    .replace(
-      /(^|,)(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b/gim,
-      (match, prefix: string, whitespace: string, quote: string, column: string, closingQuote: string, separator: string) => (
-        keyColumns.has(column.toLowerCase()) || isKeyColumn(column)
-          ? `${prefix}${whitespace}${quote}${column}${closingQuote}${separator}VARCHAR(191)`
-          : match
-      )
-    )
-    .replace(/\bAUTOINCREMENT\b/gi, "AUTO_INCREMENT");
+    for (let index = offset + match.length; index < sql.length; index += 1) {
+      const character = sql[index];
+      if (quoteCharacter) {
+        if (character === quoteCharacter && sql[index - 1] !== "\\") quoteCharacter = undefined;
+        continue;
+      }
+      if (character === "'" || character === '"' || character === "`") {
+        quoteCharacter = character;
+      } else if (character === "(") {
+        parenthesisDepth += 1;
+      } else if (character === ")" && parenthesisDepth > 0) {
+        parenthesisDepth -= 1;
+      } else if ((character === ")" || character === ",") && parenthesisDepth === 0) {
+        break;
+      } else if (parenthesisDepth === 0 && /^\bDEFAULT\b/i.test(sql.slice(index))) {
+        hasDefault = true;
+        break;
+      }
+    }
+
+    const type = keyColumns.has(identifier(column))
+      ? "VARCHAR(191)"
+      : hasDefault ? "VARCHAR(2000)" : "TEXT";
+    return type === "TEXT"
+      ? match
+      : `${prefix}${whitespace}${quote}${column}${closingQuote}${separator}${type}`;
+  });
+}
+
+export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []): string {
+  const statements = splitSqlStatements(sql);
+  const keyColumns = collectKeyColumns(statements);
+  const additional = new Set([...additionalKeyColumns].map(identifier));
+  return statements.map((statement) => {
+    const table = tableName(statement);
+    const columns = new Set([...(table ? keyColumns.get(identifier(table)) ?? [] : []), ...additional]);
+    const converted = replaceTextColumns(statement, columns)
+      .replace(/\b(CREATE\s+(?:UNIQUE\s+)?INDEX)\s+IF\s+NOT\s+EXISTS\b/gi, "$1")
+      .replace(/\bAUTOINCREMENT\b/gi, "AUTO_INCREMENT");
+    return /\bCREATE\s+TABLE\b/i.test(converted)
+      ? converted.replace(/(\bCREATE\s+TABLE\s+)(?!IF\s+NOT\s+EXISTS\b)/i, "$1IF NOT EXISTS ")
+      : converted;
+  }).join("; ");
 }
 
 export function prepareMySqlSchema(schema: string): string[] {
@@ -95,11 +157,11 @@ export function prepareMySqlSchema(schema: string): string[] {
     .replace(/\bUser\b/g, "`User`")
     .replace(/CREATE INDEX IF NOT EXISTS idx_user_email_lower ON `User`\(LOWER\(email\)\)/g, "")
     .replace(/CREATE UNIQUE INDEX IF NOT EXISTS idx_user_email_normalized_unique ON `User`\(LOWER\(email\)\)/g, ""));
-  const keyColumns = new Set<string>();
-  for (const statement of statements) {
-    for (const column of findKeyColumns(statement)) keyColumns.add(column);
-  }
-  return statements.map((statement) => toMysql(statement, keyColumns));
+  const keyColumns = collectKeyColumns(statements);
+  return statements.map((statement) => {
+    const table = tableName(statement);
+    return toMysql(statement, table ? keyColumns.get(identifier(table)) : []);
+  });
 }
 
 function mysqlErrorDetails(error: unknown): { errno: unknown; sqlMessage: unknown } {
@@ -110,13 +172,25 @@ function mysqlErrorDetails(error: unknown): { errno: unknown; sqlMessage: unknow
   return { errno: undefined, sqlMessage: undefined };
 }
 
+function affectedTable(statement: string): string {
+  return tableName(statement)
+    ?? statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1]
+    ?? statement.match(/\bALTER\s+TABLE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1]
+    ?? "(unknown)";
+}
+
 async function executeMySqlStatement(database: MySqlDatabase, statement: string): Promise<void> {
   try {
     await database.exec(statement);
   } catch (error) {
     const { errno, sqlMessage } = mysqlErrorDetails(error);
-    console.error("MySQL migration statement failed:", statement);
-    console.error("MySQL error:", { errno, sqlMessage });
+    if (errno === 1061 && /^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(statement)) return;
+    console.error("MySQL migration statement failed:", {
+      table: affectedTable(statement),
+      statement,
+      errno,
+      sqlMessage,
+    });
     throw error;
   }
 }
