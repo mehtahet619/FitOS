@@ -75,7 +75,7 @@ export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []
 
   return sql
     .replace(
-      /(^|,)(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b(?=[^,)]*\bDEFAULT\b)/gim,
+      /(^|[,(\n])(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b(?=[^,)]*\bDEFAULT\b)/gim,
       "$1$2$3$4$5$6VARCHAR(2000)"
     )
     .replace(

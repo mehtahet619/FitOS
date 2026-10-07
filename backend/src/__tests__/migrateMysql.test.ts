@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { describe, expect, it } from "vitest";
 import { prepareMySqlSchema, splitSqlStatements, toMysql } from "../db/migrate-mysql";
 
@@ -50,6 +52,29 @@ describe("MySQL migration schema execution", () => {
     expect(converted).toContain("allergies VARCHAR(2000) NOT NULL DEFAULT ''");
     expect(converted).toContain("equipment VARCHAR(2000) DEFAULT '[]'");
     expect(converted).toContain("notes TEXT NOT NULL");
+  });
+
+  it("converts every TEXT default in the schema without changing default-free TEXT", () => {
+    const schema = fs.readFileSync(path.resolve(__dirname, "../db/schema.sql"), "utf8");
+    const converted = toMysql(schema);
+
+    expect(converted).not.toMatch(/\bTEXT\b[^,;\n)]*\bDEFAULT\b/i);
+    expect(converted).toContain("allergies VARCHAR(2000) NOT NULL DEFAULT ''");
+    expect(converted).toContain("foodLikes VARCHAR(2000) NOT NULL DEFAULT ''");
+    expect(converted).toContain("equipmentJson VARCHAR(2000) NOT NULL DEFAULT '[]'");
+    expect(converted).toContain("secondaryMuscles VARCHAR(2000) NOT NULL DEFAULT ''");
+    expect(converted).toContain("status VARCHAR(2000) NOT NULL DEFAULT 'pending'");
+    expect(converted).toContain("equipmentMode VARCHAR(2000) NOT NULL DEFAULT 'USER_EQUIPMENT'");
+    expect(converted).toContain("equipmentSnapshot VARCHAR(2000) NOT NULL DEFAULT '[]'");
+    expect(converted).toContain("cycleStatus VARCHAR(2000) NOT NULL DEFAULT 'IN_PROGRESS'");
+    expect(converted).toContain("allergens VARCHAR(2000) NOT NULL DEFAULT ''");
+    expect(converted).toContain("source VARCHAR(2000) NOT NULL DEFAULT 'general-nutrition'");
+    expect(converted).toContain("passwordHash TEXT,");
+  });
+
+  it("converts a first column with a default on the same line", () => {
+    expect(toMysql("CREATE TABLE Example (value TEXT NOT NULL DEFAULT '')"))
+      .toBe("CREATE TABLE Example (value VARCHAR(2000) NOT NULL DEFAULT '')");
   });
 
   it("translates SQLite autoincrement spelling", () => {
