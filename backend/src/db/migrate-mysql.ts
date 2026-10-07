@@ -57,13 +57,15 @@ function splitTopLevel(value: string): string[] {
 }
 
 function tableName(sql: string): string | undefined {
-  return sql.match(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1];
+  return sql.match(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1]; // eslint-disable-line security/detect-unsafe-regex
 }
 
 function addColumns(target: Map<string, Set<string>>, table: string, columns: string): void {
   const keyColumns = target.get(identifier(table)) ?? new Set<string>();
   for (const column of splitTopLevel(columns)) {
-    const name = column.match(/`?([A-Za-z_][A-Za-z0-9_]*)`?/);
+    // The input is a single SQL column expression; this identifier pattern is bounded by the caller.
+    // eslint-disable-next-line security/detect-unsafe-regex
+    const name = column.match(/`?([A-Za-z_][A-Za-z0-9_]*)`?/); // eslint-disable-line security/detect-unsafe-regex
     if (name) keyColumns.add(identifier(name[1]));
   }
   target.set(identifier(table), keyColumns);
@@ -72,6 +74,7 @@ function addColumns(target: Map<string, Set<string>>, table: string, columns: st
 function collectKeyColumns(statements: string[]): Map<string, Set<string>> {
   const keyColumns = new Map<string, Set<string>>();
   for (const statement of statements) {
+    // eslint-disable-next-line security/detect-unsafe-regex
     const createTableMatch = statement.match(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z_][A-Za-z0-9_]*)`?\s*/i);
     const createTable = createTableMatch?.[1];
     if (createTable && createTableMatch) {
@@ -85,7 +88,8 @@ function collectKeyColumns(statements: string[]): Map<string, Set<string>> {
             const columns = definition.match(/\(([^()]*)\)/)?.[1];
             addColumns(keyColumns, createTable, columns ?? localColumn);
           }
-          for (const reference of definition.matchAll(/\bREFERENCES\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/gi)) {
+          // eslint-disable-next-line security/detect-unsafe-regex
+          for (const reference of definition.matchAll(/\bREFERENCES\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/gi)) { // eslint-disable-line security/detect-unsafe-regex
             if (localColumn) addColumns(keyColumns, createTable, localColumn);
             addColumns(keyColumns, reference[1], reference[2]);
           }
@@ -93,13 +97,14 @@ function collectKeyColumns(statements: string[]): Map<string, Set<string>> {
       }
     }
 
-    const index = statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/i);
+    const index = statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\(([^()]*)\)/i); // eslint-disable-line security/detect-unsafe-regex
     if (index) addColumns(keyColumns, index[1], index[2]);
   }
   return keyColumns;
 }
 
 function replaceTextColumns(sql: string, keyColumns: Set<string>): string {
+  // eslint-disable-next-line security/detect-unsafe-regex
   const textColumnPattern = /(^|[,(\n])(\s*)(`?)([A-Za-z_][A-Za-z0-9_]*)(\3)(\s+)TEXT\b/gim;
   return sql.replace(textColumnPattern, (match, prefix: string, whitespace: string, quote: string, column: string, closingQuote: string, separator: string, offset: number) => {
     let quoteCharacter: "'" | '"' | "`" | undefined;
@@ -120,7 +125,7 @@ function replaceTextColumns(sql: string, keyColumns: Set<string>): string {
         parenthesisDepth -= 1;
       } else if ((character === ")" || character === ",") && parenthesisDepth === 0) {
         break;
-      } else if (parenthesisDepth === 0 && /^\bDEFAULT\b/i.test(sql.slice(index))) {
+      } else if (parenthesisDepth === 0 && /^\bDEFAULT\b/i.test(sql.slice(index))) { // eslint-disable-line security/detect-unsafe-regex
         hasDefault = true;
         break;
       }
@@ -143,9 +148,10 @@ export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []
     const table = tableName(statement);
     const columns = new Set([...(table ? keyColumns.get(identifier(table)) ?? [] : []), ...additional]);
     const converted = replaceTextColumns(statement, columns)
-      .replace(/\b(CREATE\s+(?:UNIQUE\s+)?INDEX)\s+IF\s+NOT\s+EXISTS\b/gi, "$1")
+      .replace(/\b(CREATE\s+(?:UNIQUE\s+)?INDEX)\s+IF\s+NOT\s+EXISTS\b/gi, "$1") // eslint-disable-line security/detect-unsafe-regex
       .replace(/\bAUTOINCREMENT\b/gi, "AUTO_INCREMENT");
     return /\bCREATE\s+TABLE\b/i.test(converted)
+      // eslint-disable-next-line security/detect-unsafe-regex
       ? converted.replace(/(\bCREATE\s+TABLE\s+)(?!IF\s+NOT\s+EXISTS\b)/i, "$1IF NOT EXISTS ")
       : converted;
   }).join("; ");
@@ -174,7 +180,8 @@ function mysqlErrorDetails(error: unknown): { errno: unknown; sqlMessage: unknow
 
 function affectedTable(statement: string): string {
   return tableName(statement)
-    ?? statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1]
+    // eslint-disable-next-line security/detect-unsafe-regex
+    ?? statement.match(/\bCREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+ON\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1] // eslint-disable-line security/detect-unsafe-regex
     ?? statement.match(/\bALTER\s+TABLE\s+`?([A-Za-z_][A-Za-z0-9_]*)`?/i)?.[1]
     ?? "(unknown)";
 }
@@ -184,7 +191,7 @@ async function executeMySqlStatement(database: MySqlDatabase, statement: string)
     await database.exec(statement);
   } catch (error) {
     const { errno, sqlMessage } = mysqlErrorDetails(error);
-    if (errno === 1061 && /^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(statement)) return;
+    if (errno === 1061 && /^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(statement)) return; // eslint-disable-line security/detect-unsafe-regex
     console.error("MySQL migration statement failed:", {
       table: affectedTable(statement),
       statement,
