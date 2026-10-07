@@ -29,7 +29,7 @@ export class MySqlDatabase implements DatabaseLike {
       uri: connectionString.replace(/^tidb:\/\//, "mysql://"),
       waitForConnections: true,
       connectionLimit: Number(process.env.MYSQL_POOL_MAX ?? 10),
-      connectTimeout: 5_000,
+      connectTimeout: 20_000,
       enableKeepAlive: true,
       multipleStatements: true,
       ssl: { rejectUnauthorized: true },
