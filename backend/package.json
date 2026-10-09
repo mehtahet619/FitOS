@@ -21,6 +21,7 @@
     "migrate:mysql:prod": "node dist/db/migrate-mysql.js",
     "seed": "ts-node src/db/seed.ts",
     "seed:prod": "node dist/db/seed.js",
+    "seed:owner": "node dist/db/seed-owner.js",
     "import:exercises": "ts-node scripts/import-exercises.ts",
     "seed:equipment-aliases": "ts-node scripts/seed-equipment-aliases.ts",
     "test": "vitest run"
