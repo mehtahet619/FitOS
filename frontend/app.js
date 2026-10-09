@@ -139,7 +139,10 @@ function startResendCountdown(seconds) {
 async function routeCurrent() {
   const path = normalizePath(location.pathname);
   const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
-  if (AuthState.status === "AUTH_LOADING") { showScreen("screen-auth-loading"); return; }
+  if (AuthState.status === "AUTH_LOADING") {
+    showScreen("screen-intro");
+    return;
+  }
   if (path === "/" || path === "/login" || path === "/register") {
     if (AuthState.status === "AUTHENTICATED") { if (path !== "/homepage") navigate("/homepage", true); return; }
     State.isRegisterMode = path === "/register";
@@ -172,7 +175,7 @@ async function routeCurrent() {
   switchTab(routeTabs[path], false);
 }
 window.addEventListener("popstate", () => { if (AuthState.status === "AUTHENTICATED") { void routeCurrent(); } else { void boot(); } });
-window.addEventListener("pageshow", (event) => { if (event.persisted) { AuthState.status = "AUTH_LOADING"; showScreen("screen-auth-loading"); void boot(); } });
+window.addEventListener("pageshow", (event) => { if (event.persisted) { AuthState.status = "AUTH_LOADING"; void boot(); } });
 
 function updateAuthMode() {
   const register = State.isRegisterMode;
@@ -210,7 +213,7 @@ function showScreen(id) {
   if (!screen) return;
   screen.classList.add("active");
 
-  // Keep public/loading screens separate from the protected app shell.
+  // Keep public screens separate from the protected app shell.
   const isProtectedScreen = $("main-app").contains(screen);
   const mainApp = $("main-app");
   const bottomNav = $("bottom-nav");
@@ -218,23 +221,30 @@ function showScreen(id) {
   mainApp.style.display = isProtectedScreen ? "flex" : "none";
   bottomNav.hidden = !isProtectedScreen;
   bottomNav.style.display = isProtectedScreen ? "flex" : "none";
-  $("app").dataset.view = isProtectedScreen ? "protected" : id === "screen-auth-loading" ? "loading" : "public";
+  $("app").dataset.view = isProtectedScreen ? "protected" : "public";
 }
 
 /* ---------------- Boot ---------------- */
-async function boot() {
-  const generation = ++authBootGeneration;
-  AuthState.status = "AUTH_LOADING"; showScreen("screen-auth-loading");
+  async function boot() {
+    const generation = ++authBootGeneration;
+    AuthState.status = "AUTH_LOADING";
+  showScreen("screen-intro");
+  $("auth-submit").disabled = true;
   try {
     const data = await Api.get("/auth/me");
+      await keepIntroVisible();
     if (generation !== authBootGeneration) return;
     if (!data.authenticated) {
-      Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent(); navigate("/login", true); return;
+      Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent();
+      if (["/verify-email", "/forgot-password", "/reset-password"].includes(normalizePath(location.pathname))) await routeCurrent();
+      else navigate("/login", true);
+      return;
     }
     AuthState.authenticated(data.user);
     if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
     if (["/", "/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
+      await keepIntroVisible();
     if (generation !== authBootGeneration) return;
     if (e?.status === 401) Api.clearTokens();
     AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; clearProtectedContent(); navigate("/login", true);
@@ -244,6 +254,19 @@ async function boot() {
     const bannerEl = $("auth-banner");
     banner(bannerEl, "error", `${message} <button id="auth-retry-session" class="btn btn-outline" type="button">Retry session check</button>`);
     $("auth-retry-session").addEventListener("click", () => { void boot(); });
+  } finally {
+    if (generation === authBootGeneration) $("auth-submit").disabled = false;
+  }
+}
+
+async function keepIntroVisible() {
+  const sceneReady = window.FitOSIntroReady || Promise.resolve();
+  const sceneTimeout = new Promise((resolve) => setTimeout(resolve, 3200));
+  await Promise.race([sceneReady, sceneTimeout]);
+  if (typeof window.FitOSIntroFinishWhenReady === "function") {
+    const finishAnimation = window.FitOSIntroFinishWhenReady();
+    const finishTimeout = new Promise((resolve) => setTimeout(resolve, 7400));
+    await Promise.race([finishAnimation, finishTimeout]);
   }
 }
 

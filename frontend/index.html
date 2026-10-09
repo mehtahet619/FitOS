@@ -7,6 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Adaptive Fit" />
+<base id="app-base" href="./" />
+<script>
+  if (location.protocol !== "file:") document.getElementById("app-base").href = "/";
+</script>
 <script>
   // Migration cleanup for clients that still have the old cache-first worker.
   // Keep this ahead of application scripts so the next navigation is network-backed.
@@ -38,19 +42,20 @@
 <body>
 <div id="app">
 
-  <div id="screen-auth-loading" class="screen active auth-loading" aria-live="polite">
-    <div class="session-loader">
-      <div class="session-loader-mark" aria-hidden="true">
-        <span class="session-loader-ring"></span>
-        <span class="session-loader-bar session-loader-bar-one"></span>
-        <span class="session-loader-bar session-loader-bar-two"></span>
-        <span class="session-loader-bar session-loader-bar-three"></span>
-      </div>
-      <div class="session-loader-title">Checking your session</div>
-      <div class="session-loader-copy">Getting your next workout ready</div>
-      <div class="session-loader-progress" aria-hidden="true"><span></span></div>
+  <!-- ============ FULL-SCREEN GYM INTRO ============ -->
+  <section id="screen-intro" class="screen active intro-screen" aria-label="Loading animation">
+    <div class="intro-image-fallback" aria-hidden="true">
+      <img src="assets/gym-intro.webp" alt="" width="1536" height="1024" fetchpriority="high" />
     </div>
-  </div>
+    <canvas id="intro-canvas" aria-hidden="true"></canvas>
+    <canvas id="intro-fallback-canvas" aria-hidden="true"></canvas>
+    <div class="intro-atmosphere" aria-hidden="true"></div>
+    <img class="intro-logo" src="assets/site-logo.png" alt="Green leaf logo" width="512" height="512" fetchpriority="high" />
+    <div id="intro-message" class="intro-message" aria-live="polite">
+      <p class="intro-message-title">Good things take time.</p>
+      <p class="intro-message-copy">Be consistent.<br />Be patient.<br />Keep growing.</p>
+    </div>
+  </section>
 
   <!-- ============ AUTH SCREEN ============ -->
   <div id="screen-auth" class="screen">
@@ -72,7 +77,7 @@
         <label>Password</label>
         <input id="auth-password" type="password" placeholder="••••••••" />
       </div>
-      <button class="btn btn-primary" id="auth-submit">Log in</button>
+      <button class="btn btn-primary" id="auth-submit" disabled>Log in</button>
       <button class="link-btn" id="auth-toggle">New here? Create an account</button>
       <button class="link-btn" id="forgot-link" type="button">Forgot your password?</button>
     </div>
@@ -265,6 +270,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="gym-intro.js"></script>
 <script src="config.js"></script>
 <script src="api.js"></script>
 <script src="app.js?v=fitos-20261001-equipment-picker-v15"></script>

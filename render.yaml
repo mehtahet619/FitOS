@@ -55,7 +55,7 @@ services:
   - type: web
     name: adaptive-fit-web
     runtime: static
-    buildCommand: node scripts/inject-frontend-api-url.js
+    buildCommand: node scripts/inject-frontend-api-url.cjs
     staticPublishPath: frontend
     autoDeploy: false
     headers:
