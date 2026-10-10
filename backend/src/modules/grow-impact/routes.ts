@@ -12,6 +12,7 @@ growImpactRouter.use(requireAuth);
 const rewardChangesLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
 
 interface WorkoutRow {
+  [key: string]: unknown;
   status: string;
   completedAt: string | null;
   durationMin: number;
@@ -19,6 +20,7 @@ interface WorkoutRow {
 }
 
 interface RewardRow {
+  [key: string]: unknown;
   id: string;
   userId: string;
   qualifyingMonth: string;

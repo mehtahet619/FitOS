@@ -18,16 +18,18 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 
 ## Render deployment
 
-The repository includes a `render.yaml` blueprint for a paid, always-on
-Render web service and a managed PostgreSQL database. Set `FRONTEND_ORIGIN` to
-the deployed frontend URL. PostgreSQL migrations run as a pre-deploy step;
-normal server starts do not run seed scripts. Configure SMTP and Upstash Redis
-secrets in Render before enabling OTP registration.
+The repository includes a `render.yaml` blueprint for the Render API and web
+services. Set `DATABASE_URL` on `adaptive-fit-api` to the TiDB Cloud `mysql://`
+connection URL (or a PostgreSQL URL), and set `FRONTEND_ORIGIN` to the deployed
+frontend URL. The production start command selects the matching schema
+migration and seeds the built-in exercise/food catalog before starting the API.
+It does not create an owner account. Configure SMTP and Upstash Redis secrets
+in Render before enabling OTP registration.
 
-The API now selects PostgreSQL automatically when `DATABASE_URL` starts with
-`postgres://` or `postgresql://`. SQLite remains available for local
-development. OTP request limits use an atomic shared Upstash Redis token
-bucket in production.
+The API selects TiDB automatically when `DATABASE_URL` starts with `mysql://`,
+PostgreSQL for `postgres://` or `postgresql://`, and SQLite for local
+development. TiDB Cloud connections use TLS. OTP request limits use an atomic
+shared Upstash Redis token bucket in production.
 
 The PostgreSQL pool adapter is available in `src/db/postgres.ts` and can be
 initialized independently with:
@@ -36,12 +38,16 @@ initialized independently with:
 DATABASE_URL="postgresql://..." npm run migrate:postgres
 ```
 
+For TiDB Cloud, set `DATABASE_URL` to the TiDB `mysql://` URL and run
+`npm run migrate:tidb`. Production startup runs the same migration and
+idempotent catalog seed automatically.
+
 
 ## Environment variables (`.env`)
 
 | Var | Purpose |
 |---|---|
-| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |
+| `DATABASE_URL` | `file:./dev.db` locally; TiDB `mysql://` or PostgreSQL URLs in production. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |

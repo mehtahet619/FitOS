@@ -3,7 +3,10 @@ import path from "path";
 import { db } from "./client";
 import { v4 as uuidv4 } from "uuid";
 
-const schemaPath = path.join(__dirname, "schema.sql");
+const localSchemaPath = path.join(__dirname, "schema.sql");
+const schemaPath = fs.existsSync(localSchemaPath)
+  ? localSchemaPath
+  : path.resolve(__dirname, "../../src/db/schema.sql");
 const schema = fs.readFileSync(schemaPath, "utf-8");
 
 db.exec(schema)
@@ -226,6 +229,7 @@ db.exec(schema)
     }
 
     console.log("Migration applied.");
+    await db.close?.();
   })
   .catch((error) => {
     console.error(error);

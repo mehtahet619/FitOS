@@ -6,4 +6,5 @@ export interface DatabaseLike {
   run(sql: string, ...params: unknown[]): Promise<{ changes: number }>;
   exec(sql: string): Promise<void>;
   transaction?<T>(work: (tx: DatabaseLike) => Promise<T>): Promise<T>;
+  close?(): Promise<void>;
 }

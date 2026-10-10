@@ -75,6 +75,7 @@ export interface MealPlanResult {
 }
 
 export interface FoodRow {
+  [key: string]: unknown;
   id: string;
   name: string;
   dietType: string;

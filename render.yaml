@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    startCommand: npm start
+    startCommand: npm run start:production
     autoDeploy: false
     healthCheckPath: /health
     plan: free

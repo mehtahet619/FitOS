@@ -21,6 +21,7 @@ export const DEFAULT_MUSCLE_READINESS_CONFIG: MuscleReadinessConfig = {
 };
 
 export interface MuscleHistoryEntry {
+  [key: string]: unknown;
   id: string;
   userId: string;
   muscleId: string;
