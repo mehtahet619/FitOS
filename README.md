@@ -39,14 +39,14 @@ one-per-day gym attendance check-in.
   hard-capped at one entry per user per calendar day (enforced server-side).
 - **Auth** — email/password with JWT access + refresh tokens.
 
-## Database choices
+## Why SQLite instead of Postgres
 
 The schema (`backend/src/db/schema.sql`) is written in plain, portable SQL
 against standard relational conventions (uuid keys, indexed foreign keys).
 It runs on Node's built-in `node:sqlite` module here (Node 22.5+) so the
 whole thing works with **zero
-external services** — no DB server to stand up. Production supports both
-PostgreSQL and TiDB Cloud through `DATABASE_URL`; TiDB uses its MySQL protocol.
+external services** — no DB server to stand up. Porting to Postgres is a
+schema translation, not a redesign.
 
 ## Quickstart
 
@@ -70,12 +70,12 @@ npm test
 
 ### Deploying the backend
 
-The root `render.yaml` deploys the backend to Render. Set `DATABASE_URL` on the
-API service to the TiDB `mysql://` connection URL (or a PostgreSQL URL), and set
-`FRONTEND_ORIGIN` to the frontend URL. On startup, the API selects the matching
-schema migration and idempotently seeds the built-in exercise and food catalog;
-it does not create an owner account. Configure SMTP and Upstash Redis secrets
-in Render for OTP registration.
+The root `render.yaml` deploys the backend to Render as an always-on web
+service with a managed PostgreSQL database. Set `FRONTEND_ORIGIN` in Render to
+the frontend URL. PostgreSQL migrations run as a pre-deploy step; normal server
+starts do not run seed scripts. Configure SMTP and Upstash Redis secrets in
+Render for OTP registration. The checked-in production database adapter is
+PostgreSQL (and SQLite locally); no TiDB driver/migration exists in this repo.
 
 ### 2. Frontend
 
@@ -197,15 +197,14 @@ Optional backend settings:
 - `GROW_IMPACT_TIME_ZONE` (IANA timezone; default `UTC`)
 - `GROW_IMPACT_TREE_OPTIONS` (JSON array of exactly three objects with `id`, `name`, `species`, `image`, and `description`)
 
-Run `npm run migrate` for local SQLite, `npm run migrate:postgres` for
-PostgreSQL, or `npm run migrate:tidb` for TiDB. Production runs the selected
-migration automatically at API startup.
+Run the existing schema migration command after deployment:
+`npm run migrate` for SQLite or `npm run migrate:postgres` for PostgreSQL.
 
 - **Native mobile app is untested.** `mobile/` (Flutter/Dart) was written
   without a Flutter SDK available to compile or run it in this
   environment — see the caveat above and `mobile/README.md`.
-- SQLite remains the zero-setup local default; production supports PostgreSQL
-  and TiDB Cloud.
+- **No live Postgres/production infra.** SQLite for zero-setup reproducibility;
+  schema is Postgres-portable (see above).
 - **Maps/Places and the LLM provider are both real abstractions with mock
   defaults**, not because they're incomplete stubs pretending to be done,
   but because wiring a real Google Places key or Anthropic/OpenAI key is a

@@ -1,17 +1,17 @@
 import path from "path";
-import { PostgresDatabase, isPostgresUrl } from "./postgres";
-import { TiDbDatabase } from "./tidb";
+import { MySqlDatabase } from "./mysql";
+import { PostgresDatabase } from "./postgres";
 import type { DatabaseLike } from "./types";
-import type { QueryResultRow } from "pg";
+import { getDatabaseProvider } from "./provider";
 
 class SqliteDatabase implements DatabaseLike {
   constructor(private readonly database: { prepare(sql: string): { all(...params: unknown[]): unknown[]; get(...params: unknown[]): unknown; run(...params: unknown[]): { changes: number | bigint } }; exec(sql: string): void }) {}
 
-  async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
+  async all<T>(sql: string, ...params: unknown[]): Promise<T[]> {
     return this.database.prepare(sql).all(...params) as T[];
   }
 
-  async get<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {
+  async get<T>(sql: string, ...params: unknown[]): Promise<T | undefined> {
     return this.database.prepare(sql).get(...params) as T | undefined;
   }
 
@@ -38,8 +38,9 @@ class SqliteDatabase implements DatabaseLike {
 }
 
 function createDatabase(): DatabaseLike {
-  if (isPostgresUrl()) return new PostgresDatabase();
-  if (/^mysql:\/\//i.test(process.env.DATABASE_URL ?? "")) return new TiDbDatabase();
+  const provider = getDatabaseProvider();
+  if (provider === "postgres") return new PostgresDatabase();
+  if (provider === "mysql") return new MySqlDatabase();
 
   const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
   const dbPath = process.env.DATABASE_URL?.startsWith("file:")

@@ -18,36 +18,44 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 
 ## Render deployment
 
-The repository includes a `render.yaml` blueprint for the Render API and web
-services. Set `DATABASE_URL` on `adaptive-fit-api` to the TiDB Cloud `mysql://`
-connection URL (or a PostgreSQL URL), and set `FRONTEND_ORIGIN` to the deployed
-frontend URL. The production start command selects the matching schema
-migration and seeds the built-in exercise/food catalog before starting the API.
-It does not create an owner account. Configure SMTP and Upstash Redis secrets
-in Render before enabling OTP registration.
+The repository includes a `render.yaml` blueprint for the Render web service.
+Set `FRONTEND_ORIGIN` to the deployed frontend URL. Render's free tier does
+not support pre-deploy commands, so apply the TiDB/MySQL schema from the
+backend shell before serving traffic. Normal server starts do not run seed
+scripts. Configure
+SMTP and Upstash Redis secrets in Render before enabling OTP registration.
 
-The API selects TiDB automatically when `DATABASE_URL` starts with `mysql://`,
-PostgreSQL for `postgres://` or `postgresql://`, and SQLite for local
-development. TiDB Cloud connections use TLS. OTP request limits use an atomic
-shared Upstash Redis token bucket in production.
-
-The PostgreSQL pool adapter is available in `src/db/postgres.ts` and can be
-initialized independently with:
+The API selects TiDB/MySQL automatically for `mysql://`, `mysql2://`, or
+`tidb://` URLs, PostgreSQL for `postgres://` or `postgresql://`, and SQLite
+remains available only for local development. An unsupported `DATABASE_URL`
+scheme fails startup instead of silently using SQLite. OTP request limits use an atomic shared Upstash Redis token
+bucket in production.
 
 ```bash
-DATABASE_URL="postgresql://..." npm run migrate:postgres
+DATABASE_URL="mysql://..." npm run migrate:mysql
 ```
 
-For TiDB Cloud, set `DATABASE_URL` to the TiDB `mysql://` URL and run
-`npm run migrate:tidb`. Production startup runs the same migration and
-idempotent catalog seed automatically.
+For the compiled production migration used by Render:
+
+```bash
+npm run build
+DATABASE_URL="mysql://..." npm run migrate:mysql:prod
+```
+
+The equivalent TiDB connection URL can use the `tidb://` scheme; the backend
+normalizes it for the MySQL driver:
+
+```bash
+npm run build
+DATABASE_URL="tidb://..." npm run migrate:mysql:prod
+```
 
 
 ## Environment variables (`.env`)
 
 | Var | Purpose |
 |---|---|
-| `DATABASE_URL` | `file:./dev.db` locally; TiDB `mysql://` or PostgreSQL URLs in production. |
+| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |

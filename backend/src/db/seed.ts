@@ -242,16 +242,11 @@ async function main() {
 }
 
 try {
-  main()
-    .catch((error: unknown) => {
-      const code = error && typeof error === "object" && "code" in error
-        ? String((error as { code: unknown }).code)
-        : "";
-      console.error(code && /^[A-Z0-9_]{1,32}$/.test(code) ? `Seed failed (${code}).` : "Seed failed.");
-      process.exitCode = 1;
-    })
-    .finally(async () => db.close?.());
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 } catch (e) {
-  console.error("Seed failed.");
-  process.exitCode = 1;
+  console.error(e);
+  process.exit(1);
 }
