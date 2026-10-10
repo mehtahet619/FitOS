@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Mangrove tree illustration">
+  <defs><linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#9edb75"/><stop offset="1" stop-color="#20765c"/></linearGradient><linearGradient id="wood" x2="1"><stop stop-color="#745039"/><stop offset="1" stop-color="#b37e4e"/></linearGradient></defs>
+  <rect width="128" height="128" rx="24" fill="#e4f2ed"/><path d="M12 100c20-7 35 7 55 0s34 4 49-2v20H12z" fill="#b9dfd2"/><path d="M62 73c0 14-4 22-12 35m16-35c-1 13 5 22 15 35M60 74c-6 12-17 19-29 28m39-29c9 11 19 18 31 26" fill="none" stroke="url(#wood)" stroke-linecap="round" stroke-width="5"/>
+  <path d="M62 78V44m0 22L37 48m25 11 25-22m-26-1L46 25m17 10 17-16" fill="none" stroke="#835b3c" stroke-linecap="round" stroke-width="6"/>
+  <g fill="url(#leaf)"><ellipse cx="37" cy="43" rx="19" ry="12" transform="rotate(27 37 43)"/><ellipse cx="87" cy="34" rx="19" ry="12" transform="rotate(-26 87 34)"/><ellipse cx="46" cy="22" rx="17" ry="11" transform="rotate(18 46 22)"/><ellipse cx="82" cy="17" rx="17" ry="11" transform="rotate(-18 82 17)"/><ellipse cx="63" cy="45" rx="19" ry="13"/></g>
+</svg>

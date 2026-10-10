@@ -14,6 +14,7 @@ import { foodRouter } from "./modules/food/routes";
 import { progressRouter } from "./modules/progress/routes";
 import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
+import { growImpactRouter } from "./modules/grow-impact/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 
@@ -115,6 +116,7 @@ app.use("/food", foodRouter);
 app.use("/progress", progressRouter);
 app.use("/muscles", musclesRouter);
 app.use("/gym", gymRouter);
+app.use("/grow-impact", growImpactRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: `No route for ${req.method} ${req.path}` });

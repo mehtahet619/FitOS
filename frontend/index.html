@@ -37,7 +37,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <title>Adaptive Fit</title>
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=fitos-20261010-grow-impact-v1" />
 </head>
 <body>
 <div id="app">
@@ -47,14 +47,8 @@
     <div class="intro-image-fallback" aria-hidden="true">
       <img src="assets/gym-intro.webp" alt="" width="1536" height="1024" fetchpriority="high" />
     </div>
-    <canvas id="intro-canvas" aria-hidden="true"></canvas>
-    <canvas id="intro-fallback-canvas" aria-hidden="true"></canvas>
     <div class="intro-atmosphere" aria-hidden="true"></div>
     <img class="intro-logo" src="assets/site-logo.png" alt="Green leaf logo" width="512" height="512" fetchpriority="high" />
-    <div id="intro-message" class="intro-message" aria-live="polite">
-      <p class="intro-message-title">Good things take time.</p>
-      <p class="intro-message-copy">Be consistent.<br />Be patient.<br />Keep growing.</p>
-    </div>
   </section>
 
   <!-- ============ AUTH SCREEN ============ -->
@@ -270,10 +264,10 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
-<script src="gym-intro.js"></script>
+<script src="gym-intro.js?v=fitos-20261010-grow-impact-v1"></script>
 <script src="config.js"></script>
 <script src="api.js"></script>
-<script src="app.js?v=fitos-20261001-equipment-picker-v15"></script>
+<script src="app.js?v=fitos-20261010-grow-impact-v1"></script>
 <script type="module" src="vision.js"></script>
 </body>
 </html>

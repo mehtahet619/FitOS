@@ -400,3 +400,44 @@ CREATE TABLE IF NOT EXISTS GymAttendance (
   UNIQUE(userId, date)
 );
 CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON GymAttendance(userId, date);
+
+-- Monthly consistency rewards. A reward is unique per user and calendar month.
+-- "virtual_commitment" remains the planting status until a planting partner
+-- verifies an actual planting; partner data is recorded separately below.
+CREATE TABLE IF NOT EXISTS GrowImpactReward (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  qualifyingMonth TEXT NOT NULL, -- YYYY-MM in GROW_IMPACT_TIME_ZONE
+  status TEXT NOT NULL DEFAULT 'unlocked', -- unlocked | selected | confirmed
+  selectedSpeciesId TEXT,
+  selectedSpecies TEXT,
+  selectedTreeName TEXT,
+  selectedTreeImage TEXT,
+  confirmedAt TEXT,
+  plantingStatus TEXT NOT NULL DEFAULT 'virtual_commitment',
+  plantingReference TEXT,
+  plantingLocation TEXT,
+  plantedAt TEXT,
+  verifiedPhotosJson TEXT NOT NULL DEFAULT '[]',
+  photoUpdatesOptIn INTEGER NOT NULL DEFAULT 0,
+  nextPhotoReminderAt TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  UNIQUE(userId, qualifyingMonth)
+);
+CREATE INDEX IF NOT EXISTS idx_grow_impact_reward_user ON GrowImpactReward(userId, qualifyingMonth);
+
+-- Reserved for validated updates from a future planting partner. Only
+-- rows with verifiedAt set may influence the real-world growth visualization.
+CREATE TABLE IF NOT EXISTS GrowImpactPartnerUpdate (
+  id TEXT PRIMARY KEY,
+  rewardId TEXT NOT NULL REFERENCES GrowImpactReward(id) ON DELETE CASCADE,
+  partnerReference TEXT,
+  location TEXT,
+  plantedAt TEXT,
+  stageLabel TEXT NOT NULL,
+  verifiedPhotosJson TEXT NOT NULL DEFAULT '[]',
+  verifiedAt TEXT,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grow_impact_partner_update_reward ON GrowImpactPartnerUpdate(rewardId, verifiedAt);

@@ -228,6 +228,7 @@ function showScreen(id) {
   async function boot() {
     const generation = ++authBootGeneration;
     AuthState.status = "AUTH_LOADING";
+  window.FitOSIntroStart?.();
   showScreen("screen-intro");
   $("auth-submit").disabled = true;
   try {
@@ -489,16 +490,18 @@ async function loadTodayData(generation) {
 
     greetingEl.textContent = `Hi, ${profile.name?.split(" ")[0] || "there"}`;
 
-    const [nutrition, gym] = await Promise.allSettled([
+    const [nutritionResult, gymResult, growImpactResult] = await Promise.allSettled([
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
+      Api.get("/grow-impact/"),
     ]);
     if (generation !== todayLoadGeneration) return;
 
-    const nutritionData = nutrition.status === "fulfilled" ? nutrition.value : null;
-    const gymData = gym.status === "fulfilled" ? gym.value : null;
+    const nutritionData = nutritionResult.status === "fulfilled" ? nutritionResult.value : null;
+    const gymData = gymResult.status === "fulfilled" ? gymResult.value : null;
+    const growImpactData = growImpactResult.status === "fulfilled" ? growImpactResult.value : null;
 
-    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData);
+    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData);
     el.dataset.loadState = "success";
   } catch (e) {
     if (generation === todayLoadGeneration) handleTodayError(el, e);
@@ -509,7 +512,7 @@ async function loadTodayData(generation) {
   }
 }
 
-function renderTodaySuccess(el, dashboard, plan, nutrition, gym) {
+function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact) {
   const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
   const nextWod = plan?.nextWorkout?.label || null;
   const statusInfo = activePlanLabel
@@ -531,7 +534,7 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym) {
         ? `<div class="banner banner-info" style="margin-top:8px;">⚠️ ${plan.decision.warning}</div>`
         : ""}
     </div>
-    <div class="card-grid-2">
+      <div class="card-grid-2">
       <div class="card">
         <div class="card-label">🔥 Calories</div>
         <div class="card-value">${nutrition ? nutrition.totals.calories : "—"}</div>
@@ -555,7 +558,132 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym) {
         <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
       </div>
     </div>
+    ${growImpact ? renderGrowImpact(growImpact) : ""}
   `;
+  bindGrowImpactActions(el);
+}
+
+function escapeImpactText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
+function renderGrowImpact(impact) {
+  const percent = Math.max(0, Math.min(100, Number(impact.progressPercent) || 0));
+  const count = Number(impact.sessions) || 0;
+  const target = Number(impact.target) || 26;
+  const encouragement = count >= target
+    ? "You reached your monthly goal. Choose a tree to mark your consistency."
+    : count === 0 ? "Every completed workout is a step toward a greener future."
+      : impact.remaining === 1 ? "One more session to unlock your tree choice. Keep going."
+        : "Your consistency is adding up. Sundays are rest days.";
+  const reward = impact.reward;
+  const tree = impact.trees?.find((option) => option.id === reward?.selectedSpeciesId) || (reward?.selectedSpeciesId ? {
+    id: reward.selectedSpeciesId,
+    name: reward.selectedTreeName || "Your selected tree",
+    species: reward.selectedSpecies || reward.selectedSpeciesId,
+    image: reward.selectedTreeImage || "",
+    description: "",
+  } : null);
+  let rewardPanel = "";
+
+  if (!reward && count >= target) {
+    rewardPanel = `<p class="grow-impact-unlocked">Your tree reward is ready. Pick one of three trees below.</p>
+      <div class="grow-impact-options">${(impact.trees || []).map((option) => renderTreeOption(option, null)).join("")}</div>`;
+  } else if (reward?.status === "unlocked") {
+    rewardPanel = `<p class="grow-impact-unlocked">Your tree reward is ready. Pick one of three trees below.</p>
+      <div class="grow-impact-options">${(impact.trees || []).map((option) => renderTreeOption(option, null)).join("")}</div>`;
+  } else if (reward?.status === "selected" && tree) {
+    rewardPanel = `<div class="grow-impact-choice-preview">
+      <img src="${escapeImpactText(tree.image)}" alt="Illustration of ${escapeImpactText(tree.name)}" loading="lazy" />
+      <div><strong>${escapeImpactText(tree.name)}</strong><span>${escapeImpactText(tree.species)}</span>
+      <small>${escapeImpactText(tree.description)}</small></div>
+      </div><p class="grow-impact-virtual-label">Pilot reward · a virtual commitment; this does not represent a planted tree.</p>
+      <button class="btn btn-primary grow-impact-confirm" type="button">Confirm this tree</button>
+      <div class="grow-impact-options">${(impact.trees || []).map((option) => renderTreeOption(option, tree.id)).join("")}</div>`;
+  } else if (reward?.status === "confirmed" && tree) {
+    const isVerified = reward.plantingStatus === "planted_verified";
+    const stage = reward.virtualStage || { label: "Choice saved", elapsedDays: 0 };
+    const latestUpdate = reward.verifiedUpdates?.[0];
+    const stagePercent = isVerified
+      ? partnerStagePercent(latestUpdate?.stageLabel)
+      : Math.min(100, Math.round((stage.elapsedDays / 90) * 100));
+    const plantingLocation = latestUpdate?.location || reward.plantingLocation;
+    const plantedAt = latestUpdate?.plantedAt || reward.plantedAt;
+    const verifiedPhotos = isVerified
+      ? (latestUpdate?.verifiedPhotos?.length ? latestUpdate.verifiedPhotos : reward.verifiedPhotos || [])
+      : [];
+    rewardPanel = `<div class="grow-impact-tree-card">
+      <img src="${escapeImpactText(tree.image)}" alt="Illustration of ${escapeImpactText(tree.name)}" loading="lazy" />
+      <div class="grow-impact-tree-copy"><strong>${escapeImpactText(tree.name)}</strong><span>${escapeImpactText(tree.species)}</span>
+        <small>${isVerified ? "Planting verified by the partner" : "Virtual growth journey · illustrative milestones only"}</small>
+      </div></div>
+      <div class="grow-impact-stage"><div class="grow-impact-stage-line"><span>${isVerified && latestUpdate ? escapeImpactText(latestUpdate.stageLabel) : escapeImpactText(stage.label)}</span>
+        <span>${isVerified ? "Partner update" : `${stage.elapsedDays} virtual days`}</span></div>
+        <div class="grow-impact-stage-track" role="progressbar" aria-label="Virtual growth journey" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${stagePercent}"><span style="width:${stagePercent}%"></span></div>
+      </div>
+      ${isVerified && plantingLocation ? `<p class="grow-impact-partner-note">Verified location: ${escapeImpactText(plantingLocation)}${plantedAt ? ` · ${escapeImpactText(plantedAt)}` : ""}</p>` : ""}
+      ${!isVerified ? `<p class="grow-impact-virtual-label">Pilot reward · no planting partner is connected, so no real tree planting is claimed.</p>` : ""}
+      ${verifiedPhotos.length ? `<div class="grow-impact-photos">${verifiedPhotos.map((src) => `<img src="${escapeImpactText(src)}" alt="Verified planting partner update" loading="lazy" />`).join("")}</div>` : ""}`;
+  }
+
+  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title">
+    <div class="grow-impact-heading"><div><div class="card-label">🌱 Grow Your Impact</div><h2 id="grow-impact-title">${count} <span>of ${target} sessions</span></h2></div>
+      <span class="grow-impact-month">${escapeImpactText(impact.month)}</span></div>
+    <div class="grow-impact-progress" role="progressbar" aria-label="Monthly gym session progress" aria-valuemin="0" aria-valuemax="${target}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
+    <p class="grow-impact-encouragement">${escapeImpactText(encouragement)}</p>
+    <p class="grow-impact-rest-note">Only completed workouts with a logged set count. Each calendar day counts once. Sundays are rest days.</p>
+    <p class="grow-impact-feedback" role="status" aria-live="polite"></p>
+    ${rewardPanel}
+  </section>`;
+}
+
+function partnerStagePercent(stageLabel) {
+  const stage = String(stageLabel || "").toLowerCase();
+  if (/mature|canopy/.test(stage)) return 100;
+  if (/young tree/.test(stage)) return 75;
+  if (/sapling/.test(stage)) return 55;
+  if (/seedling/.test(stage)) return 35;
+  if (/plant/.test(stage)) return 15;
+  return 0;
+}
+
+function renderTreeOption(option, selectedId) {
+  const selected = selectedId === option.id;
+  return `<button class="grow-impact-option${selected ? " is-selected" : ""}" type="button" data-grow-tree="${escapeImpactText(option.id)}" aria-pressed="${selected}">
+    <img src="${escapeImpactText(option.image)}" alt="" loading="lazy" />
+    <span><strong>${escapeImpactText(option.name)}</strong><small><i>${escapeImpactText(option.species)}</i></small></span>
+    <span class="grow-impact-option-check" aria-hidden="true">${selected ? "✓" : "＋"}</span>
+  </button>`;
+}
+
+function bindGrowImpactActions(root) {
+  root.querySelectorAll("[data-grow-tree]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree });
+      todayRequest = null;
+      await loadToday();
+    } catch (error) {
+      const feedback = root.querySelector(".grow-impact-feedback");
+      if (feedback) feedback.textContent = error?.message || "Could not save your tree choice.";
+      button.disabled = false;
+    }
+  }));
+  const confirmButton = root.querySelector(".grow-impact-confirm");
+  confirmButton?.addEventListener("click", async () => {
+    confirmButton.disabled = true;
+    try {
+      await Api.post("/grow-impact/confirm", {});
+      todayRequest = null;
+      await loadToday();
+    } catch (error) {
+      const feedback = root.querySelector(".grow-impact-feedback");
+      if (feedback) feedback.textContent = error?.message || "Could not confirm your tree choice.";
+      confirmButton.disabled = false;
+    }
+  });
 }
 
 function handleTodayError(el, error) {
