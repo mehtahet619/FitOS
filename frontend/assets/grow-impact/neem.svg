@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Neem tree illustration">
+  <defs><linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#b1df6a"/><stop offset="1" stop-color="#26855e"/></linearGradient><linearGradient id="wood" x2="1"><stop stop-color="#6f4930"/><stop offset="1" stop-color="#b57c49"/></linearGradient></defs>
+  <rect width="128" height="128" rx="24" fill="#eef4df"/><circle cx="96" cy="29" r="14" fill="#fff3c0" opacity=".85"/>
+  <path d="M61 108c7-24 7-43 2-65h11c-4 23-2 44 5 65z" fill="url(#wood)"/><path d="M68 69 42 49m26 13 26-23M67 48 52 32m18 5 14-18" fill="none" stroke="#80553a" stroke-linecap="round" stroke-width="5"/>
+  <g fill="url(#leaf)"><ellipse cx="39" cy="46" rx="21" ry="12" transform="rotate(28 39 46)"/><ellipse cx="96" cy="37" rx="19" ry="11" transform="rotate(-29 96 37)"/><ellipse cx="51" cy="29" rx="18" ry="11" transform="rotate(25 51 29)"/><ellipse cx="86" cy="18" rx="17" ry="10" transform="rotate(-24 86 18)"/><ellipse cx="72" cy="48" rx="21" ry="13" transform="rotate(-5 72 48)"/><ellipse cx="49" cy="64" rx="18" ry="11" transform="rotate(24 49 64)"/></g>
+  <path d="M25 109h80" stroke="#adbf79" stroke-linecap="round" stroke-width="3" opacity=".7"/>
+</svg>

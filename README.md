@@ -178,6 +178,28 @@ for any first run, not a sign of a deeper problem.
 
 ## Architecture notes / what's intentionally scoped down
 
+## Grow Your Impact
+
+The authenticated Today dashboard counts at most one qualifying workout per
+calendar day. A workout must be marked completed, have a positive duration,
+and include at least one logged completed set. The default monthly goal is 26
+days; Sundays remain rest days. The first release unlocks a clearly labeled
+virtual tree commitment and does not report a real planting. A unique
+user/month reward row and verified-partner-update table are ready for a future
+planting integration; photo reminder preference fields are reserved for later
+notifications, which are not sent by this release.
+
+Optional backend settings:
+
+- `GROW_IMPACT_MONTHLY_TARGET` (default `26`)
+- `GROW_IMPACT_MONTH_LENGTH_DAYS` (defaults to the active calendar month's length)
+- `GROW_IMPACT_HOLIDAY_ALLOWANCE_DAYS` (default `0`, used in planning-day metadata)
+- `GROW_IMPACT_TIME_ZONE` (IANA timezone; default `UTC`)
+- `GROW_IMPACT_TREE_OPTIONS` (JSON array of exactly three objects with `id`, `name`, `species`, `image`, and `description`)
+
+Run the existing schema migration command after deployment:
+`npm run migrate` for SQLite or `npm run migrate:postgres` for PostgreSQL.
+
 - **Native mobile app is untested.** `mobile/` (Flutter/Dart) was written
   without a Flutter SDK available to compile or run it in this
   environment — see the caveat above and `mobile/README.md`.
