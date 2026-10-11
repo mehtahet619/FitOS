@@ -8,8 +8,15 @@ async function seedOwner(): Promise<void> {
   const ownerPassword = process.env.OWNER_PASSWORD;
 
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
-  if (!databaseUrl.startsWith("postgres://") && !databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("file:")) {
-    throw new Error("DATABASE_URL must use postgres://, postgresql://, or file:");
+  if (
+    !databaseUrl.startsWith("postgres://") &&
+    !databaseUrl.startsWith("postgresql://") &&
+    !databaseUrl.startsWith("mysql://") &&
+    !databaseUrl.startsWith("mysql2://") &&
+    !databaseUrl.startsWith("tidb://") &&
+    !databaseUrl.startsWith("file:")
+  ) {
+    throw new Error("DATABASE_URL must use postgres://, postgresql://, mysql://, mysql2://, tidb://, or file:");
   }
   if (!ownerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
     throw new Error("OWNER_EMAIL must be a valid email address");
@@ -56,14 +63,17 @@ async function seedOwner(): Promise<void> {
       console.info("Owner account created.");
     });
   } finally {
-    // Close the PostgreSQL pool when present so this one-shot script exits promptly.
+    // Close the database pool when present so this one-shot script exits promptly.
     const closableDb = db as typeof db & { close?: () => Promise<void> };
     await closableDb.close?.();
   }
 }
 
 seedOwner().catch((error: unknown) => {
-  // Error details are intentionally omitted because a database error may contain connection data.
-  console.error("Owner account seed failed. Check the database and required environment configuration.");
+  // Never print error messages or connection details; mysql clients may include credentials in them.
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : "UNKNOWN";
+  console.error(`Owner account seed failed (${code}). Check TiDB credentials, TLS/network access, and schema migrations.`);
   process.exitCode = 1;
 });
