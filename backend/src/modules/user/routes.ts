@@ -17,7 +17,8 @@ const profileSchema = z.object({
   fitnessLevel: z.enum(["beginner", "intermediate", "advanced"]),
   primaryGoal: z.enum(["muscle_gain", "fat_loss", "strength", "general_fitness", "endurance"]),
   daysPerWeek: z.number().int().min(1).max(7),
-  sessionMinutes: z.number().int().positive(),
+  // Older onboarding clients may not send a session duration yet.
+  sessionMinutes: z.number().int().positive().default(60),
   dietaryPref: z.enum(["vegetarian", "vegan", "non_vegetarian", "eggetarian"]),
   allergies: z.array(z.string()).default([]),
   foodLikes: z.array(z.string()).default([]),

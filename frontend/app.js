@@ -85,6 +85,7 @@ function renderScanResult(area, result, onResult) {
 /* ---------------- Global state ---------------- */
 const State = {
   equipmentList: [],
+  equipmentLoaded: false,
   selectedEquipment: new Set(),
   isRegisterMode: false,
 };
@@ -168,7 +169,7 @@ async function routeCurrent() {
       $("ob-name").value = AuthState.user.name;
     }
     showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
-    void loadEquipmentChips().catch((error) => banner($("onboarding-banner"), "error", error.message || "Could not load equipment."));
+    void loadEquipmentChips();
     return;
   }
   if (path === "/history") { showHistory(); return; }
@@ -341,10 +342,29 @@ async function loadEquipmentChips() {
   const container = $("equipment-chips");
   if (!container) return;
   container.textContent = "Loading equipment...";
-  const [equipment, savedEquipment] = await Promise.all([
-    Api.get("/equipment"),
-    Api.get("/equipment/user/equipment"),
-  ]);
+  let equipment;
+  let savedEquipment;
+  try {
+    [equipment, savedEquipment] = await Promise.all([
+      Api.get("/equipment"),
+      Api.get("/equipment/user/equipment"),
+    ]);
+    State.equipmentLoaded = true;
+  } catch (error) {
+    State.equipmentLoaded = false;
+    container.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "card-sub";
+    message.textContent = "Could not load equipment. You can retry or continue without selecting equipment.";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn btn-outline";
+    retry.textContent = "Retry loading equipment";
+    retry.addEventListener("click", () => { void loadEquipmentChips(); });
+    container.append(message, retry);
+    banner($("onboarding-banner"), "error", error.message || "Could not load equipment.");
+    return;
+  }
   State.equipmentList = (Array.isArray(equipment) ? equipment : []).filter((eq) => eq.name !== "No Equipment");
   State.selectedEquipment = new Set((Array.isArray(savedEquipment) ? savedEquipment : [])
     .map((eq) => eq.name)
@@ -395,6 +415,7 @@ $("onboarding-submit").addEventListener("click", async () => {
     fitnessLevel: $("ob-level").value,
     primaryGoal: $("ob-goal").value,
     daysPerWeek: Number($("ob-days").value),
+    sessionMinutes: 60,
     dietaryPref: $("ob-diet").value,
     allergies: $("ob-allergies").value.split(",").map((s) => s.trim()).filter(Boolean),
     foodLikes: [],
@@ -406,7 +427,9 @@ $("onboarding-submit").addEventListener("click", async () => {
   }
   try {
     await Api.put("/user/profile", payload);
-    await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(State.selectedEquipment) });
+    if (State.equipmentLoaded) {
+      await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(State.selectedEquipment) });
+    }
     enterMainApp();
   } catch (e) {
     banner(bannerEl, "error", e.message || "Could not save profile.");
