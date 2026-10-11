@@ -7,11 +7,34 @@ export function splitSqlStatements(sql: string): string[] {
   const statements: string[] = [];
   let start = 0;
   let quote: "'" | '"' | "`" | undefined;
+  let lineComment = false;
+  let blockComment = false;
 
   for (let index = 0; index < sql.length; index += 1) {
     const character = sql[index];
+    if (lineComment) {
+      if (character === "\n" || character === "\r") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && sql[index + 1] === "/") {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
     if (quote) {
       if (character === quote && sql[index - 1] !== "\\") quote = undefined;
+      continue;
+    }
+    if (character === "-" && sql[index + 1] === "-" && /\s/.test(sql[index + 2] ?? " ")) {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "/" && sql[index + 1] === "*") {
+      blockComment = true;
+      index += 1;
       continue;
     }
     if (character === "'" || character === '"' || character === "`") {
@@ -158,7 +181,11 @@ export function toMysql(sql: string, additionalKeyColumns: Iterable<string> = []
 }
 
 export function prepareMySqlSchema(schema: string): string[] {
-  const statements = splitSqlStatements(schema
+  // Normalize mixed Windows/Unix line endings before removing SQLite PRAGMA
+  // directives. Otherwise the multiline regex can consume LF but leave CR,
+  // causing MySQL/TiDB to treat the following CREATE statement as a comment.
+  const normalizedSchema = schema.replace(/\r\n?/g, "\n");
+  const statements = splitSqlStatements(normalizedSchema
     .replace(/^\s*PRAGMA[^;]+;\s*/gim, "")
     .replace(/\bUser\b/g, "`User`")
     .replace(/CREATE INDEX IF NOT EXISTS idx_user_email_lower ON `User`\(LOWER\(email\)\)/g, "")
