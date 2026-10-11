@@ -9,6 +9,11 @@ describe("MySQL migration schema execution", () => {
       .toEqual(["CREATE TABLE A (name TEXT DEFAULT 'a;b')", "CREATE TABLE B (id TEXT)"]);
   });
 
+  it("does not split SQL statements at semicolons in line comments", () => {
+    expect(splitSqlStatements("-- comment; still a comment\nCREATE TABLE Example (id TEXT);"))
+      .toEqual(["-- comment; still a comment\nCREATE TABLE Example (id TEXT)"]);
+  });
+
   it("removes SQLite-only statements and prepares all schema statements", () => {
     const statements = prepareMySqlSchema(`
       PRAGMA foreign_keys = ON;
@@ -21,6 +26,15 @@ describe("MySQL migration schema execution", () => {
       "CREATE TABLE IF NOT EXISTS `User` (id VARCHAR(191) PRIMARY KEY)",
       "CREATE TABLE IF NOT EXISTS Workout (id VARCHAR(191) PRIMARY KEY)",
     ]);
+  });
+
+  it("normalizes CRLF before removing PRAGMA lines after SQL comments", () => {
+    const statements = prepareMySqlSchema(
+      "-- schema header\r\n-- SQLite source\r\nPRAGMA foreign_keys = ON;\r\n\r\nCREATE TABLE User (id TEXT PRIMARY KEY);"
+    );
+
+    expect(statements[0]).toContain("CREATE TABLE IF NOT EXISTS `User`");
+    expect(statements[0]).not.toContain("\rCREATE TABLE");
   });
 
   it("converts TEXT columns used by keys, indexes, and foreign keys only", () => {
