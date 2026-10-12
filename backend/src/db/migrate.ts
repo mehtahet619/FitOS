@@ -60,6 +60,14 @@ db.exec(schema)
       )
     `);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON PasswordResetChallenge(otpExpiresAt)`);
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS LoginChallenge (
+        id TEXT PRIMARY KEY, userId TEXT NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
+        otpHash TEXT, otpExpiresAt TEXT, otpAttempts INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+      )
+    `);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_login_challenge_expiry ON LoginChallenge(otpExpiresAt)`);
 
     try {
       await db.exec(`

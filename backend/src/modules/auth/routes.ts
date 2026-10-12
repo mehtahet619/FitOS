@@ -160,10 +160,15 @@ authRouter.post("/register/resend-otp", async (req, res) => {
   return res.status(202).json({ message: "If a verification is pending, a new code has been sent." });
 });
 
-async function verifyChallenge(email: string, submitted: string, table: "PendingRegistration" | "PasswordResetChallenge") {
+async function verifyChallenge(email: string, submitted: string, table: "PendingRegistration" | "PasswordResetChallenge" | "LoginChallenge") {
   return transaction(async (tx) => {
+    const query = table === "PendingRegistration"
+      ? `SELECT * FROM PendingRegistration WHERE email=?`
+      : table === "LoginChallenge"
+        ? `SELECT c.*,u.email,u.name FROM LoginChallenge c JOIN "User" u ON u.id=c.userId WHERE LOWER(u.email)=? AND u.emailVerified=1`
+        : `SELECT c.*,u.email,u.name FROM PasswordResetChallenge c JOIN "User" u ON u.id=c.userId WHERE LOWER(u.email)=?`;
     const row = await tx.get<{ id: string; userId?: string; email?: string; name?: string; passwordHash?: string; otpHash: string | null; otpExpiresAt: string | null; otpAttempts: number }>(
-      table === "PendingRegistration" ? `SELECT * FROM PendingRegistration WHERE email=?` : `SELECT c.*,u.email,u.name FROM PasswordResetChallenge c JOIN "User" u ON u.id=c.userId WHERE u.email=?`, email
+      query, email
     );
     if (!row || !row.otpHash || !row.otpExpiresAt) return { ok: false as const, error: "OTP_INVALID" };
     if (new Date(row.otpExpiresAt).getTime() <= Date.now()) {
@@ -179,6 +184,7 @@ async function verifyChallenge(email: string, submitted: string, table: "Pending
       return { ok: false as const, error: attempts >= MAX_ATTEMPTS ? "OTP_ATTEMPTS_EXCEEDED" : "OTP_INVALID" };
     }
     if (table === "PendingRegistration") await tx.run(`UPDATE PendingRegistration SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE id=?`, nowIso(), row.id);
+    else if (table === "LoginChallenge") await tx.run(`UPDATE LoginChallenge SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE id=?`, nowIso(), row.id);
     else await tx.run(`UPDATE PasswordResetChallenge SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE id=?`, nowIso(), row.id);
     return { ok: true as const, row };
   });
@@ -218,6 +224,73 @@ authRouter.post("/register/verify-otp", async (req, res) => {
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });
+authRouter.post("/login/request-otp", async (req, res) => {
+  const parsed = resendSchema.safeParse(req.body);
+  if (!parsed.success) return codeError(res, 400, "INVALID_EMAIL", "Please enter a valid email address.");
+  const validation = await validateRegistrationEmail(parsed.data.email);
+  if (!validation.valid) return codeError(res, 400, validation.code, validation.message);
+  if (!await otpRateLimit(req, res, `login:${validation.email}`, "login")) return res;
+
+  const user = await db.get<{ id: string; email: string; name: string | null }>(
+    `SELECT id,email,name FROM "User" WHERE LOWER(email)=? AND emailVerified=1`, validation.email
+  );
+  if (user) {
+    let otp: string;
+    let hashedOtp: string;
+    try {
+      otp = String(randomInt(100000, 1000000));
+      hashedOtp = otpHash(user.email.toLowerCase(), otp);
+      const timestamp = nowIso();
+      await db.run(
+        `INSERT INTO LoginChallenge (id,userId,otpHash,otpExpiresAt,otpAttempts,createdAt,updatedAt)
+         VALUES (?,?,?,?,0,?,?) ON CONFLICT(userId) DO UPDATE SET otpHash=excluded.otpHash,otpExpiresAt=excluded.otpExpiresAt,otpAttempts=0,updatedAt=excluded.updatedAt`,
+        uuidv4(), user.id, hashedOtp, new Date(Date.now() + OTP_MS).toISOString(), timestamp, timestamp
+      );
+    } catch (error) {
+      logOtpFailure("login_otp_storage", "database", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+    }
+
+    try {
+      await emailService.sendLoginOTP(user.name || "there", user.email, otp);
+    } catch (error) {
+      try {
+        await db.run(`UPDATE LoginChallenge SET otpHash=NULL,otpExpiresAt=NULL,updatedAt=? WHERE userId=?`, nowIso(), user.id);
+      } catch (cleanupError) {
+        logOtpFailure("login_otp_cleanup", "database", cleanupError);
+      }
+      logOtpFailure("login_otp_email", "resend-api", error);
+      return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+    }
+  }
+  return res.status(202).json({ message: "If the account exists, a sign-in code has been sent." });
+});
+
+authRouter.post("/login/verify-otp", async (req, res) => {
+  const parsed = verifySchema.safeParse(req.body);
+  if (!parsed.success) return codeError(res, 400, "OTP_INVALID", "Enter the 6-digit sign-in code.");
+  const validation = await validateRegistrationEmail(parsed.data.email);
+  if (!validation.valid) return codeError(res, 400, validation.code, validation.message);
+  let checked;
+  try {
+    checked = await verifyChallenge(validation.email, parsed.data.otp, "LoginChallenge");
+  } catch (error) {
+    logOtpFailure("login_otp_verification", "database", error);
+    return codeError(res, 503, "OTP_SERVICE_UNAVAILABLE", "Verification is temporarily unavailable. Please try again later.");
+  }
+  if (!checked.ok) {
+    if (checked.error === "OTP_EXPIRED") return codeError(res, 400, checked.error, "This sign-in code has expired. Please request a new code.");
+    if (checked.error === "OTP_ATTEMPTS_EXCEEDED") return codeError(res, 429, checked.error, "Too many incorrect attempts. Please request a new code.");
+    return codeError(res, 400, checked.error, "That sign-in code is not valid.");
+  }
+  const userId = checked.row.userId;
+  if (!userId) return codeError(res, 400, "OTP_INVALID", "That sign-in code is not valid.");
+  const mobileTokens = await createSession(userId, res, req);
+  const user = await db.get<{ id: string; name: string | null; email: string }>(`SELECT id,name,email FROM "User" WHERE id=?`, userId);
+  if (!user) return codeError(res, 401, "INVALID_CREDENTIALS", "That sign-in code is not valid.");
+  return res.json({ authenticated: true, user: { ...user, emailVerified: true, profileComplete: await hasCompletedProfile(userId) }, ...(mobileTokens || {}) });
+});
+
 authRouter.post("/login", async (req, res) => {
   const started = Date.now();
   const log = (label: string) => {

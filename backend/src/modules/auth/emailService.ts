@@ -57,6 +57,10 @@ async function verifyResendTransport(): Promise<void> {
 }
 
 export const emailService = {
+  async sendLoginOTP(name: string, email: string, otp: string): Promise<void> {
+    const mail = { to: email, subject: "Your FitOS sign-in code", text: `Hi ${name},\n\nYour FitOS sign-in code is:\n\n${otp}\n\nThis code expires in 10 minutes and can only be used once. If you did not request it, you can safely ignore this email.\n\nFitOS Team` };
+    await sendResendMail(mail, "login");
+  },
   async sendVerificationOTP(name: string, email: string, otp: string): Promise<void> {
     const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Verify your FitOS account", text: `Hi ${name},\n\nYour FitOS verification code is:\n\n${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nFitOS Team` };
     if (process.env.NODE_ENV !== "production" && process.env.ENABLE_LOCAL_EMAIL_PREVIEW === "true" && !resendConfigured()) {

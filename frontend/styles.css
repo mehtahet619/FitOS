@@ -140,7 +140,7 @@ html, body {
 }
 [hidden] { display: none !important; }
 #main-app { width: 100%; max-width: 430px; margin: 0 auto; }
-#screen-auth, #screen-verify-email, #screen-forgot-password, #screen-reset-password { padding: 0; }
+#screen-auth, #screen-verify-email, #screen-login-otp, #screen-forgot-password, #screen-reset-password { padding: 0; }
 
 /* ---------- Header ---------- */
 .header { margin-bottom: 18px; }
