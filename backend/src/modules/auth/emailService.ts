@@ -4,12 +4,13 @@ import { logOtpFailure } from "./otpDiagnostics";
 type LocalMail = { email: string; subject: string; text: string; createdAt: number };
 const localOutbox: LocalMail[] = [];
 const LOCAL_CODE_TTL_MS = 10 * 60 * 1000;
+const mailKeyConfigured = () => Boolean(process.env.BREVO_API_KEY?.trim() || process.env.RESEND_API_KEY?.trim());
 function resendConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim());
+  return Boolean(mailKeyConfigured() && process.env.EMAIL_FROM?.trim());
 }
 
 export function getEmailConfigStatus(): { providerConfigured: boolean; senderConfigured: boolean; credentialsConfigured: boolean } {
-  const apiKeyConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+  const apiKeyConfigured = mailKeyConfigured();
   return {
     providerConfigured: apiKeyConfigured,
     senderConfigured: Boolean(process.env.EMAIL_FROM?.trim()),
@@ -32,26 +33,46 @@ export function getLocalVerificationCode(email: string): { subject: string; code
   return mail && code ? { subject: mail.subject, code } : undefined;
 }
 
+function parseFrom(from: string): { name?: string; email: string } {
+  const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1].trim() || undefined, email: m[2].trim() } : { email: from.trim() };
+}
+
+async function sendBrevoMail(mail: { to: string; subject: string; text: string }, apiKey: string, from: string): Promise<void> {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ sender: parseFrom(from), to: [{ email: mail.to }], subject: mail.subject, textContent: mail.text }),
+  });
+  if (!res.ok) throw new Error(`Brevo rejected the email request (${res.status}): ${(await res.text()).slice(0, 200)}`);
+}
+
 async function sendResendMail(mail: { to: string; subject: string; text: string }, flow: string): Promise<void> {
+  const brevoKey = process.env.BREVO_API_KEY?.trim();
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.EMAIL_FROM?.trim();
-  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
+  if (!brevoKey && !apiKey) throw new Error("BREVO_API_KEY or RESEND_API_KEY is not configured");
   if (!from) throw new Error("EMAIL_FROM is not configured");
 
+  const provider = brevoKey ? "brevo-api" : "resend-api";
   try {
-    const resend = new Resend(apiKey);
-    const { error } = await resend.emails.send({ from, ...mail });
-    if (error) throw new Error(error.message || "Resend rejected the email request");
+    if (brevoKey) {
+      await sendBrevoMail(mail, brevoKey, from);
+    } else {
+      const resend = new Resend(apiKey!);
+      const { error } = await resend.emails.send({ from, ...mail });
+      if (error) throw new Error(error.message || "Resend rejected the email request");
+    }
   } catch (error) {
-    console.error("[OTP] email send failed", JSON.stringify({ flow, provider: "resend-api" }));
-    logOtpFailure(`email_send_${flow}`, "resend-api", error);
+    console.error("[OTP] email send failed", JSON.stringify({ flow, provider }));
+    logOtpFailure(`email_send_${flow}`, provider, error);
     throw error;
   }
 }
 
 async function verifyResendTransport(): Promise<void> {
   const status = getEmailConfigStatus();
-  if (!status.providerConfigured) console.error("[EMAIL] RESEND_API_KEY is not configured");
+  if (!status.providerConfigured) console.error("[EMAIL] BREVO_API_KEY or RESEND_API_KEY is not configured");
   if (!status.senderConfigured) console.error("[EMAIL] EMAIL_FROM is not configured");
   if (status.providerConfigured && status.senderConfigured) console.info("[EMAIL] Resend configuration verification: OK");
 }

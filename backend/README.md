@@ -19,11 +19,10 @@ npm test         # unit tests for the substitution engine, macro calc, ranking
 ## Render deployment
 
 The repository includes a `render.yaml` blueprint for the Render web service.
-Set `FRONTEND_ORIGIN` to the deployed frontend URL. Render's free tier does
-not support pre-deploy commands, so apply the TiDB/MySQL schema from the
-backend shell before serving traffic. Normal server starts do not run seed
-scripts. Configure
-Resend and Upstash Redis secrets in Render before enabling email OTP flows.
+Set `FRONTEND_ORIGIN` to the deployed frontend URL. The Render API start
+command applies the idempotent TiDB/MySQL schema migration before serving
+traffic. Normal server starts do not run seed scripts. Configure Resend and
+Upstash Redis secrets in Render before enabling email OTP flows.
 
 The API selects TiDB/MySQL automatically for `mysql://`, `mysql2://`, or
 `tidb://` URLs, PostgreSQL for `postgres://` or `postgresql://`, and SQLite

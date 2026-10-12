@@ -11,6 +11,7 @@ export function safeOtpError(error: unknown): { name: string; message: string } 
   let message = err.message || "No error message";
   const sensitiveValues = [
     process.env.RESEND_API_KEY,
+    process.env.BREVO_API_KEY,
     process.env.UPSTASH_REDIS_REST_TOKEN,
     process.env.UPSTASH_REDIS_REST_URL,
     process.env.EMAIL_FROM,
