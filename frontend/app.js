@@ -105,7 +105,7 @@ const AuthState = {
     if (this.status === "UNAUTHENTICATED") return;
     this.status = "UNAUTHENTICATED"; this.user = null; this.profileComplete = null; this.generation += 1;
     Api.clearTokens(); clearProtectedContent();
-    if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
+    if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/verify-login") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
   },
 };
 let authBootGeneration = 0;
@@ -124,6 +124,7 @@ function clearProtectedContent() {
 }
 function maskEmail(email) { const [name, domain] = (email || "").split("@"); return `${(name || "").slice(0, 1)}***@${domain || ""}`; }
 let verifyEmail = sessionStorage.getItem("pendingVerifyEmail") || "";
+let loginOtpEmail = sessionStorage.getItem("loginOtpEmail") || "";
 let resendTimer;
 function showVerify(email) {
   verifyEmail = (email || "").trim().toLowerCase();
@@ -131,15 +132,21 @@ function showVerify(email) {
   $("verify-email-masked").textContent = maskEmail(verifyEmail);
   showScreen("screen-verify-email"); startResendCountdown(60);
 }
-function startResendCountdown(seconds) {
+function showLoginOtp(email) {
+  loginOtpEmail = (email || "").trim().toLowerCase();
+  if (loginOtpEmail) sessionStorage.setItem("loginOtpEmail", loginOtpEmail);
+  $("login-otp-email-masked").textContent = maskEmail(loginOtpEmail);
+  showScreen("screen-login-otp"); startResendCountdown(60, "login-otp-resend", "login-otp-countdown");
+}
+function startResendCountdown(seconds, buttonId = "verify-resend", countdownId = "verify-countdown") {
   clearInterval(resendTimer); let remaining = seconds;
-  const button = $("verify-resend"); button.disabled = true;
-  const paint = () => { $("verify-countdown").textContent = remaining > 0 ? `Resend available in ${remaining}s` : "You can request a new code."; button.disabled = remaining > 0; };
+  const button = $(buttonId); button.disabled = true;
+  const paint = () => { $(countdownId).textContent = remaining > 0 ? `Resend available in ${remaining}s` : "You can request a new code."; button.disabled = remaining > 0; };
   paint(); resendTimer = setInterval(() => { remaining -= 1; paint(); if (remaining <= 0) clearInterval(resendTimer); }, 1000);
 }
 async function routeCurrent() {
   const path = normalizePath(location.pathname);
-  const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
+  const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
   if (AuthState.status === "AUTH_LOADING") {
     showScreen("screen-intro");
     return;
@@ -148,6 +155,11 @@ async function routeCurrent() {
     if (AuthState.status === "AUTHENTICATED") { if (path !== "/homepage") navigate("/homepage", true); return; }
     State.isRegisterMode = path === "/register";
     updateAuthMode(); showScreen("screen-auth"); return;
+  }
+  if (path === "/verify-login") {
+    if (!loginOtpEmail) { navigate("/login", true); return; }
+    $("login-otp-email-masked").textContent = maskEmail(loginOtpEmail);
+    showScreen(publicRoutes[path]); return;
   }
   if (path === "/verify-email" || path === "/forgot-password" || path === "/reset-password") { showScreen(publicRoutes[path]); return; }
   if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
@@ -185,6 +197,7 @@ function updateAuthMode() {
   $("auth-toggle").textContent = register ? "Already have an account? Log in" : "New here? Create an account";
   $("auth-name-label").hidden = !register; $("auth-name").hidden = !register;
   $("forgot-link").hidden = register;
+  $("login-otp-link").hidden = register;
 }
 
 const EQUIPMENT_ICONS = {
@@ -313,6 +326,46 @@ $("auth-submit").addEventListener("click", async () => {
     btn.textContent = State.isRegisterMode ? "Sign up" : "Log in";
   }
 });
+
+$("login-otp-link").addEventListener("click", async () => {
+  const email = $("auth-email").value.trim().toLowerCase();
+  const bannerEl = $("auth-banner"); banner(bannerEl, "info", "");
+  if (!email) { banner(bannerEl, "error", "Enter your email address first."); return; }
+  const button = $("login-otp-link"); button.disabled = true; button.textContent = "Sending code…";
+  try {
+    await Api.post("/auth/login/request-otp", { email });
+    $("login-otp").value = "";
+    history.pushState({}, "", "/verify-login");
+    showLoginOtp(email);
+  } catch (e) {
+    banner(bannerEl, "error", e.message || "Could not send a sign-in code.");
+  } finally {
+    button.disabled = false; button.textContent = "Email me a sign-in code";
+  }
+});
+
+$("login-otp-submit").addEventListener("click", async () => {
+  const bannerEl = $("login-otp-banner"); banner(bannerEl, "info", "");
+  try {
+    const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
+    if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/homepage", true);
+  } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
+});
+
+$("login-otp-resend").addEventListener("click", async () => {
+  const button = $("login-otp-resend"); button.disabled = true;
+  try {
+    await Api.post("/auth/login/request-otp", { email: loginOtpEmail });
+    startResendCountdown(60, "login-otp-resend", "login-otp-countdown");
+    banner($("login-otp-banner"), "success", "If the account exists, a new sign-in code has been sent.");
+  } catch (e) {
+    if (e.status === 429) startResendCountdown(e.body?.retryAfter || 60, "login-otp-resend", "login-otp-countdown");
+    else button.disabled = false;
+    banner($("login-otp-banner"), "error", e.message || "Could not resend the sign-in code.");
+  }
+});
+$("login-otp-back").addEventListener("click", () => { sessionStorage.removeItem("loginOtpEmail"); loginOtpEmail = ""; navigate("/login"); });
 
 $("verify-submit").addEventListener("click", async () => {
   const bannerEl = $("verify-banner"); banner(bannerEl, "info", "");

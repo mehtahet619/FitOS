@@ -81,9 +81,12 @@ export class TokenBucketRateLimiter {
   consumeRegistration(email: string, ip: string): Promise<BucketResult> {
     const normalized = email.trim().toLowerCase();
     const ipKey = createHash("sha256").update(ip).digest("hex");
-    const namespace = normalized.startsWith("password:") ? "password" : "register";
+    const namespace = normalized.startsWith("password:") ? "password" : normalized.startsWith("login:") ? "login" : "register";
+    const rateLimitEmail = normalized.replace(/^(?:password|login):/, "");
+    const emailCapacity = namespace === "login" ? 5 : 50;
+    const emailRefillPerSecond = namespace === "login" ? 5 / 3600 : 50 / 60;
     return this.store.consumeMany([
-      { key: `otp:bucket:${namespace}:email:${normalized.replace(/^password:/, "")}`, capacity: 50, refillPerSecond: 50 / 60 },
+      { key: `otp:bucket:${namespace}:email:${rateLimitEmail}`, capacity: emailCapacity, refillPerSecond: emailRefillPerSecond },
       { key: `otp:bucket:${namespace}:ip:${ipKey}`, capacity: 20, refillPerSecond: 20 / 60 },
     ], this.now());
   }

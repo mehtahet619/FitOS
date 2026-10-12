@@ -23,7 +23,7 @@ Set `FRONTEND_ORIGIN` to the deployed frontend URL. Render's free tier does
 not support pre-deploy commands, so apply the TiDB/MySQL schema from the
 backend shell before serving traffic. Normal server starts do not run seed
 scripts. Configure
-SMTP and Upstash Redis secrets in Render before enabling OTP registration.
+Resend and Upstash Redis secrets in Render before enabling email OTP flows.
 
 The API selects TiDB/MySQL automatically for `mysql://`, `mysql2://`, or
 `tidb://` URLs, PostgreSQL for `postgres://` or `postgresql://`, and SQLite
@@ -76,6 +76,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 - `POST /auth/register/resend-otp` `{ email }`
 - `POST /auth/register/verify-otp` `{ email, otp }`
 - `POST /auth/login` `{ email, password }`
+- `POST /auth/login/request-otp` `{ email }` and `POST /auth/login/verify-otp` `{ email, otp }` — email-code sign-in for verified accounts
 - `GET /auth/me` session restoration
 - `POST /auth/refresh` rotating refresh session
 - `POST /auth/logout` (auth)

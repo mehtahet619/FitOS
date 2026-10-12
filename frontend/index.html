@@ -72,6 +72,7 @@
         <input id="auth-password" type="password" placeholder="••••••••" />
       </div>
       <button class="btn btn-primary" id="auth-submit" disabled>Log in</button>
+      <button class="link-btn" id="login-otp-link" type="button">Email me a sign-in code</button>
       <button class="link-btn" id="auth-toggle">New here? Create an account</button>
       <button class="link-btn" id="forgot-link" type="button">Forgot your password?</button>
     </div>
@@ -81,6 +82,17 @@
     <div class="auth-wrap"><div class="header"><h1>Verify your email</h1><p>We sent a 6-digit verification code to <span id="verify-email-masked"></span></p><button class="link-btn" id="verify-back" type="button">Wrong email? Change it</button></div>
       <div id="verify-banner"></div><div class="field"><label>Verification code</label><input id="verify-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
       <button class="btn btn-primary" id="verify-submit">Verify Email</button><button class="link-btn" id="verify-resend" type="button">Resend code</button><p id="verify-countdown" class="muted"></p><p class="muted">Check your spam folder.</p>
+    </div>
+  </div>
+
+  <div id="screen-login-otp" class="screen">
+    <div class="auth-wrap">
+      <div class="header"><h1>Sign in with a code</h1><p>We sent a one-time code to <span id="login-otp-email-masked"></span></p><button class="link-btn" id="login-otp-back" type="button">Use a different email</button></div>
+      <div id="login-otp-banner"></div>
+      <div class="field"><label for="login-otp">Sign-in code</label><input id="login-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
+      <button class="btn btn-primary" id="login-otp-submit" type="button">Verify and log in</button>
+      <button class="link-btn" id="login-otp-resend" type="button">Resend code</button>
+      <p id="login-otp-countdown" class="muted"></p>
     </div>
   </div>
 
