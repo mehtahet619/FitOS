@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run build
-    startCommand: npm run migrate:mysql:prod && npm start
+    startCommand: npm start
     autoDeploy: false
     healthCheckPath: /health
     plan: free
@@ -24,6 +24,8 @@ services:
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
       - key: RESEND_API_KEY
+        sync: false
+      - key: BREVO_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
@@ -69,3 +71,4 @@ services:
     envVars:
       - key: API_BASE_URL
         value: https://adaptive-fit-api.onrender.com
+        
