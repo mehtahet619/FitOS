@@ -181,24 +181,39 @@ for any first run, not a sign of a deeper problem.
 ## Grow Your Impact
 
 The authenticated Today dashboard counts at most one qualifying workout per
-calendar day. A workout must be marked completed, have a positive duration,
-and include at least one logged completed set. The default monthly goal is 26
-days; Sundays remain rest days. The first release unlocks a clearly labeled
-virtual tree commitment and does not report a real planting. A unique
+local calendar day. A workout must be marked completed, have a positive
+duration, and include at least one logged completed set. The target is
+calculated from the selected calendar month: calendar days minus unique
+Sundays, configured public holidays, and additional gym closures. Gujarat,
+India is the initial location. Its 2026 dates use the [Gujarat Government
+General Administration Department holiday notification](https://s3-ap-southeast-1.amazonaws.com/gtusitecirculars/uploads/general_holidays_2026_555209.pdf);
+operators should update future-year calendars from the relevant official
+notification and users can mark holidays open when their gym operates.
+
+Growth stages are derived from completed workout records and persisted by user
+and month. Reopening the dashboard recomputes progress from those records; it
+does not advance a stage on its own. The first release unlocks a clearly
+labeled virtual tree commitment and does not report real planting. A unique
 user/month reward row and verified-partner-update table are ready for a future
 planting integration; photo reminder preference fields are reserved for later
 notifications, which are not sent by this release.
 
 Optional backend settings:
 
-- `GROW_IMPACT_MONTHLY_TARGET` (default `26`)
-- `GROW_IMPACT_MONTH_LENGTH_DAYS` (defaults to the active calendar month's length)
-- `GROW_IMPACT_HOLIDAY_ALLOWANCE_DAYS` (default `0`, used in planning-day metadata)
-- `GROW_IMPACT_TIME_ZONE` (IANA timezone; default `UTC`)
+- `GROW_IMPACT_DEFAULT_LOCATION` (configured key; defaults to `IN-GJ`)
+- `GROW_IMPACT_LOCATION_CALENDARS_JSON` (administrator-maintained map of location keys to country/region names, IANA time zones, and `holidaysByYear` date/name lists)
+- `GROW_IMPACT_GYM_CLOSURES_JSON` (administrator-maintained map of location keys to additional `YYYY-MM-DD` gym closure dates)
 - `GROW_IMPACT_TREE_OPTIONS` (JSON array of exactly three objects with `id`, `name`, `species`, `image`, and `description`)
 
-Run the existing schema migration command after deployment:
-`npm run migrate` for SQLite or `npm run migrate:postgres` for PostgreSQL.
+The authenticated user can select a configured location, mark a public holiday
+as open for their gym, and add gym-specific closure dates. Calendar settings
+are per user. Add future-year public holidays from the applicable official
+source before relying on holiday exclusions for those years; the bundled
+Gujarat calendar currently includes 2026.
+
+Apply the additive schema after deployment: `npm run migrate` for SQLite,
+`npm run migrate:postgres` for PostgreSQL, or `npm run migrate:mysql` for
+TiDB/MySQL (use the corresponding `:prod` script after building).
 
 - **Native mobile app is untested.** `mobile/` (Flutter/Dart) was written
   without a Flutter SDK available to compile or run it in this

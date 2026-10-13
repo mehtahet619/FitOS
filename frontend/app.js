@@ -614,7 +614,7 @@ async function loadTodayData(generation) {
     const [nutritionResult, gymResult, growImpactResult] = await Promise.allSettled([
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
-      Api.get("/grow-impact/"),
+      Api.get(`/grow-impact/?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata")}`),
     ]);
     if (generation !== todayLoadGeneration) return;
 
@@ -693,12 +693,15 @@ function escapeImpactText(value) {
 function renderGrowImpact(impact) {
   const percent = Math.max(0, Math.min(100, Number(impact.progressPercent) || 0));
   const count = Number(impact.sessions) || 0;
-  const target = Number(impact.target) || 26;
-  const encouragement = count >= target
-    ? "You reached your monthly goal. Choose a tree to mark your consistency."
+  const target = Math.max(0, Number(impact.target) || 0);
+  const completed = count >= target && target > 0;
+  const encouragement = completed
+    ? "Congratulations! Your monthly growth goal is complete."
     : count === 0 ? "Every completed workout is a step toward a greener future."
       : impact.remaining === 1 ? "One more session to unlock your tree choice. Keep going."
         : "Your consistency is adding up. Sundays are rest days.";
+  const stage = Math.max(1, Number(impact.growthStageIndex) || 1);
+  const stageCount = Math.max(2, Number(impact.growthStageCount) || 25);
   const reward = impact.reward;
   const tree = impact.trees?.find((option) => option.id === reward?.selectedSpeciesId) || (reward?.selectedSpeciesId ? {
     id: reward.selectedSpeciesId,
@@ -709,11 +712,11 @@ function renderGrowImpact(impact) {
   } : null);
   let rewardPanel = "";
 
-  if (!reward && count >= target) {
-    rewardPanel = `<p class="grow-impact-unlocked">Your tree reward is ready. Pick one of three trees below.</p>
+  if (!reward && completed) {
+    rewardPanel = `<p class="grow-impact-unlocked">Your virtual tree reward is ready. Pick one of three trees below.</p>
       <div class="grow-impact-options">${(impact.trees || []).map((option) => renderTreeOption(option, null)).join("")}</div>`;
-  } else if (reward?.status === "unlocked") {
-    rewardPanel = `<p class="grow-impact-unlocked">Your tree reward is ready. Pick one of three trees below.</p>
+  } else if (reward?.status === "unlocked" && completed) {
+    rewardPanel = `<p class="grow-impact-unlocked">Your virtual tree reward is ready. Pick one of three trees below.</p>
       <div class="grow-impact-options">${(impact.trees || []).map((option) => renderTreeOption(option, null)).join("")}</div>`;
   } else if (reward?.status === "selected" && tree) {
     rewardPanel = `<div class="grow-impact-choice-preview">
@@ -749,15 +752,104 @@ function renderGrowImpact(impact) {
       ${verifiedPhotos.length ? `<div class="grow-impact-photos">${verifiedPhotos.map((src) => `<img src="${escapeImpactText(src)}" alt="Verified planting partner update" loading="lazy" />`).join("")}</div>` : ""}`;
   }
 
-  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title">
+  const holidayOptions = (impact.holidayDates || []).filter((holiday) => holiday.source === "public").map((holiday) => {
+    const openOnHoliday = (impact.settings?.gymOpenOnHolidayDates || []).includes(holiday.date);
+    return `<label class="grow-impact-holiday"><input type="checkbox" data-impact-open-holiday value="${escapeImpactText(holiday.date)}" ${openOnHoliday ? "checked" : ""} />
+      <span>${escapeImpactText(holiday.date)} · ${escapeImpactText(holiday.name)}${holiday.sunday ? " · Sunday" : ""}</span></label>`;
+  }).join("");
+  const closures = (impact.settings?.additionalClosureDates || []).filter((date) => date.startsWith(`${impact.month}-`)).map((date) =>
+    `<li><span>${escapeImpactText(date)}</span><button type="button" data-remove-impact-closure="${escapeImpactText(date)}" aria-label="Remove closure on ${escapeImpactText(date)}">Remove</button></li>`
+  ).join("");
+  const locations = (impact.locations || []).map((location) =>
+    `<option value="${escapeImpactText(location.key)}" ${location.key === impact.location?.key ? "selected" : ""}>${escapeImpactText(location.regionName)}, ${escapeImpactText(location.countryName)}</option>`
+  ).join("");
+  const growthArt = renderImpactPlant(stage, stageCount, completed);
+  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title"
+    data-open-holiday-dates="${escapeImpactText(JSON.stringify(impact.settings?.gymOpenOnHolidayDates || []))}"
+    data-additional-closure-dates="${escapeImpactText(JSON.stringify(impact.settings?.additionalClosureDates || []))}">
     <div class="grow-impact-heading"><div><div class="card-label">🌱 Grow Your Impact</div><h2 id="grow-impact-title">${count} <span>of ${target} sessions</span></h2></div>
-      <span class="grow-impact-month">${escapeImpactText(impact.month)}</span></div>
-    <div class="grow-impact-progress" role="progressbar" aria-label="Monthly gym session progress" aria-valuemin="0" aria-valuemax="${target}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
+      <label class="grow-impact-month-label" aria-label="Choose a calendar month"><input class="grow-impact-month" type="month" data-impact-month value="${escapeImpactText(impact.month)}" /></label></div>
+    <div class="grow-impact-calendar-stats" aria-label="Monthly target details">
+      <span><strong>${impact.calendarDays}</strong> total days</span><span><strong>${impact.sundayRestDays}</strong> Sundays</span>
+      <span><strong>${impact.holidayCount}</strong> public holidays</span><span><strong>${impact.additionalClosureCount || 0}</strong> additional closures</span>
+      <span><strong>${impact.eligibleDays}</strong> eligible gym days</span>
+      <span><strong>${count}</strong> completed sessions</span><span><strong>${impact.remaining}</strong> remaining</span>
+    </div>
+    <p class="grow-impact-location-line">${escapeImpactText(impact.location?.regionName)}, ${escapeImpactText(impact.location?.countryName)} · ${escapeImpactText(impact.timeZone)} · ${impact.holidaySundayCount || 0} holiday/Sunday overlap${impact.holidaySundayCount === 1 ? "" : "s"}</p>
+    ${impact.holidayCalendarConfigured === false ? `<p class="grow-impact-calendar-warning" role="status">No public holiday calendar is configured for ${escapeImpactText(impact.year)}. This target currently excludes Sundays and configured gym closures only.</p>` : ""}
+    <div class="grow-impact-progress" role="progressbar" aria-label="Monthly gym session progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
     <p class="grow-impact-encouragement">${escapeImpactText(encouragement)}</p>
-    <p class="grow-impact-rest-note">Only completed workouts with a logged set count. Each calendar day counts once. Sundays are rest days.</p>
+    <div class="grow-impact-growth ${completed ? "is-complete" : ""}">
+      ${growthArt}
+      <div class="grow-impact-growth-copy"><strong>Stage ${stage} of ${stageCount} · ${escapeImpactText(impact.growthStageLabel || "Seed")}</strong>
+        <span>${escapeImpactText(impact.nextMilestone || "Next: roots take hold")}</span></div>
+    </div>
+    ${completed ? `<div class="grow-impact-celebration" role="status" aria-live="polite"><strong>🎉 Congratulations — you reached your monthly target!</strong><span>Your virtual growth milestone is complete. Choose a tree below to save your pilot reward.</span></div>` : ""}
+    <p class="grow-impact-rest-note">Only completed workouts with a logged set count. Each calendar day counts once. Progress is based on the workout's local completion date.</p>
+    <details class="grow-impact-calendar-settings"><summary>Calendar and gym closures</summary>
+      <label class="grow-impact-setting-label">Holiday location<select data-impact-location>${locations}</select></label>
+      <p>Public holidays are excluded by default. Check a holiday below if your gym stays open that day. Add other dates when your gym is closed.</p>
+      ${holidayOptions ? `<div class="grow-impact-holiday-list">${holidayOptions}</div>` : `<p>No public holidays are configured for this month.</p>`}
+      <label class="grow-impact-setting-label">Additional gym closure<input type="date" data-impact-new-closure /></label>
+      <button type="button" class="btn btn-secondary grow-impact-add-closure">Add closure date</button>
+      ${closures ? `<ul class="grow-impact-closure-list">${closures}</ul>` : ""}
+      <button type="button" class="btn btn-primary grow-impact-save-settings">Save calendar settings</button>
+    </details>
     <p class="grow-impact-feedback" role="status" aria-live="polite"></p>
     ${rewardPanel}
+    <p class="grow-impact-virtual-label">Pilot reward · virtual commitment only. FitOS is not currently claiming that a real tree has been planted.</p>
   </section>`;
+}
+
+function renderImpactPlant(stage, stageCount, isComplete) {
+  const progress = stageCount > 1 ? Math.max(0, Math.min(1, (stage - 1) / (stageCount - 1))) : 0;
+  const soilY = 156;
+  const stemHeight = Math.round(progress * 91);
+  const stemTop = soilY - stemHeight;
+  const rootCount = Math.floor(progress * 8);
+  const roots = Array.from({ length: rootCount }, (_, index) => {
+    const side = index % 2 ? 1 : -1;
+    const branch = Math.floor(index / 2) + 1;
+    const endX = 140 + side * (12 + branch * 13);
+    const endY = soilY + 7 + branch * 5;
+    return `<path d="M140 ${soilY} Q${140 + side * branch * 6} ${soilY + 5} ${endX} ${endY}" />`;
+  }).join("");
+  const stem = progress > 0.04
+    ? `<path class="impact-stem" d="M140 ${soilY} C${137 - stemHeight * .03} ${soilY - stemHeight * .32} ${143 + stemHeight * .03} ${soilY - stemHeight * .72} 140 ${stemTop}" />`
+    : "";
+  const branchCount = Math.floor(progress * 8);
+  const branches = Array.from({ length: branchCount }, (_, index) => {
+    const side = index % 2 ? 1 : -1;
+    const level = Math.floor(index / 2) + 1;
+    const y = soilY - stemHeight * (0.3 + Math.min(level * .12, .58));
+    const x = 140 + side * (12 + level * 7);
+    const endY = y - 8 - level * 2;
+    return `<path class="impact-branch" d="M140 ${y} Q${140 + side * 10} ${endY - 1} ${x} ${endY}" />`;
+  }).join("");
+  const leafCount = Math.floor(progress * 20);
+  const leaves = Array.from({ length: leafCount }, (_, index) => {
+    const side = index % 2 ? 1 : -1;
+    const row = Math.floor(index / 2);
+    const y = soilY - Math.max(8, stemHeight * (.34 + (row % 5) * .12));
+    const x = 140 + side * (12 + (row % 4) * 7);
+    const size = 4 + progress * 4;
+    return `<path class="impact-leaf" d="M${x} ${y} C${x + side * size} ${y - size * 1.2} ${x + side * size * 2} ${y - size * .9} ${x + side * size * 2.2} ${y} C${x + side * size} ${y + size * .5} ${x + side * size * .4} ${y + size * .3} ${x} ${y}Z" />`;
+  }).join("");
+  const seed = progress < .11 ? `<ellipse class="impact-seed" cx="140" cy="151" rx="${Math.max(4, 7 - progress * 20)}" ry="${Math.max(3, 5 - progress * 15)}" transform="rotate(-28 140 151)" />` : "";
+  return `<svg class="grow-impact-plant-art" viewBox="0 0 280 205" role="img" aria-label="${isComplete ? "Fully grown tree" : `Plant growth stage ${stage} of ${stageCount}`}" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="impactSky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3fff6"/><stop offset="1" stop-color="#d7f1df"/></linearGradient>
+      <linearGradient id="impactStem" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#75513b"/><stop offset=".55" stop-color="#a8774d"/><stop offset="1" stop-color="#684731"/></linearGradient>
+      <linearGradient id="impactLeaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a9dc62"/><stop offset="1" stop-color="#18845d"/></linearGradient></defs>
+    <rect x="1" y="1" width="278" height="203" rx="18" fill="url(#impactSky)" />
+    <circle cx="225" cy="42" r="20" fill="#fff4c2" opacity=".72" />
+    <path d="M1 156 Q43 149 80 156 T160 155 T240 156 T279 153V204H1Z" fill="#614833" />
+    <path d="M1 159 Q45 153 88 159 T175 158 T279 157" fill="none" stroke="#9c7754" stroke-width="3" />
+    <g class="impact-roots" fill="none" stroke="#c89250" stroke-linecap="round" stroke-width="2">${roots}</g>
+    <g fill="none" stroke="url(#impactStem)" stroke-linecap="round" stroke-linejoin="round">
+      ${stem}<g stroke-width="3">${branches}</g>
+    </g><g fill="url(#impactLeaf)">${leaves}</g>${seed}
+    ${isComplete ? `<circle cx="140" cy="${Math.max(28, stemTop)}" r="37" fill="#93cf52" opacity=".12" class="impact-canopy-glow" />` : ""}
+  </svg>`;
 }
 
 function partnerStagePercent(stageLabel) {
@@ -783,9 +875,10 @@ function bindGrowImpactActions(root) {
   root.querySelectorAll("[data-grow-tree]").forEach((button) => button.addEventListener("click", async () => {
     button.disabled = true;
     try {
-      await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree });
-      todayRequest = null;
-      await loadToday();
+      const month = root.querySelector("[data-impact-month]")?.value;
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+      await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree, month, timeZone });
+      await refreshCard(month);
     } catch (error) {
       const feedback = root.querySelector(".grow-impact-feedback");
       if (feedback) feedback.textContent = error?.message || "Could not save your tree choice.";
@@ -796,15 +889,79 @@ function bindGrowImpactActions(root) {
   confirmButton?.addEventListener("click", async () => {
     confirmButton.disabled = true;
     try {
-      await Api.post("/grow-impact/confirm", {});
-      todayRequest = null;
-      await loadToday();
+      const month = root.querySelector("[data-impact-month]")?.value;
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+      await Api.post("/grow-impact/confirm", { month, timeZone });
+      await refreshCard(month);
     } catch (error) {
       const feedback = root.querySelector(".grow-impact-feedback");
       if (feedback) feedback.textContent = error?.message || "Could not confirm your tree choice.";
       confirmButton.disabled = false;
     }
   });
+
+  const refreshCard = async (month, settingsPayload) => {
+    const feedback = root.querySelector(".grow-impact-feedback");
+    try {
+      if (settingsPayload) await Api.put("/grow-impact/settings", settingsPayload);
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+      const query = new URLSearchParams({ timeZone: zone });
+      if (month) query.set("month", month);
+      const impact = await Api.get(`/grow-impact/?${query.toString()}`);
+      const card = root.querySelector(".grow-impact-card");
+      if (card) card.outerHTML = renderGrowImpact(impact);
+      bindGrowImpactActions(root);
+    } catch (error) {
+      if (feedback) feedback.textContent = error?.message || "Could not update the monthly calendar.";
+    }
+  };
+
+  const monthInput = root.querySelector("[data-impact-month]");
+  monthInput?.addEventListener("change", () => {
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(monthInput.value)) void refreshCard(monthInput.value);
+  });
+
+  const buildSettingsPayload = (clearOpenHolidayDates = false) => {
+    const card = root.querySelector(".grow-impact-card");
+    const locationKey = card?.querySelector("[data-impact-location]")?.value;
+    const month = card?.querySelector("[data-impact-month]")?.value;
+    const currentOpenDates = card?.querySelectorAll("[data-impact-open-holiday]:checked") || [];
+    const shownPublicDates = [...(card?.querySelectorAll("[data-impact-open-holiday]") || [])].map((input) => input.value);
+    const savedOpenDates = card?.dataset.openHolidayDates ? JSON.parse(card.dataset.openHolidayDates) : [];
+    const openDates = clearOpenHolidayDates ? [] : [
+      ...savedOpenDates.filter((date) => !date.startsWith(`${month}-`) && !shownPublicDates.includes(date)),
+      ...[...currentOpenDates].map((input) => input.value),
+    ];
+    const closureDates = card?.dataset.additionalClosureDates ? JSON.parse(card.dataset.additionalClosureDates) : [];
+    return { locationKey, gymOpenOnHolidayDates: [...new Set(openDates)], additionalClosureDates: closureDates };
+  };
+
+  const locationSelect = root.querySelector("[data-impact-location]");
+  locationSelect?.addEventListener("change", () => {
+    const payload = buildSettingsPayload(true);
+    void refreshCard(root.querySelector("[data-impact-month]")?.value, payload);
+  });
+
+  root.querySelector(".grow-impact-save-settings")?.addEventListener("click", () => {
+    const payload = buildSettingsPayload(false);
+    void refreshCard(root.querySelector("[data-impact-month]")?.value, payload);
+  });
+
+  root.querySelector(".grow-impact-add-closure")?.addEventListener("click", () => {
+    const card = root.querySelector(".grow-impact-card");
+    const date = card?.querySelector("[data-impact-new-closure]")?.value;
+    if (!date) return;
+    const payload = buildSettingsPayload(false);
+    payload.additionalClosureDates = [...new Set([...payload.additionalClosureDates, date])];
+    void refreshCard(card?.querySelector("[data-impact-month]")?.value, payload);
+  });
+
+  root.querySelectorAll("[data-remove-impact-closure]").forEach((button) => button.addEventListener("click", () => {
+    const card = root.querySelector(".grow-impact-card");
+    const payload = buildSettingsPayload(false);
+    payload.additionalClosureDates = payload.additionalClosureDates.filter((date) => date !== button.dataset.removeImpactClosure);
+    void refreshCard(card?.querySelector("[data-impact-month]")?.value, payload);
+  }));
 }
 
 function handleTodayError(el, error) {

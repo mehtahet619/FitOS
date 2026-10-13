@@ -438,6 +438,48 @@ CREATE TABLE IF NOT EXISTS GrowImpactReward (
 );
 CREATE INDEX IF NOT EXISTS idx_grow_impact_reward_user ON GrowImpactReward(userId, qualifyingMonth);
 
+-- User-selected holiday region and the gym-specific exceptions that affect
+-- future monthly targets. JSON date lists contain YYYY-MM-DD values.
+CREATE TABLE IF NOT EXISTS GrowImpactSettings (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
+  countryCode TEXT NOT NULL DEFAULT 'IN',
+  regionCode TEXT NOT NULL DEFAULT 'GJ',
+  timeZone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+  gymOpenOnHolidayDatesJson TEXT NOT NULL DEFAULT '[]',
+  additionalClosureDatesJson TEXT NOT NULL DEFAULT '[]',
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grow_impact_settings_user ON GrowImpactSettings(userId);
+
+-- Idempotent per-user/month snapshot. Workout rows remain the source of truth;
+-- every refresh recomputes dates and the target from those verified records.
+CREATE TABLE IF NOT EXISTS GrowImpactMonthlyProgress (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  qualifyingMonth TEXT NOT NULL,
+  countryCode TEXT NOT NULL,
+  regionCode TEXT NOT NULL,
+  timeZone TEXT NOT NULL,
+  calendarDays INTEGER NOT NULL,
+  sundayRestDays INTEGER NOT NULL,
+  holidayCount INTEGER NOT NULL,
+  holidaySundayCount INTEGER NOT NULL,
+  holidayCalendarConfigured INTEGER NOT NULL,
+  eligibleDays INTEGER NOT NULL,
+  monthlyTarget INTEGER NOT NULL,
+  completedSessions INTEGER NOT NULL,
+  growthStageIndex INTEGER NOT NULL,
+  growthStageCount INTEGER NOT NULL,
+  completedSessionDatesJson TEXT NOT NULL DEFAULT '[]',
+  computedAt TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  UNIQUE(userId, qualifyingMonth)
+);
+CREATE INDEX IF NOT EXISTS idx_grow_impact_progress_user_month ON GrowImpactMonthlyProgress(userId, qualifyingMonth);
+
 -- Reserved for validated updates from a future planting partner. Only
 -- rows with verifiedAt set may influence the real-world growth visualization.
 CREATE TABLE IF NOT EXISTS GrowImpactPartnerUpdate (
