@@ -37,12 +37,12 @@ interface RewardRow {
   nextPhotoReminderAt: string | null;
 };
 
-async function currentImpact(userId: string, requestedMonth?: string, timeZoneOverride?: string, now = new Date()) {
+async function currentImpact(userId: string, requestedMonth?: string, now = new Date()) {
   const userSettings = await getUserImpactSettings(db, userId);
   const config = getGrowImpactConfig();
-  const timeZone = timeZoneOverride || userSettings.timeZone;
+  const timeZone = userSettings.timeZone;
   const month = requestedMonth || getMonthWindow(now, timeZone).month;
-  const progress = await refreshMonthlyProgress(db, userId, month, timeZone, now);
+  const progress = await refreshMonthlyProgress(db, userId, month, timeZone, now, userSettings);
   const sessionCount = progress.completedSessions;
   const target = progress.target;
   let reward = await db.get<RewardRow>(
@@ -128,12 +128,7 @@ function parsePhotoList(value: string | null | undefined): string[] {
 growImpactRouter.get("/", async (req: AuthedRequest, res) => {
   const month = typeof req.query.month === "string" ? req.query.month : undefined;
   if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Month must use YYYY-MM format." });
-  const timeZone = typeof req.query.timeZone === "string" ? req.query.timeZone : undefined;
-  if (timeZone) {
-    try { new Intl.DateTimeFormat("en", { timeZone }).format(); }
-    catch { return res.status(400).json({ error: "Time zone must be a valid IANA time zone." }); }
-  }
-  return res.json(await currentImpact(req.userId!, month, timeZone));
+  return res.json(await currentImpact(req.userId!, month));
 });
 
 const dateListSchema = z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(100);
@@ -176,18 +171,13 @@ growImpactRouter.put("/settings", rewardChangesLimiter, async (req: AuthedReques
 });
 
 const qualifyingMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
-const requestTimeZoneSchema = z.string().min(1).max(64).optional();
 const chooseTreeSchema = z.object({
-  speciesId: z.string().min(1).max(80), month: qualifyingMonthSchema.optional(), timeZone: requestTimeZoneSchema,
+  speciesId: z.string().min(1).max(80), month: qualifyingMonthSchema.optional(),
 });
 growImpactRouter.post("/select", rewardChangesLimiter, async (req: AuthedRequest, res) => {
   const parsed = chooseTreeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Choose one of the available trees." });
-  if (parsed.data.timeZone) {
-    try { new Intl.DateTimeFormat("en", { timeZone: parsed.data.timeZone }).format(); }
-    catch { return res.status(400).json({ error: "Time zone must be a valid IANA time zone." }); }
-  }
-  const impact = await currentImpact(req.userId!, parsed.data.month, parsed.data.timeZone);
+  const impact = await currentImpact(req.userId!, parsed.data.month);
   if (impact.target === 0 || impact.sessions < impact.target || !impact.reward) return res.status(403).json({ error: "Complete this month's session target to unlock a tree choice." });
   if (impact.reward.status === "confirmed") return res.status(409).json({ error: "Your tree choice has already been confirmed." });
   const tree = impact.trees.find((option) => option.id === parsed.data.speciesId);
@@ -197,18 +187,14 @@ growImpactRouter.post("/select", rewardChangesLimiter, async (req: AuthedRequest
      WHERE userId=? AND qualifyingMonth=? AND status<>'confirmed'`,
     tree.id, tree.species, tree.name, tree.image, nowIso(), req.userId!, impact.month
   );
-  return res.json({ success: true, impact: await currentImpact(req.userId!, impact.month, parsed.data.timeZone) });
+  return res.json({ success: true, impact: await currentImpact(req.userId!, impact.month) });
 });
 
-const confirmTreeSchema = z.object({ month: qualifyingMonthSchema.optional(), timeZone: requestTimeZoneSchema });
+const confirmTreeSchema = z.object({ month: qualifyingMonthSchema.optional() });
 growImpactRouter.post("/confirm", rewardChangesLimiter, async (req: AuthedRequest, res) => {
   const parsed = confirmTreeSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: "Month must use YYYY-MM format." });
-  if (parsed.data.timeZone) {
-    try { new Intl.DateTimeFormat("en", { timeZone: parsed.data.timeZone }).format(); }
-    catch { return res.status(400).json({ error: "Time zone must be a valid IANA time zone." }); }
-  }
-  const impact = await currentImpact(req.userId!, parsed.data.month, parsed.data.timeZone);
+  const impact = await currentImpact(req.userId!, parsed.data.month);
   if (impact.target === 0 || impact.sessions < impact.target || !impact.reward) return res.status(403).json({ error: "Complete this month's session target to unlock a tree choice." });
   if (impact.reward.status === "confirmed") return res.json({ success: true, impact });
   if (impact.reward.status !== "selected" || !impact.reward.selectedSpeciesId) return res.status(409).json({ error: "Choose a tree before confirming." });
@@ -218,5 +204,5 @@ growImpactRouter.post("/confirm", rewardChangesLimiter, async (req: AuthedReques
      WHERE userId=? AND qualifyingMonth=? AND status='selected'`,
     ts, ts, req.userId!, impact.month
   );
-  return res.json({ success: true, impact: await currentImpact(req.userId!, impact.month, parsed.data.timeZone) });
+  return res.json({ success: true, impact: await currentImpact(req.userId!, impact.month) });
 });
