@@ -1608,10 +1608,11 @@ function renderWorkout(workout, plan) {
     const swapButton = canEditWorkout && !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped"
       ? `<button class="btn btn-outline workout-swap-btn" data-action="swap" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Swap</button>`
       : "";
+    const dragHandle = canEditWorkout
+      ? `<button class="workout-drag-handle" type="button" data-index="${index}" aria-label="Reorder ${escapeWorkoutText(exercise.exerciseName)}" title="Drag to reorder"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5h10M3 11h10" /></svg></button>`
+      : `<span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>`;
     const controls = canEditWorkout
       ? `<div class="workout-exercise-actions">
-          <button class="btn btn-outline" data-action="move-up" data-index="${index}" aria-label="Move ${escapeWorkoutText(exercise.exerciseName)} up" ${index === 0 ? "disabled" : ""}>↑</button>
-          <button class="btn btn-outline" data-action="move-down" data-index="${index}" aria-label="Move ${escapeWorkoutText(exercise.exerciseName)} down" ${index === progress.length - 1 ? "disabled" : ""}>↓</button>
           <button class="btn btn-outline" data-action="edit-exercise" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Edit exercise</button>
           ${swapButton}
         </div>
@@ -1624,8 +1625,8 @@ function renderWorkout(workout, plan) {
           <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
       : swapButton;
-    return `<article class="workout-exercise-row ${stateClass}">
-      <span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>
+    return `<article class="workout-exercise-row ${stateClass}" data-index="${index}">
+      ${dragHandle}
       <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.exerciseName)}</strong><span>${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")} · ${escapeWorkoutText(equipmentLine(exercise))} · ${setLabel} · ${repLabel}</span></div>
       <span class="workout-exercise-state">${stateLabel}</span>${controls}
     </article>`;
@@ -1715,24 +1716,69 @@ function renderWorkout(workout, plan) {
     });
   }
 
-  el.querySelectorAll('[data-action="move-up"], [data-action="move-down"]').forEach((button) => {
-    button.addEventListener("click", async () => {
-      const from = Number(button.dataset.index);
-      const to = from + (button.dataset.action === "move-up" ? -1 : 1);
-      if (!Number.isInteger(from) || to < 0 || to >= workout.exercises.length) return;
-      const reordered = [...workout.exercises];
-      const [moved] = reordered.splice(from, 1);
-      reordered.splice(to, 0, moved);
-      button.disabled = true;
-      try {
-        await Api.post(`/workouts/${workout.id}/reorder-exercises`, {
-          workoutExerciseIds: reordered.map((exercise) => exercise.workoutExerciseId),
-        });
-        renderWorkout({ ...workout, exercises: reordered }, plan);
-      } catch (error) {
-        showWorkoutNotice(error.message || "Could not reorder exercises.", "error");
-        button.disabled = false;
-      }
+  const saveExerciseOrder = async (from, to) => {
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0
+      || from >= workout.exercises.length || to >= workout.exercises.length || from === to) return;
+    const reordered = [...workout.exercises];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    try {
+      await Api.post(`/workouts/${workout.id}/reorder-exercises`, {
+        workoutExerciseIds: reordered.map((exercise) => exercise.workoutExerciseId),
+      });
+      renderWorkout({ ...workout, exercises: reordered }, plan);
+    } catch (error) {
+      showWorkoutNotice(error.message || "Could not reorder exercises.", "error");
+    }
+  };
+  el.querySelectorAll(".workout-drag-handle").forEach((handle) => {
+    handle.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      const from = Number(handle.dataset.index);
+      void saveExerciseOrder(from, from + (event.key === "ArrowUp" ? -1 : 1));
+    });
+  });
+  let activeDrag = null;
+  const clearDragMarks = () => {
+    el.querySelectorAll(".workout-exercise-row.is-dragging, .workout-exercise-row.is-drop-target")
+      .forEach((row) => row.classList.remove("is-dragging", "is-drop-target"));
+  };
+  const finishDrag = (event, cancelled = false) => {
+    if (!activeDrag || (event && event.pointerId !== activeDrag.pointerId)) return;
+    const { from, to } = activeDrag;
+    activeDrag = null;
+    document.removeEventListener("pointermove", moveDrag);
+    document.removeEventListener("pointerup", finishDrag);
+    document.removeEventListener("pointercancel", cancelDrag);
+    clearDragMarks();
+    if (!cancelled) void saveExerciseOrder(from, to);
+  };
+  const cancelDrag = (event) => finishDrag(event, true);
+  const moveDrag = (event) => {
+    if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".workout-exercise-row");
+    const nextIndex = Number(target?.dataset.index);
+    if (!target || !el.contains(target) || !Number.isInteger(nextIndex)
+      || nextIndex < 0 || nextIndex >= workout.exercises.length) return;
+    el.querySelectorAll(".workout-exercise-row.is-drop-target").forEach((row) => row.classList.remove("is-drop-target"));
+    target.classList.add("is-drop-target");
+    activeDrag.to = nextIndex;
+  };
+  el.querySelectorAll(".workout-drag-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || activeDrag) return;
+      event.preventDefault();
+      const row = handle.closest(".workout-exercise-row");
+      const from = Number(handle.dataset.index);
+      if (!row || !Number.isInteger(from)) return;
+      activeDrag = { pointerId: event.pointerId, from, to: from };
+      row.classList.add("is-dragging");
+      handle.setPointerCapture?.(event.pointerId);
+      document.addEventListener("pointermove", moveDrag, { passive: false });
+      document.addEventListener("pointerup", finishDrag);
+      document.addEventListener("pointercancel", cancelDrag);
     });
   });
 
