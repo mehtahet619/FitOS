@@ -366,8 +366,9 @@ export async function refreshMonthlyProgress(
   month: string,
   timeZoneOverride?: string,
   now = new Date(),
+  settingsOverride?: GrowImpactSettings,
 ): Promise<StoredMonthlyProgress> {
-  const settings = await getUserImpactSettings(database, userId);
+  const settings = settingsOverride ?? await getUserImpactSettings(database, userId);
   const timeZone = assertTimeZone(timeZoneOverride || settings.timeZone);
   const calendar = calculateMonthlyTarget(month, settings.location, timeZone, settings);
   const workouts = await database.all<CompletedWorkoutCandidate>(

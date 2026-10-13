@@ -614,7 +614,7 @@ async function loadTodayData(generation) {
     const [nutritionResult, gymResult, growImpactResult] = await Promise.allSettled([
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
-      Api.get(`/grow-impact/?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata")}`),
+      Api.get("/grow-impact/"),
     ]);
     if (generation !== todayLoadGeneration) return;
 
@@ -876,8 +876,7 @@ function bindGrowImpactActions(root) {
     button.disabled = true;
     try {
       const month = root.querySelector("[data-impact-month]")?.value;
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
-      await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree, month, timeZone });
+      await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree, month });
       await refreshCard(month);
     } catch (error) {
       const feedback = root.querySelector(".grow-impact-feedback");
@@ -890,8 +889,7 @@ function bindGrowImpactActions(root) {
     confirmButton.disabled = true;
     try {
       const month = root.querySelector("[data-impact-month]")?.value;
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
-      await Api.post("/grow-impact/confirm", { month, timeZone });
+      await Api.post("/grow-impact/confirm", { month });
       await refreshCard(month);
     } catch (error) {
       const feedback = root.querySelector(".grow-impact-feedback");
@@ -904,8 +902,7 @@ function bindGrowImpactActions(root) {
     const feedback = root.querySelector(".grow-impact-feedback");
     try {
       if (settingsPayload) await Api.put("/grow-impact/settings", settingsPayload);
-      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
-      const query = new URLSearchParams({ timeZone: zone });
+      const query = new URLSearchParams();
       if (month) query.set("month", month);
       const impact = await Api.get(`/grow-impact/?${query.toString()}`);
       const card = root.querySelector(".grow-impact-card");
