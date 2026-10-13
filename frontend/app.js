@@ -1596,6 +1596,7 @@ function renderWorkout(workout, plan) {
 
   const exerciseRows = progress.map((item, index) => {
     const exercise = item.exercise;
+    const equipment = equipmentLine(exercise);
     const skipped = exercise.status === "skipped";
     const isDone = skipped || exercise.status === "completed" || item.nextSetNumber === undefined;
     const isActive = index === activeIndex;
