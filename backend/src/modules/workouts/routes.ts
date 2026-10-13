@@ -30,7 +30,8 @@ import {
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
-import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
+import { exerciseFamilyKey, exerciseRecommendationService, getExerciseSwapContext } from "./exerciseRecommendation";
+import { getAiExerciseFallback } from "./exerciseAiFallback";
 import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
 
 export const workoutRouter = Router();
@@ -751,8 +752,8 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const parsed = replaceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
   const { workoutExerciseId, reason } = parsed.data;
-  const workout = await db.get<{ userId: string; status: string; equipmentMode?: string; equipmentSnapshot?: string }>(
-    `SELECT userId,status,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?`, req.params.id);
+  const workout = await db.get<{ userId: string; status: string; equipmentMode?: string; equipmentSnapshot?: string; durationMin?: number }>(
+    `SELECT userId,status,equipmentMode,equipmentSnapshot,durationMin FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== req.userId)
     return res.status(404).json({ error: "Workout not found" });
   if (workout.status === "completed")
@@ -859,10 +860,47 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     performableAlternatives.push({ exercise, equipmentId: isBodyweight ? null : equipmentId! });
   }
 
+  if (performableAlternatives.length === 0) {
+    const allowedIds = fullGym ? new Set(allEquipmentRows.map((row) => row.id)) : availableEquipmentIds;
+    const allowedEquipment = allEquipmentRows
+      .filter((row) => allowedIds.has(row.id) && normalizeExerciseValue(row.name) !== "no equipment")
+      .map((row) => ({
+        name: row.name,
+        aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
+      }));
+    if (!allowedEquipment.some((option) => normalizeExerciseValue(option.name) === "bodyweight")) {
+      allowedEquipment.push({ name: "Bodyweight", aliases: [] });
+    }
+    const swapContext = getExerciseSwapContext(exerciseRow.sourceExerciseName || base.name, baseMachine);
+    const fallback = await getAiExerciseFallback({
+      targetMuscles: [base.primaryMuscle],
+      sessionDurationMinutes: workout.durationMin ?? 45,
+      count: 1,
+      equipment: allowedEquipment,
+      excludedExerciseNames: usedNames.map((row) => row.name),
+      excludedFamilyKeys,
+      targetedMuscle: swapContext?.targetedMuscle || base.primaryMuscle,
+      timeTakenOneSet: swapContext?.timeTakenOneSet,
+    });
+    for (const exercise of fallback) {
+      const equipmentId = equipmentIdByAlias.get(normalizeExerciseValue(exercise.machine)) ?? null;
+      if (normalizeExerciseValue(exercise.machine) !== "bodyweight" && !fullGym && (!equipmentId || !availableEquipmentIds.has(equipmentId))) continue;
+      performableAlternatives.push({
+        exercise: {
+          ...exercise,
+          targetedMuscle: swapContext?.targetedMuscle || exercise.targetedMuscle,
+          targetedMuscles: swapContext?.targetedMuscles ?? exercise.targetedMuscles,
+          timeTakenOneSet: swapContext?.timeTakenOneSet || exercise.timeTakenOneSet,
+        },
+        equipmentId,
+      });
+    }
+  }
+
   const nextAlternative = performableAlternatives[0];
   if (!nextAlternative)
     return res.status(422).json({
-      error: `No dataset exercise matches the exact target muscles and one-set duration for "${base.name}" with your current equipment.`,
+      error: `No CSV or configured AI exercise matches the target muscles and one-set duration for "${base.name}" with your current equipment.`,
       requiresEquipment: baseRequiresEquipment,
     });
 

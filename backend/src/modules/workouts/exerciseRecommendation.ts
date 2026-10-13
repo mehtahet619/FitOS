@@ -85,6 +85,30 @@ export function exerciseFamilyKey(exerciseName: string): string {
   return familyWords.join(" ").replace(/\s+/g, " ").trim() || normalizeExerciseValue(exerciseName);
 }
 
+export function getExerciseSwapContext(exerciseName: string, machine: string): Pick<CsvExercise, "targetedMuscle" | "targetedMuscles" | "timeTakenOneSet"> | undefined {
+  const nameKey = normalizeExerciseValue(exerciseName);
+  const machineKey = normalizeExerciseValue(machine);
+  const familyKey = exerciseFamilyKey(exerciseName);
+  const rows = [...csvExerciseAlternativesRepository.getAll(), ...csvExerciseRepository.getAll()];
+  const matches = rows.filter((row) =>
+    row.targetedMuscles.length > 0
+    && row.timeTakenOneSet
+    && (normalizeExerciseValue(row.exercise) === nameKey || exerciseFamilyKey(row.exercise) === familyKey),
+  );
+  const selected = [...matches].sort((left, right) => {
+    const score = (row: CsvExercise) =>
+      (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
+      + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
+      + (row.alternativeRank === 1 ? 1 : 0);
+    return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
+  })[0];
+  return selected ? {
+    targetedMuscle: selected.targetedMuscle,
+    targetedMuscles: selected.targetedMuscles,
+    timeTakenOneSet: selected.timeTakenOneSet,
+  } : undefined;
+}
+
 export function exerciseCountForDuration(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes <= 0) throw new Error("Session duration must be a positive number of minutes.");
   if (minutes <= 30) return 2;
