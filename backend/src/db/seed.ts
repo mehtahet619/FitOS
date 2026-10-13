@@ -1,32 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { db, nowIso } from "./client";
-
-const EQUIPMENT = [
-  "No Equipment",
-  "Dumbbells",
-  "Barbell",
-  "Bench",
-  "Pull-up Bar",
-  "Resistance Bands",
-  "Cable Machine",
-  "Squat Rack",
-  "Treadmill",
-  "Exercise Bike",
-  "Smith Machine",
-  "Leg Press",
-  "Lat Pulldown",
-  "Chest Press",
-  "Pec Deck",
-  "Leg Extension",
-  "Leg Curl",
-  "Preacher Curl",
-  "Assisted Pull-up",
-  "Kettlebells",
-  "Medicine Ball",
-  "Exercise Ball",
-  "EZ Curl Bar",
-  "Foam Roller",
-];
+import { CANONICAL_EQUIPMENT } from "../modules/equipment/catalog";
 
 interface ExerciseSeed {
   name: string;
@@ -172,7 +146,7 @@ const FOODS: {
 async function main() {
   console.log("Seeding equipment...");
   const equipmentByName: Record<string, string> = {};
-  for (const name of EQUIPMENT) {
+  for (const name of CANONICAL_EQUIPMENT) {
     await db.run(`INSERT INTO Equipment (id, name, isCustom) VALUES (?, ?, 0) ON CONFLICT(name) DO NOTHING`, uuidv4(), name);
     const row = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, name);
     if (!row) throw new Error(`Equipment seed failed for ${name}`);

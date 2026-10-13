@@ -4,12 +4,13 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
+import { ensureCanonicalEquipmentCatalog } from "./catalog";
 
 export const equipmentRouter = Router();
 
 // Public: list all known equipment (used to render onboarding checkboxes)
 equipmentRouter.get("/", async (_req, res) => {
-  const equipment = await db.all(`SELECT * FROM Equipment ORDER BY name ASC`);
+  const equipment = await ensureCanonicalEquipmentCatalog(db);
   return res.json(equipment);
 });
 
