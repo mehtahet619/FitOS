@@ -97,7 +97,9 @@ const Api = (() => {
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       credentials: "include",
     };
-    const timeoutMs = isSessionCheck ? 7000 : 10000;
+    const timeoutMs = Number.isFinite(opts.timeoutMs)
+      ? Math.max(1000, opts.timeoutMs)
+      : isSessionCheck ? 7000 : 10000;
     let { response, text } = await fetchResponse(path, requestOptions, timeoutMs);
 
     // /auth/me intentionally reports an expired access cookie as an
@@ -137,7 +139,7 @@ const Api = (() => {
     setTokens,
     clearTokens,
     get: (path) => request(path),
-    post: (path, body) => request(path, { method: "POST", body }),
+    post: (path, body, opts = {}) => request(path, { ...opts, method: "POST", body }),
     put: (path, body) => request(path, { method: "PUT", body }),
     del: (path) => request(path, { method: "DELETE" }),
   };

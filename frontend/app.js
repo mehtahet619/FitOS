@@ -1087,7 +1087,7 @@ function renderLegacyWorkoutRefresh(workout, plan) {
         if (equipmentMode === "SCANNED") request.detectedEquipmentNames = workout.availableEquipmentNames;
         if (equipmentMode === "USER_EQUIPMENT") request.availableEquipmentNames = workout.availableEquipmentNames;
       }
-      const generated = await Api.post("/workouts/generate", request);
+      const generated = await Api.post("/workouts/generate", request, { timeoutMs: 30000 });
       renderGeneratedWorkout(generated, plan);
     } catch (error) {
       const feedback = $("refresh-plan-workout-feedback");
@@ -1416,7 +1416,7 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
         durationMinutes: durationInput.valueAsNumber,
         equipmentMode: "USER_EQUIPMENT",
         availableEquipmentNames: Array.from(selected),
-      });
+      }, { timeoutMs: 30000 });
       renderGeneratedWorkout(generated, plan);
     } catch (error) {
       if (error?.status === 400 && error.message?.includes("Complete onboarding")) {
@@ -1540,6 +1540,15 @@ function renderWorkout(workout, plan) {
   const completedWorkout = workout.status === "completed";
   const planName = plan?.activePlan?.structureLabel || plan?.activePlan || "";
   const nextPlanWorkout = plan?.nextWorkout?.label;
+  const targetMuscles = [...new Map((workout.targetMuscles || [])
+    .filter((muscle) => typeof muscle === "string" && muscle.trim())
+    .map((muscle) => [muscle.trim().toLowerCase(), muscle.trim()])).values()];
+  const equipmentChoices = [...new Set([
+    "Bodyweight",
+    ...(Array.isArray(workout.availableEquipmentNames) ? workout.availableEquipmentNames : []),
+    ...exercises.map((exercise) => exercise.machine).filter(Boolean),
+  ].filter((name) => name !== "FULL_GYM"))];
+  const canEditWorkout = !completedWorkout && loggedSets === 0;
   const equipmentLine = (exercise) => exercise.machine || (exercise.requiresEquipment
     ? (exercise.equipmentRequired || []).join(", ") || exercise.equipmentName || "Gym equipment"
     : "Bodyweight");
@@ -1595,13 +1604,29 @@ function renderWorkout(workout, plan) {
     const setLabel = `${item.completedSetRows.length}/${item.targetSets} sets`;
     const repLabel = `${Number(exercise.repRangeLow) || 1}–${Number(exercise.repRangeHigh) || Number(exercise.repRangeLow) || 1} reps`;
     const hasLoggedSets = item.completedSetRows.length > 0;
-    const swapButton = !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped" && workout.status !== "completed"
+    const swapButton = canEditWorkout && !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped"
       ? `<button class="btn btn-outline workout-swap-btn" data-action="swap" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Swap</button>`
       : "";
+    const controls = canEditWorkout
+      ? `<div class="workout-exercise-actions">
+          <button class="btn btn-outline" data-action="move-up" data-index="${index}" aria-label="Move ${escapeWorkoutText(exercise.exerciseName)} up" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="btn btn-outline" data-action="move-down" data-index="${index}" aria-label="Move ${escapeWorkoutText(exercise.exerciseName)} down" ${index === progress.length - 1 ? "disabled" : ""}>↓</button>
+          <button class="btn btn-outline" data-action="edit-exercise" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Edit exercise</button>
+          ${swapButton}
+        </div>
+        <form class="workout-edit-form" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}" hidden>
+          <label>Exercise name<input name="exerciseName" maxlength="100" required value="${escapeWorkoutText(exercise.exerciseName)}"></label>
+          <label>Target muscle<select name="targetMuscle" required>${targetMuscles.map((muscle) => `<option value="${escapeWorkoutText(muscle)}" ${muscle.toLowerCase() === String(exercise.primaryMuscle || "").toLowerCase() ? "selected" : ""}>${escapeWorkoutText(muscle)}</option>`).join("")}</select></label>
+          <label>Equipment<input name="equipmentName" list="workout-equipment-options" maxlength="80" required value="${escapeWorkoutText(equipment)}"></label>
+          <button class="btn btn-primary" type="submit">Save and rebalance workout</button>
+          <button class="btn btn-outline" type="button" data-action="cancel-edit">Cancel</button>
+          <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
+        </form>`
+      : swapButton;
     return `<article class="workout-exercise-row ${stateClass}">
       <span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>
       <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.exerciseName)}</strong><span>${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")} · ${escapeWorkoutText(equipmentLine(exercise))} · ${setLabel} · ${repLabel}</span></div>
-      <span class="workout-exercise-state">${stateLabel}</span>${swapButton}
+      <span class="workout-exercise-state">${stateLabel}</span>${controls}
     </article>`;
   }).join("");
 
@@ -1618,6 +1643,7 @@ function renderWorkout(workout, plan) {
     <section class="workout-exercise-list">
       <div class="workout-list-heading"><div><span class="workout-eyebrow">YOUR WORKOUT</span><h3>Exercise order</h3></div><span>${progress.length} movements</span></div>
       ${exerciseRows || `<p class="card-sub">No exercises were added to this workout.</p>`}
+      <datalist id="workout-equipment-options">${equipmentChoices.map((name) => `<option value="${escapeWorkoutText(name)}"></option>`).join("")}</datalist>
     </section>
     ${completedWorkout && plan ? renderActivePlanCard(plan) : ""}
     ${!completedWorkout ? `<div class="workout-finish-note">You can finish early. Sets you haven't logged won't be added to your training history.</div><button class="btn btn-primary" id="complete-workout-btn">Finish workout</button>` : ""}
@@ -1648,7 +1674,7 @@ function renderWorkout(workout, plan) {
           if (equipmentMode === "SCANNED") request.detectedEquipmentNames = workout.availableEquipmentNames;
           if (equipmentMode === "USER_EQUIPMENT") request.availableEquipmentNames = workout.availableEquipmentNames;
         }
-        const generated = await Api.post("/workouts/generate", request);
+        const generated = await Api.post("/workouts/generate", request, { timeoutMs: 30000 });
         renderGeneratedWorkout(generated, plan);
       } catch (error) {
         feedback.className = "banner banner-error";
@@ -1687,6 +1713,63 @@ function renderWorkout(workout, plan) {
       }
     });
   }
+
+  el.querySelectorAll('[data-action="move-up"], [data-action="move-down"]').forEach((button) => {
+    button.addEventListener("click", async () => {
+      const from = Number(button.dataset.index);
+      const to = from + (button.dataset.action === "move-up" ? -1 : 1);
+      if (!Number.isInteger(from) || to < 0 || to >= workout.exercises.length) return;
+      const reordered = [...workout.exercises];
+      const [moved] = reordered.splice(from, 1);
+      reordered.splice(to, 0, moved);
+      button.disabled = true;
+      try {
+        await Api.post(`/workouts/${workout.id}/reorder-exercises`, {
+          workoutExerciseIds: reordered.map((exercise) => exercise.workoutExerciseId),
+        });
+        renderWorkout({ ...workout, exercises: reordered }, plan);
+      } catch (error) {
+        showWorkoutNotice(error.message || "Could not reorder exercises.", "error");
+        button.disabled = false;
+      }
+    });
+  });
+
+  el.querySelectorAll('[data-action="edit-exercise"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest(".workout-exercise-row")?.querySelector(".workout-edit-form");
+      if (form) form.hidden = !form.hidden;
+    });
+  });
+  el.querySelectorAll('[data-action="cancel-edit"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest(".workout-edit-form");
+      if (form) form.hidden = true;
+    });
+  });
+  el.querySelectorAll(".workout-edit-form").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submitButton = form.querySelector('[type="submit"]');
+      const body = {
+        workoutExerciseId: form.dataset.id,
+        exerciseName: form.elements.exerciseName.value,
+        targetMuscle: form.elements.targetMuscle.value,
+        equipmentName: form.elements.equipmentName.value,
+      };
+      submitButton.disabled = true;
+      submitButton.textContent = "Rebalancing workout…";
+      try {
+        const result = await Api.post(`/workouts/${workout.id}/edit-exercise`, body, { timeoutMs: 30000 });
+        await loadWorkout();
+        showWorkoutNotice(`Exercise updated. FitOS refreshed ${result.rebalancedExerciseCount} other movement${result.rebalancedExerciseCount === 1 ? "" : "s"} for workout coverage.`, "success");
+      } catch (error) {
+        showWorkoutNotice(error.message || "Could not edit the exercise.", "error");
+        submitButton.disabled = false;
+        submitButton.textContent = "Save and rebalance workout";
+      }
+    });
+  });
 
   el.querySelectorAll('[data-action="swap"]').forEach((button) => {
     button.addEventListener("click", async () => {

@@ -18,7 +18,7 @@ export interface ExerciseFallbackInput {
 }
 
 interface ProviderConfig {
-  name: "OpenRouter" | "Anthropic";
+  name: "OpenAI" | "OpenRouter" | "Anthropic";
   apiKey: string;
   model: string;
   url: string;
@@ -26,6 +26,14 @@ interface ProviderConfig {
 
 function configuredProviders(): ProviderConfig[] {
   const providers: ProviderConfig[] = [];
+  if (process.env.OPENAI_API_KEY) {
+    providers.push({
+      name: "OpenAI",
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      url: "https://api.openai.com/v1/chat/completions",
+    });
+  }
   if (process.env.OPENROUTER_API_KEY) {
     providers.push({
       name: "OpenRouter",
@@ -118,7 +126,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     ],
   };
   const system = "You are a conservative exercise catalog assistant. Follow the supplied constraints exactly and return valid JSON only.";
-  const body = provider.name === "OpenRouter"
+  const body = provider.name !== "Anthropic"
     ? {
       model: provider.model,
       temperature: 0.1,
@@ -137,7 +145,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(provider.name === "OpenRouter"
+    ...(provider.name !== "Anthropic"
       ? { Authorization: `Bearer ${provider.apiKey}` }
       : { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" }),
   };
@@ -145,11 +153,11 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(7_000),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload = await response.json() as any;
-  const content = provider.name === "OpenRouter"
+  const content = provider.name !== "Anthropic"
     ? payload.choices?.[0]?.message?.content
     : payload.content?.find((block: any) => block.type === "text")?.text;
   if (typeof content !== "string") throw new Error("Provider returned no text content.");

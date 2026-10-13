@@ -45,6 +45,14 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       }
       if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return state.exercises as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return state.equipment as T[];
+      if (sql.includes("SELECT id FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC")) {
+        return state.workoutExercises.filter((row) => row.workoutId === params[0])
+          .sort((left, right) => left.orderIndex - right.orderIndex).map(({ id }) => ({ id })) as unknown as T[];
+      }
+      if (sql.includes("SELECT * FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC")) {
+        return state.workoutExercises.filter((row) => row.workoutId === params[0])
+          .sort((left, right) => left.orderIndex - right.orderIndex) as T[];
+      }
       if (sql.includes("SELECT equipmentId,alias FROM EquipmentAlias")) return state.equipmentAliases as unknown as T[];
       if (sql.includes("SELECT weightKg, reps FROM WorkoutHistory")) return [];
       if (sql.includes("SELECT equipmentId FROM ExerciseEquipment WHERE exerciseId = ?")) {
@@ -85,6 +93,9 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
         return { count: state.sets.filter((row) => row.completed && exerciseIds.has(row.workoutExerciseId)).length } as unknown as T;
       }
       if (sql.includes("SELECT userId,status,equipmentMode,equipmentSnapshot,durationMin FROM Workout WHERE id = ?")) {
+        return state.workouts.find((row) => row.id === params[0]) as T | undefined;
+      }
+      if (sql.includes("SELECT userId,status,focus,durationMin,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?")) {
         return state.workouts.find((row) => row.id === params[0]) as T | undefined;
       }
       if (sql.includes("SELECT userId,status FROM Workout WHERE id = ?")) return state.workouts.find((row) => row.id === params[0]) as T | undefined;
@@ -132,6 +143,15 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
         state.userEquipment = state.userEquipment.filter((row) => row.userId !== params[0]);
       } else if (sql.includes("INSERT INTO UserEquipment (")) {
         state.userEquipment.push({ id: params[0], userId: params[1], equipmentId: params[2] });
+      } else if (sql.includes("UPDATE WorkoutExercise SET orderIndex = ?")) {
+        const row = state.workoutExercises.find((exercise) => exercise.id === params[1] && exercise.workoutId === params[2]);
+        if (row) row.orderIndex = params[0] as number;
+      } else if (sql.includes("UPDATE WorkoutExercise SET exerciseId=?,status='pending'")) {
+        const row = state.workoutExercises.find((exercise) => exercise.id === params[5] && exercise.workoutId === params[6]);
+        if (row) Object.assign(row, {
+          exerciseId: params[0], status: "pending",
+          sourceExerciseName: params[1], sourceMuscle: params[2], sourcePrimaryMuscle: params[3], sourceMachine: params[4],
+        });
       } else if (sql.includes("UPDATE WorkoutExercise")) {
         const row = state.workoutExercises.find((exercise) => exercise.id === params[6]);
         if (row) Object.assign(row, {
@@ -321,8 +341,32 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
       });
       expect(secondSwapResponse.status).toBe(422);
-      expect((await secondSwapResponse.json() as any).error).toMatch(/no (?:dataset|CSV or configured AI) exercise matches/i);
+      expect((await secondSwapResponse.json() as any).error).toMatch(/no curated CSV substitute matches/i);
       expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
+
+      const reorderIds = [...state.workoutExercises]
+        .filter((exercise) => exercise.workoutId === before.id)
+        .sort((left, right) => right.orderIndex - left.orderIndex)
+        .map((exercise) => exercise.id);
+      const reorderResponse = await fetch(`${baseUrl}/workouts/${before.id}/reorder-exercises`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseIds: reorderIds }),
+      });
+      expect(reorderResponse.status).toBe(200);
+      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)
+        .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
+
+      const editSlotId = reorderIds[0];
+      const editResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Dumbbell Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(editResponse.status).toBe(200);
+      expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
+      const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
+      expect(editedSlot).toMatchObject({ sourceExerciseName: "Dumbbell Deadlift", sourcePrimaryMuscle: "Back", sourceMachine: "Dumbbells" });
+      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)
+        .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
 
       const refreshResponse = await fetch(`${baseUrl}/workouts/generate`, {
         method: "POST", headers: { "Content-Type": "application/json" },

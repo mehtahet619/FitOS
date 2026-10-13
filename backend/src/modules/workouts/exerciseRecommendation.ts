@@ -11,6 +11,8 @@ export type RecommendationEquipmentMode = "FULL_GYM" | "SCANNED" | "USER_EQUIPME
 export interface ExerciseRecommendationInput {
   targetMuscles: string[];
   sessionDurationMinutes: number;
+  requestedCount?: number;
+  excludedExerciseNames?: Iterable<string>;
   /** Equipment names and aliases from the existing FitOS equipment catalog. */
   availableEquipment: Iterable<string>;
   equipmentMode: RecommendationEquipmentMode;
@@ -241,10 +243,9 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       && row.targetedMuscles.length > 0
       && row.timeTakenOneSet,
     );
-    // Prefer an exact dataset name/equipment match. Existing workouts can
-    // predate this dataset, so a deterministic family match is the migration
-    // bridge; the selected anchor and all alternatives still come only from
-    // the new CSV and share its exact targeted muscle and duration.
+    // Only use a curated group whose rank-1 source matches this movement
+    // family. Falling back to any same-muscle/time row can return unrelated
+    // movements (for example, a hip hinge for a cable pull-through).
     const sourceAnchor = [...sourceAnchors].sort((left, right) => {
       const score = (row: CsvExercise) =>
         (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
@@ -252,18 +253,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
         + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey) ? 1 : 0);
       return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
     })[0];
-    const legacyAnchor = [...alternativesRows].filter((row) =>
-      exerciseFamilyKey(row.exercise) === currentFamily
-      && row.targetedMuscles.length > 0
-      && row.timeTakenOneSet,
-    ).sort((left, right) => {
-      const score = (row: CsvExercise) =>
-        (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
-        + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
-        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey) ? 1 : 0);
-      return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
-    })[0];
-    const selectedAnchor = sourceAnchor ?? legacyAnchor;
+    const selectedAnchor = sourceAnchor;
     if (!selectedAnchor) return [];
 
     const targetKey = targetedMuscleKey(selectedAnchor.targetedMuscles);
@@ -300,13 +290,14 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
   }
 
   getRecommendedExercises(input: ExerciseRecommendationInput): ExerciseRecommendationResult {
-    const requestedCount = exerciseCountForDuration(input.sessionDurationMinutes);
+    const requestedCount = input.requestedCount ?? exerciseCountForDuration(input.sessionDurationMinutes);
     const targetKeys = new Set(input.targetMuscles.map(normalizeExerciseValue).filter(Boolean));
     if (targetKeys.size === 0) {
       return { exercises: [], requestedCount, availableCount: 0, limitedByDataset: true };
     }
 
     const availableEquipment = new Set([...input.availableEquipment].map(normalizeExerciseValue).filter(Boolean));
+    const excludedExerciseNames = new Set([...(input.excludedExerciseNames ?? [])].map(normalizeExerciseValue));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
       // A target term may match a CSV category containing that same full word
@@ -320,6 +311,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
 
       const exerciseKey = normalizeExerciseValue(row.exercise);
+      if (excludedExerciseNames.has(exerciseKey)) continue;
       if (!uniqueCandidates.has(exerciseKey)) uniqueCandidates.set(exerciseKey, {
         row,
         matchingMuscles,
