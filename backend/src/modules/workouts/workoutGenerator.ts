@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
 import { exerciseRecommendationService } from "./exerciseRecommendation";
+import { getAiExerciseFallback, type ExerciseFallbackEquipment } from "./exerciseAiFallback";
 
 export interface GeneratedExercise {
   exerciseId: string;
@@ -82,6 +83,31 @@ async function getEquipmentAliases(database: DatabaseLike, equipmentIds: Set<str
     ...equipmentIds
   );
   return [...new Set(rows.flatMap((row) => [row.name, row.alias].filter((value): value is string => Boolean(value))))];
+}
+
+async function getFallbackEquipment(
+  database: DatabaseLike,
+  equipmentMode: EquipmentMode,
+  availableEquipmentIds: Set<string>,
+): Promise<ExerciseFallbackEquipment[]> {
+  if (equipmentMode !== "FULL_GYM" && availableEquipmentIds.size === 0) {
+    return [{ name: "Bodyweight", aliases: [] }];
+  }
+  const rows = await database.all<{ name: string; alias: string | null }>(
+    `SELECT e.name,ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id
+     WHERE e.name != 'No Equipment'${equipmentMode === "FULL_GYM" ? "" : ` AND e.id IN (${[...availableEquipmentIds].map(() => "?").join(",")})`}`,
+    ...(equipmentMode === "FULL_GYM" ? [] : [...availableEquipmentIds]),
+  );
+  const byName = new Map<string, ExerciseFallbackEquipment>();
+  for (const row of rows) {
+    const key = normalizeExerciseValue(row.name);
+    const option = byName.get(key) ?? { name: row.name, aliases: [] };
+    if (row.alias && !option.aliases.includes(row.alias)) option.aliases.push(row.alias);
+    byName.set(key, option);
+  }
+  // Bodyweight is always compatible with a user's equipment snapshot.
+  if (!byName.has("bodyweight")) byName.set("bodyweight", { name: "Bodyweight", aliases: [] });
+  return [...byName.values()];
 }
 
 function stableCsvId(prefix: string, value: string): string {
@@ -240,8 +266,20 @@ export async function generateWorkout(
     availableEquipment,
     equipmentMode,
   });
-  const exerciseIds = await ensureExerciseRows(database, result.exercises);
-  const generated = await Promise.all(result.exercises.map(async (exercise): Promise<GeneratedExercise> => {
+  const missingCount = Math.max(0, result.requestedCount - result.exercises.length);
+  const aiExercises = missingCount > 0
+    ? await getAiExerciseFallback({
+      targetMuscles: unitMuscles,
+      sessionDurationMinutes: durationMin,
+      count: missingCount,
+      equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
+      excludedExerciseNames: result.exercises.map((exercise) => exercise.exercise),
+      excludedFamilyKeys: result.exercises.map((exercise) => exercise.exercise),
+    })
+    : [];
+  const selectedExercises = [...result.exercises, ...aiExercises];
+  const exerciseIds = await ensureExerciseRows(database, selectedExercises);
+  const generated = await Promise.all(selectedExercises.map(async (exercise): Promise<GeneratedExercise> => {
     const exerciseRecord = exerciseIds.get(exercise.sourceIndex);
     if (!exerciseRecord) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
     return {
@@ -265,7 +303,7 @@ export async function generateWorkout(
     focus,
     exercises: generated,
     requestedExerciseCount: result.requestedCount,
-    availableExerciseCount: result.availableCount,
-    limitedByDataset: result.limitedByDataset,
+    availableExerciseCount: result.availableCount + aiExercises.length,
+    limitedByDataset: selectedExercises.length < result.requestedCount,
   };
 }
