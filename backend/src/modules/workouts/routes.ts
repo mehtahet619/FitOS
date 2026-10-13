@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
-import { ensureExerciseRows, generateWorkout } from "./workoutGenerator";
+import { ensureExerciseRows, generateWorkout, musclesForFocus } from "./workoutGenerator";
+import { getAiExerciseFallback } from "./exerciseAiFallback";
 import { loadExerciseWithLinks } from "../exercises/substitutionEngine";
 import {
   canSwitchWorkoutPlan,
@@ -30,8 +31,8 @@ import {
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
-import { exerciseFamilyKey, exerciseRecommendationService, getExerciseSwapContext } from "./exerciseRecommendation";
-import { getAiExerciseFallback } from "./exerciseAiFallback";
+import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
+import type { RecommendedExercise } from "./exerciseRecommendation";
 import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
 
 export const workoutRouter = Router();
@@ -489,7 +490,11 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   // The selection is fully local and deterministic; no AI/provider is part of generation.
   const summary = null;
   return res.status(201).json({
-    workout: { id: workoutId, focus, durationMin: durationMinutes, status: "pending", cycleId: state.cycleId },
+    workout: {
+      id: workoutId, focus, durationMin: durationMinutes, status: "pending", cycleId: state.cycleId,
+      targetMuscles: [...new Set([...requiredUnit.muscles, ...exercises.map((exercise) => exercise.primaryMuscle)])],
+      availableEquipmentNames: equipmentMode === "FULL_GYM" ? ["FULL_GYM"] : availableEquipmentForLog,
+    },
     requestedExerciseCount: generation.requestedExerciseCount,
     availableExerciseCount: generation.availableExerciseCount,
     limitedByDataset: generation.limitedByDataset,
@@ -641,6 +646,10 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       ...equipmentSnapshotIds
     )).map((item) => item.name)
     : [];
+  const targetMuscles = [...new Set([
+    ...musclesForFocus(workout.focus),
+    ...exercises.map((exercise) => exercise.sourcePrimaryMuscle ?? exercise.primaryMuscle).filter(Boolean),
+  ])];
   return res.json({
     id: workout.id,
     focus: workout.focus,
@@ -650,6 +659,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     generatorVersion: workout.generatorVersion ?? null,
     equipmentMode: workout.equipmentMode ?? "USER_EQUIPMENT",
     availableEquipmentNames: equipmentSnapshotNames,
+    targetMuscles,
     needsRegeneration: workout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
     // Legacy pending workouts can be explicitly refreshed even after logging;
     // the old workout and its set/history rows are retained as superseded.
@@ -746,6 +756,17 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
 const replaceSchema = z.object({
   workoutExerciseId: z.string(),
   reason: z.enum(["no_equipment", "pain", "user_preference"]).default("no_equipment"),
+});
+
+const reorderExercisesSchema = z.object({
+  workoutExerciseIds: z.array(z.string().min(1)).min(1),
+});
+
+const editExerciseSchema = z.object({
+  workoutExerciseId: z.string().min(1),
+  exerciseName: z.string().trim().min(2).max(100),
+  targetMuscle: z.string().trim().min(1).max(80),
+  equipmentName: z.string().trim().min(1).max(80),
 });
 
 workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
@@ -860,47 +881,10 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     performableAlternatives.push({ exercise, equipmentId: isBodyweight ? null : equipmentId! });
   }
 
-  if (performableAlternatives.length === 0) {
-    const allowedIds = fullGym ? new Set(allEquipmentRows.map((row) => row.id)) : availableEquipmentIds;
-    const allowedEquipment = allEquipmentRows
-      .filter((row) => allowedIds.has(row.id) && normalizeExerciseValue(row.name) !== "no equipment")
-      .map((row) => ({
-        name: row.name,
-        aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
-      }));
-    if (!allowedEquipment.some((option) => normalizeExerciseValue(option.name) === "bodyweight")) {
-      allowedEquipment.push({ name: "Bodyweight", aliases: [] });
-    }
-    const swapContext = getExerciseSwapContext(exerciseRow.sourceExerciseName || base.name, baseMachine);
-    const fallback = await getAiExerciseFallback({
-      targetMuscles: [base.primaryMuscle],
-      sessionDurationMinutes: workout.durationMin ?? 45,
-      count: 1,
-      equipment: allowedEquipment,
-      excludedExerciseNames: usedNames.map((row) => row.name),
-      excludedFamilyKeys,
-      targetedMuscle: swapContext?.targetedMuscle || base.primaryMuscle,
-      timeTakenOneSet: swapContext?.timeTakenOneSet,
-    });
-    for (const exercise of fallback) {
-      const equipmentId = equipmentIdByAlias.get(normalizeExerciseValue(exercise.machine)) ?? null;
-      if (normalizeExerciseValue(exercise.machine) !== "bodyweight" && !fullGym && (!equipmentId || !availableEquipmentIds.has(equipmentId))) continue;
-      performableAlternatives.push({
-        exercise: {
-          ...exercise,
-          targetedMuscle: swapContext?.targetedMuscle || exercise.targetedMuscle,
-          targetedMuscles: swapContext?.targetedMuscles ?? exercise.targetedMuscles,
-          timeTakenOneSet: swapContext?.timeTakenOneSet || exercise.timeTakenOneSet,
-        },
-        equipmentId,
-      });
-    }
-  }
-
   const nextAlternative = performableAlternatives[0];
   if (!nextAlternative)
     return res.status(422).json({
-      error: `No CSV or configured AI exercise matches the target muscles and one-set duration for "${base.name}" with your current equipment.`,
+      error: `No curated CSV substitute matches the target muscle, movement family, and available equipment for "${base.name}". Use Edit exercise to enter your own movement.`,
       requiresEquipment: baseRequiresEquipment,
     });
 
@@ -952,6 +936,170 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     },
     explanation,
   });
+});
+
+workoutRouter.post("/:id/reorder-exercises", async (req: AuthedRequest, res) => {
+  const parsed = reorderExercisesSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Provide the workout exercise IDs in the desired order." });
+  const workout = await db.get<{ userId: string; status: string }>(
+    `SELECT userId,status FROM Workout WHERE id = ?`, req.params.id);
+  if (!workout || workout.userId !== req.userId) return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "completed") return res.status(409).json({ error: "A completed workout cannot be reordered." });
+  const exercises = await db.all<{ id: string }>(
+    `SELECT id FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC`, req.params.id);
+  const submitted = parsed.data.workoutExerciseIds;
+  if (new Set(submitted).size !== submitted.length
+    || submitted.length !== exercises.length
+    || submitted.some((id) => !exercises.some((exercise) => exercise.id === id))) {
+    return res.status(400).json({ error: "The order must contain each exercise in this workout exactly once." });
+  }
+  const logged = await db.get<{ count: number }>(
+    `SELECT COUNT(*) as count FROM WorkoutSet ws JOIN WorkoutExercise we ON we.id=ws.workoutExerciseId WHERE we.workoutId = ? AND ws.completed = 1`,
+    req.params.id);
+  if ((logged?.count ?? 0) > 0) return res.status(409).json({ error: "Reorder exercises before logging your first set." });
+  for (const [orderIndex, exerciseId] of submitted.entries()) {
+    await db.run(`UPDATE WorkoutExercise SET orderIndex = ? WHERE id = ? AND workoutId = ?`, orderIndex, exerciseId, req.params.id);
+  }
+  return res.json({ workoutExerciseIds: submitted });
+});
+
+workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
+  const parsed = editExerciseSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Enter an exercise name, target muscle, and equipment." });
+  const { workoutExerciseId, exerciseName, targetMuscle, equipmentName } = parsed.data;
+  const workout = await db.get<{
+    userId: string; status: string; focus: string; durationMin: number; equipmentMode?: string; equipmentSnapshot?: string;
+  }>(`SELECT userId,status,focus,durationMin,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?`, req.params.id);
+  if (!workout || workout.userId !== req.userId) return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "completed") return res.status(409).json({ error: "A completed workout cannot be edited." });
+  const logged = await db.get<{ count: number }>(
+    `SELECT COUNT(*) as count FROM WorkoutSet ws JOIN WorkoutExercise we ON we.id=ws.workoutExerciseId WHERE we.workoutId = ? AND ws.completed = 1`,
+    req.params.id);
+  if ((logged?.count ?? 0) > 0) return res.status(409).json({ error: "Edit exercises before logging your first set." });
+
+  const slots = await db.all<any>(
+    `SELECT * FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC`, req.params.id);
+  const slot = slots.find((exercise) => exercise.id === workoutExerciseId);
+  if (!slot) return res.status(404).json({ error: "Workout exercise not found" });
+  if (slots.some((exercise) => exercise.id !== slot.id
+    && normalizeExerciseValue(exercise.sourceExerciseName || "") === normalizeExerciseValue(exerciseName))) {
+    return res.status(409).json({ error: "That exercise is already in this workout." });
+  }
+
+  const targetMuscles = [...new Set([
+    ...musclesForFocus(workout.focus),
+    ...slots.map((exercise) => exercise.sourcePrimaryMuscle).filter(Boolean),
+  ])];
+  const targetMuscleByKey = new Map(targetMuscles.map((muscle) => [normalizeExerciseValue(muscle), muscle]));
+  const selectedTargetMuscle = targetMuscleByKey.get(normalizeExerciseValue(targetMuscle));
+  if (!selectedTargetMuscle) {
+    return res.status(400).json({ error: "Choose a target muscle already included in this workout." });
+  }
+
+  const allEquipment = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
+  const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
+    `SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
+  const aliasToEquipment = new Map<string, { id: string; name: string }>();
+  allEquipment.filter((row) => normalizeExerciseValue(row.name) !== "no equipment")
+    .forEach((row) => aliasToEquipment.set(normalizeExerciseValue(row.name), row));
+  for (const alias of equipmentAliases) {
+    const equipment = allEquipment.find((row) => row.id === alias.equipmentId);
+    if (equipment && !aliasToEquipment.has(normalizeExerciseValue(alias.alias))) {
+      aliasToEquipment.set(normalizeExerciseValue(alias.alias), equipment);
+    }
+  }
+  const isBodyweight = normalizeExerciseValue(equipmentName) === "bodyweight";
+  const selectedEquipment = aliasToEquipment.get(normalizeExerciseValue(equipmentName));
+  if (!isBodyweight && !selectedEquipment) return res.status(400).json({ error: "Choose equipment from the FitOS equipment catalog." });
+
+  let snapshotIds: string[] = [];
+  try {
+    const snapshot = typeof workout.equipmentSnapshot === "string" ? JSON.parse(workout.equipmentSnapshot) : workout.equipmentSnapshot;
+    if (Array.isArray(snapshot)) snapshotIds = snapshot.filter((id): id is string => typeof id === "string");
+  } catch { /* Legacy workout: saved inventory is checked below. */ }
+  const fullGym = workout.equipmentMode === "FULL_GYM";
+  const availableIds = new Set(fullGym
+    ? allEquipment.map((row) => row.id)
+    : snapshotIds.length
+      ? snapshotIds
+      : workout.equipmentMode === "SCANNED"
+        ? []
+        : (await db.all<{ equipmentId: string }>(`SELECT equipmentId FROM UserEquipment WHERE userId = ?`, req.userId!)).map((row) => row.equipmentId));
+  if (!isBodyweight && selectedEquipment && !availableIds.has(selectedEquipment.id)) {
+    return res.status(422).json({ error: `${selectedEquipment.name} was not available for this workout.` });
+  }
+
+  const chosenMachine = isBodyweight ? "Bodyweight" : selectedEquipment!.name;
+  const manualExercise: RecommendedExercise = {
+    sourceIndex: -1,
+    exercise: exerciseName,
+    machine: chosenMachine,
+    muscle: selectedTargetMuscle,
+    primaryMuscle: selectedTargetMuscle,
+    muscleCategories: [selectedTargetMuscle],
+    timeTakenOneSet: "User-selected",
+    targetedMuscle: selectedTargetMuscle,
+    targetedMuscles: [selectedTargetMuscle],
+  };
+
+  const otherSlots = slots.filter((exercise) => exercise.id !== slot.id);
+  const remainingCoverage = targetMuscles.filter((muscle) => normalizeExerciseValue(muscle) !== normalizeExerciseValue(selectedTargetMuscle));
+  const coverageTargets = remainingCoverage.length ? remainingCoverage : targetMuscles;
+  const recommendationEquipment = fullGym ? [] : [...new Set([
+    ...allEquipment.filter((row) => availableIds.has(row.id)).map((row) => row.name),
+    ...equipmentAliases.filter((row) => availableIds.has(row.equipmentId)).map((row) => row.alias),
+    "Bodyweight",
+  ])];
+  let recommendations = otherSlots.length
+    ? exerciseRecommendationService.getRecommendedExercises({
+      targetMuscles: coverageTargets,
+      sessionDurationMinutes: workout.durationMin,
+      requestedCount: otherSlots.length,
+      availableEquipment: recommendationEquipment,
+      equipmentMode: fullGym ? "FULL_GYM" : workout.equipmentMode === "SCANNED" ? "SCANNED" : "USER_EQUIPMENT",
+      excludedExerciseNames: [exerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean)],
+    }).exercises
+    : [];
+  if (recommendations.length < otherSlots.length) {
+    const fallbackEquipment = allEquipment
+      .filter((row) => availableIds.has(row.id) && normalizeExerciseValue(row.name) !== "no equipment")
+      .map((row) => ({
+        name: row.name,
+        aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
+      }));
+    if (!fallbackEquipment.some((row) => normalizeExerciseValue(row.name) === "bodyweight")) {
+      fallbackEquipment.push({ name: "Bodyweight", aliases: [] });
+    }
+    const missingCount = otherSlots.length - recommendations.length;
+    const aiRecommendations = await getAiExerciseFallback({
+      targetMuscles: coverageTargets,
+      sessionDurationMinutes: workout.durationMin,
+      count: missingCount,
+      equipment: fallbackEquipment,
+      excludedExerciseNames: [exerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean), ...recommendations.map((exercise) => exercise.exercise)],
+    });
+    recommendations = [...recommendations, ...aiRecommendations.map((exercise, index) => ({
+      ...exercise,
+      sourceIndex: -1000 - index,
+    }))];
+  }
+  const persisted = await ensureExerciseRows(db, [manualExercise, ...recommendations]);
+  const manualRecord = persisted.get(manualExercise.sourceIndex);
+  if (!manualRecord) throw new Error(`Could not persist the user-selected exercise "${exerciseName}".`);
+  await db.run(
+    `UPDATE WorkoutExercise SET exerciseId=?,status='pending',sourceExerciseName=?,sourceMuscle=?,sourcePrimaryMuscle=?,sourceMachine=? WHERE id=? AND workoutId=?`,
+    manualRecord.id, exerciseName, selectedTargetMuscle, selectedTargetMuscle, chosenMachine, slot.id, req.params.id,
+  );
+  for (const [index, exercise] of recommendations.entries()) {
+    const exerciseRecord = persisted.get(exercise.sourceIndex);
+    const otherSlot = otherSlots[index];
+    if (!exerciseRecord || !otherSlot) continue;
+    await db.run(
+      `UPDATE WorkoutExercise SET exerciseId=?,status='pending',sourceExerciseName=?,sourceMuscle=?,sourcePrimaryMuscle=?,sourceMachine=? WHERE id=? AND workoutId=?`,
+      exerciseRecord.id, exercise.exercise, exercise.muscle, exercise.primaryMuscle, exercise.machine, otherSlot.id, req.params.id,
+    );
+  }
+  return res.json({ updated: true, rebalancedExerciseCount: recommendations.length, targetMuscles: coverageTargets });
 });
 
 workoutRouter.post("/:id/skip-exercise", async (req: AuthedRequest, res) => {
