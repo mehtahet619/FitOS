@@ -191,6 +191,44 @@ html, body {
 .grow-impact-stage-track { height: 6px; }
 .grow-impact-photos { display: flex; gap: 8px; overflow-x: auto; margin-top: 10px; }
 .grow-impact-photos img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; }
+.grow-impact-month-label input { width: 142px; min-height: 34px; padding: 5px 8px; border: 1px solid #dce9df; border-radius: 10px; color: #256b4c; background: #f7fcf8; font: inherit; font-size: 12px; font-weight: 700; }
+.grow-impact-calendar-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
+.grow-impact-calendar-stats span { padding: 8px; border: 1px solid #e8f0ea; border-radius: 11px; color: #68756d; background: rgba(255,255,255,.72); font-size: 10px; }
+.grow-impact-calendar-stats strong { display: block; margin-bottom: 2px; color: #174d3b; font-size: 15px; }
+.grow-impact-location-line { margin: 6px 0 0; color: #69766e; font-size: 11px; }
+.grow-impact-calendar-warning { margin: 8px 0; padding: 9px 11px; border-radius: 10px; color: #76551a; background: #fff7df; font-size: 11px; line-height: 1.45; }
+.grow-impact-growth { display: flex; align-items: center; gap: 12px; margin: 13px 0; padding: 8px; border: 1px solid #e5eee7; border-radius: 16px; background: rgba(255,255,255,.68); }
+.grow-impact-plant-art { display: block; width: min(48%, 190px); min-width: 125px; height: 134px; flex: 0 0 auto; overflow: visible; }
+.impact-roots path { animation: impact-root-in .35s ease both; }
+.impact-stem { stroke-width: 7; animation: impact-sprout-in .45s cubic-bezier(.2,.8,.2,1) both; }
+.impact-branch { stroke-width: 3; }
+.impact-leaf { transform-box: fill-box; transform-origin: center; animation: impact-leaf-in .45s cubic-bezier(.2,.8,.2,1) both; }
+.impact-seed { fill: #b8dc67; stroke: #5c8e45; stroke-width: 1.5; }
+.impact-canopy-glow { animation: impact-canopy-glow 2.8s ease-in-out infinite alternate; }
+.grow-impact-growth.is-complete .grow-impact-plant-art { animation: impact-mature-tree .8s cubic-bezier(.2,.8,.2,1) both; }
+.grow-impact-growth-copy { display: grid; gap: 5px; color: #22583d; font-size: 12px; }
+.grow-impact-growth-copy span { color: #718078; font-size: 11px; }
+.grow-impact-celebration { display: grid; gap: 4px; margin: 10px 0; padding: 12px; border: 1px solid #c7e9cf; border-radius: 14px; color: #175638; background: linear-gradient(115deg, #edfaef, #fbfff1); font-size: 12px; animation: impact-celebrate-in .6s ease both; }
+.grow-impact-celebration span { color: #586a5e; line-height: 1.45; }
+.grow-impact-calendar-settings { margin-top: 13px; border-top: 1px solid #e7efe9; padding-top: 9px; color: #506057; font-size: 12px; }
+.grow-impact-calendar-settings summary { color: #286244; font-weight: 700; cursor: pointer; }
+.grow-impact-calendar-settings > p { color: #738078; font-size: 11px; line-height: 1.45; }
+.grow-impact-setting-label { display: grid; gap: 5px; margin-top: 9px; color: #52645a; font-weight: 600; }
+.grow-impact-setting-label select,.grow-impact-setting-label input { min-height: 36px; padding: 7px 9px; border: 1px solid #dce8de; border-radius: 10px; color: #19251e; background: #fff; font: inherit; }
+.grow-impact-holiday-list { display: grid; gap: 5px; max-height: 180px; overflow-y: auto; margin-top: 8px; }
+.grow-impact-holiday { display: flex; align-items: flex-start; gap: 8px; padding: 6px; border-radius: 8px; background: rgba(255,255,255,.65); line-height: 1.35; }
+.grow-impact-holiday input { flex: 0 0 auto; margin-top: 2px; accent-color: #228a5d; }
+.grow-impact-closure-list { display: grid; gap: 5px; margin: 8px 0; padding: 0; list-style: none; }
+.grow-impact-closure-list li { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 8px; background: #f4f8f4; }
+.grow-impact-closure-list button { border: 0; color: #8b4038; background: transparent; cursor: pointer; }
+.grow-impact-add-closure,.grow-impact-save-settings { width: 100%; margin-top: 8px; }
+@keyframes impact-root-in { from { opacity: 0; stroke-dasharray: 0 50; } to { opacity: 1; stroke-dasharray: 50 0; } }
+@keyframes impact-sprout-in { from { transform: scaleY(.15); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
+@keyframes impact-leaf-in { from { opacity: .2; scale: .45; } to { opacity: 1; scale: 1; } }
+@keyframes impact-canopy-glow { from { opacity: .08; } to { opacity: .3; } }
+@keyframes impact-mature-tree { 45% { transform: scale(1.055); } to { transform: scale(1); } }
+@keyframes impact-celebrate-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .grow-impact-plant-art,.impact-roots path,.impact-stem,.impact-leaf,.impact-canopy-glow,.grow-impact-celebration { animation: none !important; } }
 @media (max-width: 520px) { .grow-impact-heading h2 { font-size: 22px; } .grow-impact-heading h2 span { font-size: 12px; } }
 .card-value { font-size: 24px; font-weight: 800; }
 .card-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }

@@ -104,6 +104,23 @@ const camelCaseColumns: Record<string, string> = {
   stagelabel: "stageLabel",
   verifiedat: "verifiedAt",
   completedsetcount: "completedSetCount",
+  countrycode: "countryCode",
+  regioncode: "regionCode",
+  timezone: "timeZone",
+  gymopenonholidaydatesjson: "gymOpenOnHolidayDatesJson",
+  additionalclosuredatesjson: "additionalClosureDatesJson",
+  sundayrestdays: "sundayRestDays",
+  calendardays: "calendarDays",
+  holidaycount: "holidayCount",
+  holidaysundaycount: "holidaySundayCount",
+  holidaycalendarconfigured: "holidayCalendarConfigured",
+  eligibledays: "eligibleDays",
+  monthlytarget: "monthlyTarget",
+  completedsessions: "completedSessions",
+  growthstageindex: "growthStageIndex",
+  growthstagecount: "growthStageCount",
+  completedsessiondatesjson: "completedSessionDatesJson",
+  computedat: "computedAt",
 };
 
 export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {

@@ -31,6 +31,7 @@ import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
 import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
+import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -709,6 +710,8 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
   const workout = await db.get<any>(`SELECT * FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== userId)
     return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "completed")
+    return res.status(409).json({ error: "This workout has already been completed." });
 
   const ts = nowIso();
   await db.run(`UPDATE Workout SET status = 'completed', completedAt = ? WHERE id = ?`, ts, req.params.id);
@@ -725,6 +728,13 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
     } catch (err: any) {
       return res.status(409).json({ error: err.message });
     }
+  }
+  try {
+    await refreshProgressForCompletedWorkout(db, userId, ts);
+  } catch {
+    // The workout record is authoritative; a missing/unavailable reward schema
+    // must not turn a successful workout completion into a failed response.
+    console.error("[GrowImpact] Monthly progress refresh failed after workout completion.");
   }
   return res.json({
     status: "completed",
