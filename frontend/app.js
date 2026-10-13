@@ -113,9 +113,9 @@ let authBootGeneration = 0;
 window.AuthState = AuthState;
 
 const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/history": "history", "/profile": "profile", "/settings": "settings" };
-const publicSiteUrl = "https://adaptive-fit-web.onrender.com";
+const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
 const routeMetadata = {
-  "/": ["Personalized AI Workout Planner Based on Gym Equipment | FitOS", "FitOS connects your available gym equipment, training history, workout goals, and nearby food options to help you make smarter fitness decisions."],
+  "/": ["AI Workout Planner Based on Gym Equipment | FitOS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FitOS."],
   "/login": ["Log in to FitOS | Personalized Workout Planner", "Log in to your FitOS account to continue your workout and nutrition plan."],
   "/register": ["Create your FitOS account | Adaptive Workout Planner", "Create a FitOS account to build an equipment-aware training plan around your goals."],
   "/verify-email": ["Verify your email | FitOS", "Verify your email address to finish setting up your FitOS account."],
