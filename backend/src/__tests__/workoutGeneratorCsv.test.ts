@@ -50,6 +50,18 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
 }
 
 describe("CSV recommendations inside workout generation", () => {
+  it("keeps an explicitly empty USER_EQUIPMENT selection bodyweight-only", async () => {
+    const { db } = memoryDatabase();
+    const result = await generateWorkout(db, "bodyweight-user", "Chest", 60, {
+      lockToMuscles: ["chest"],
+      equipmentMode: "USER_EQUIPMENT",
+      userEquipmentIds: [],
+    });
+
+    expect(result.exercises.length).toBeGreaterThan(0);
+    expect(result.exercises.every((exercise) => exercise.machine === "Bodyweight" && !exercise.requiresEquipment)).toBe(true);
+  });
+
   it("uses the WorkoutPlanState target passed by the route, persists exact CSV source fields, and does not advance plan state", async () => {
     const { db, exercises, queries } = memoryDatabase();
     const state = { cycleId: "cycle-stays-the-same", currentIndex: 1 };

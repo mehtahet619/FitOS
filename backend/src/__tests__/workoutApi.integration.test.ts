@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { CsvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
 import { CsvExerciseRecommendationService, exerciseFamilyKey } from "../modules/workouts/exerciseRecommendation";
+import { CANONICAL_EQUIPMENT } from "../modules/equipment/catalog";
 
 type Row = Record<string, any>;
 
@@ -23,6 +24,8 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
 
   const db: DatabaseLike = {
     async all<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
+      if (sql === "SELECT name FROM Equipment") return state.equipment.map(({ name }) => ({ name })) as unknown as T[];
+      if (sql === "SELECT * FROM Equipment ORDER BY name ASC") return [...state.equipment].sort((a, b) => a.name.localeCompare(b.name)) as T[];
       if (sql.includes("SELECT equipmentId FROM UserEquipment")) return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => ({ equipmentId: row.equipmentId })) as unknown as T[];
       if (sql.includes("SELECT ue.equipmentId,e.name FROM UserEquipment")) return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => ({ equipmentId: row.equipmentId, name: state.equipment.find((equipment) => equipment.id === row.equipmentId)?.name })) as unknown as T[];
       if (sql.includes("SELECT e.id,e.name,ea.alias FROM Equipment")) {
@@ -231,6 +234,11 @@ describe("workout API CSV flow", () => {
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
     try {
+      const catalogResponse = await fetch(`${baseUrl}/`);
+      expect(catalogResponse.status).toBe(200);
+      const catalog = await catalogResponse.json() as Array<{ name: string }>;
+      expect(catalog.map((row) => row.name)).toEqual(expect.arrayContaining([...CANONICAL_EQUIPMENT]));
+
       const staleCycleResponse = await fetch(`${baseUrl}/workouts/today`);
       expect(staleCycleResponse.status).toBe(404);
 
