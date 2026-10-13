@@ -9,7 +9,7 @@ import {
   getMonthWindowForKey,
   growthProgress,
   refreshMonthlyProgress,
-  uniqueCompletedSessionDays,
+  uniqueCompletedSessionDates,
   virtualGrowthStage,
 } from "./service";
 import type { DatabaseLike } from "../../db/types";
@@ -89,8 +89,8 @@ describe("monthly target calendar", () => {
     expect(window.end.toISOString()).toBe("2026-02-01T05:00:00.000Z");
     expect(window.calendarDays).toBe(31);
 
-    const localFirstDay = uniqueCompletedSessionDays([
-      { status: "completed", completedAt: "2026-09-30T18:31:00.000Z", durationMin: 40, completedSetCount: 1 },
+    const localFirstDay = uniqueCompletedSessionDates([
+      { id: "session-1", status: "completed", completedAt: "2026-09-30T18:31:00.000Z", durationMin: 40 },
     ], "2026-10", "Asia/Kolkata");
     expect(localFirstDay).toEqual(["2026-10-01"]);
   });
@@ -103,25 +103,27 @@ describe("monthly target calendar", () => {
 });
 
 describe("verified monthly workout sessions", () => {
-  const valid = (completedAt: string) => ({ status: "completed", completedAt, durationMin: 40, completedSetCount: 1 });
+  const valid = (id: string, completedAt: string) => ({ id, status: "completed", completedAt, durationMin: 40 });
 
-  it("counts no more than one verified session per local calendar day", () => {
-    const days = uniqueCompletedSessionDays([
-      valid("2026-06-03T09:00:00.000Z"), valid("2026-06-03T20:00:00.000Z"),
-      valid("2026-06-04T07:30:00.000Z"), valid("2026-05-31T21:00:00.000Z"),
+  it("counts each completed log ID once, including multiple sessions on one local day", () => {
+    const dates = uniqueCompletedSessionDates([
+      valid("session-1", "2026-06-03T09:00:00.000Z"), valid("session-2", "2026-06-03T20:00:00.000Z"),
+      valid("session-2", "2026-06-03T20:00:00.000Z"), valid("session-3", "2026-06-04T07:30:00.000Z"),
+      valid("session-4", "2026-05-31T21:00:00.000Z"),
     ], "2026-06", "America/Los_Angeles");
-    expect(days).toEqual(["2026-06-03", "2026-06-04"]);
+    expect(dates).toEqual(["2026-06-03", "2026-06-03", "2026-06-04"]);
   });
 
-  it("ignores incomplete or invalid workouts", () => {
-    const days = uniqueCompletedSessionDays([
-      valid("2026-06-07T10:00:00.000Z"),
-      { ...valid("2026-06-08T10:00:00.000Z"), status: "pending" },
-      { ...valid("2026-06-09T10:00:00.000Z"), durationMin: 0 },
-      { ...valid("2026-06-10T10:00:00.000Z"), completedSetCount: 0 },
-      { ...valid("2026-06-11T10:00:00.000Z"), completedAt: null },
+  it("ignores incomplete, superseded, failed, missing-date, and invalid-duration logs", () => {
+    const dates = uniqueCompletedSessionDates([
+      valid("session-1", "2026-06-07T10:00:00.000Z"),
+      { ...valid("session-2", "2026-06-08T10:00:00.000Z"), status: "pending" },
+      { ...valid("session-3", "2026-06-09T10:00:00.000Z"), status: "superseded" },
+      { ...valid("session-4", "2026-06-10T10:00:00.000Z"), status: "failed" },
+      { ...valid("session-5", "2026-06-11T10:00:00.000Z"), durationMin: 0 },
+      { ...valid("session-6", "2026-06-12T10:00:00.000Z"), completedAt: null },
     ], "2026-06", "UTC");
-    expect(days).toEqual(["2026-06-07"]);
+    expect(dates).toEqual(["2026-06-07"]);
   });
 
   it("persists per-user/month progress from workout rows and unlocks one reward only once", async () => {
@@ -131,11 +133,7 @@ describe("verified monthly workout sessions", () => {
       database.exec(fs.readFileSync(path.resolve(__dirname, "../../db/schema.sql"), "utf8"));
       database.prepare(`INSERT INTO "User" (id,email,createdAt,updatedAt) VALUES (?,?,?,?)`)
         .run("member-1", "member@example.test", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
-      database.prepare(`INSERT INTO Exercise (id,name,primaryMuscle,movementPattern,difficulty,defaultSets,repRangeLow,repRangeHigh,instructions,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-        .run("exercise-1", "Test movement", "chest", "push", "beginner", 3, 8, 12, "Test", "2026-01-01T00:00:00.000Z");
       const insertWorkout = database.prepare(`INSERT INTO Workout (id,userId,focus,status,durationMin,createdAt,completedAt) VALUES (?,?,?,?,?,?,?)`);
-      const insertExercise = database.prepare(`INSERT INTO WorkoutExercise (id,workoutId,exerciseId,orderIndex,targetSets,repRangeLow,repRangeHigh,status) VALUES (?,?,?,?,?,?,?,?)`);
-      const insertSet = database.prepare(`INSERT INTO WorkoutSet (id,workoutExerciseId,setNumber,completed,createdAt) VALUES (?,?,?,?,?)`);
       const eligible = calculateMonthlyTarget("2026-10", getDefaultImpactLocation()).holidayDates
         .filter((holiday) => holiday.excluded).map((holiday) => holiday.date);
       const sundays = getMonthWindowForKey("2026-10", "Asia/Kolkata").sundayDates;
@@ -146,15 +144,7 @@ describe("verified monthly workout sessions", () => {
         const completedAt = `${day}T12:00:00.000Z`;
         const workoutId = `workout-${index}`;
         insertWorkout.run(workoutId, "member-1", "chest", "completed", 40, completedAt, completedAt);
-        const workoutExerciseId = `workout-exercise-${index}`;
-        insertExercise.run(workoutExerciseId, workoutId, "exercise-1", 0, 3, 8, 12, "completed");
-        insertSet.run(`set-${index}`, workoutExerciseId, 1, 1, completedAt);
       }
-      // A second verified workout on an already-counted day must not advance the stage.
-      insertWorkout.run("duplicate-day", "member-1", "chest", "completed", 40, `${eligibleDates[0]}T18:00:00.000Z`, `${eligibleDates[0]}T18:00:00.000Z`);
-      insertExercise.run("duplicate-exercise", "duplicate-day", "exercise-1", 0, 3, 8, 12, "completed");
-      insertSet.run("duplicate-set", "duplicate-exercise", 1, 1, `${eligibleDates[0]}T18:00:00.000Z`);
-
       const adapter: DatabaseLike = {
         all: async <T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]) => database.prepare(sql).all(...params) as T[],
         get: async <T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]) => database.prepare(sql).get(...params) as T | undefined,

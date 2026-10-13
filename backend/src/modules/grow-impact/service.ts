@@ -2,10 +2,10 @@ import { v4 as uuidv4 } from "uuid";
 import type { DatabaseLike } from "../../db/types";
 
 export interface CompletedWorkoutCandidate {
+  id: string;
   status: string;
   completedAt: string | null;
   durationMin: number | string;
-  completedSetCount: number | string;
 }
 
 export interface GrowImpactTreeOption {
@@ -300,21 +300,20 @@ export function calculateMonthlyTarget(
 }
 
 export function isValidCompletedGymWorkout(workout: CompletedWorkoutCandidate): boolean {
-  return workout.status === "completed" && Boolean(workout.completedAt) &&
+  return Boolean(workout.id) && workout.status === "completed" && Boolean(workout.completedAt) &&
     Number.isFinite(Number(workout.durationMin)) && Number(workout.durationMin) > 0 &&
-    Number.isFinite(Number(workout.completedSetCount)) && Number(workout.completedSetCount) > 0 &&
     !Number.isNaN(Date.parse(workout.completedAt!));
 }
 
-export function uniqueCompletedSessionDays(workouts: CompletedWorkoutCandidate[], month: string, timeZone: string): string[] {
-  const dates = new Set<string>();
+export function uniqueCompletedSessionDates(workouts: CompletedWorkoutCandidate[], month: string, timeZone: string): string[] {
+  const sessions = new Map<string, string>();
   for (const workout of workouts) {
     if (!isValidCompletedGymWorkout(workout)) continue;
     const parts = dateParts(new Date(workout.completedAt!), timeZone);
     const date = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-    if (date.startsWith(`${month}-`)) dates.add(date);
+    if (date.startsWith(`${month}-`) && !sessions.has(workout.id)) sessions.set(workout.id, date);
   }
-  return [...dates].sort();
+  return [...sessions.values()].sort();
 }
 
 export function growthProgress(sessions: number, target: number): { growthStageIndex: number; growthStageCount: number; growthStageLabel: string; nextMilestone: string } {
@@ -372,13 +371,11 @@ export async function refreshMonthlyProgress(
   const timeZone = assertTimeZone(timeZoneOverride || settings.timeZone);
   const calendar = calculateMonthlyTarget(month, settings.location, timeZone, settings);
   const workouts = await database.all<CompletedWorkoutCandidate>(
-    `SELECT w.status,w.completedAt,w.durationMin,
-      (SELECT COUNT(*) FROM WorkoutExercise we JOIN WorkoutSet ws ON ws.workoutExerciseId=we.id
-       WHERE we.workoutId=w.id AND ws.completed=1) AS completedSetCount
+    `SELECT w.id,w.status,w.completedAt,w.durationMin
      FROM Workout w WHERE w.userId=? AND w.completedAt>=? AND w.completedAt<? AND w.status='completed'`,
     userId, calendar.start.toISOString(), calendar.end.toISOString(),
   );
-  const completedSessionDates = uniqueCompletedSessionDays(workouts, month, timeZone);
+  const completedSessionDates = uniqueCompletedSessionDates(workouts, month, timeZone);
   const completedSessions = completedSessionDates.length;
   const growth = growthProgress(completedSessions, calendar.target);
   const updatedAt = now.toISOString();

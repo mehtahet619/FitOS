@@ -621,8 +621,9 @@ async function loadTodayData(generation) {
     const nutritionData = nutritionResult.status === "fulfilled" ? nutritionResult.value : null;
     const gymData = gymResult.status === "fulfilled" ? gymResult.value : null;
     const growImpactData = growImpactResult.status === "fulfilled" ? growImpactResult.value : null;
+    const growImpactError = growImpactResult.status === "rejected";
 
-    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData);
+    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData, growImpactError);
     el.dataset.loadState = "success";
   } catch (e) {
     if (generation === todayLoadGeneration) handleTodayError(el, e);
@@ -633,7 +634,7 @@ async function loadTodayData(generation) {
   }
 }
 
-function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact) {
+function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false) {
   const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
   const nextWod = plan?.nextWorkout?.label || null;
   const statusInfo = activePlanLabel
@@ -679,9 +680,17 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact) {
         <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
       </div>
     </div>
-    ${growImpact ? renderGrowImpact(growImpact) : ""}
+    ${growImpact ? renderGrowImpact(growImpact) : renderGrowImpactUnavailable(growImpactError)}
   `;
   bindGrowImpactActions(el);
+}
+
+function renderGrowImpactUnavailable(failed) {
+  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title" role="status">
+    <div class="card-label" id="grow-impact-title">🌱 Grow Your Impact</div>
+    <p class="card-sub">${failed ? "Your saved workout progress could not be loaded." : "Loading your saved workout progress…"}</p>
+    ${failed ? '<button class="btn btn-secondary" type="button" data-retry-grow-impact>Try again</button>' : ""}
+  </section>`;
 }
 
 function escapeImpactText(value) {
@@ -872,6 +881,11 @@ function renderTreeOption(option, selectedId) {
 }
 
 function bindGrowImpactActions(root) {
+  root.querySelector("[data-retry-grow-impact]")?.addEventListener("click", () => {
+    todayRequest = null;
+    void loadToday();
+  });
+
   root.querySelectorAll("[data-grow-tree]").forEach((button) => button.addEventListener("click", async () => {
     button.disabled = true;
     try {
