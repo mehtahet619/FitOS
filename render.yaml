@@ -64,6 +64,51 @@ services:
       - path: /*
         name: Cache-Control
         value: no-cache, no-store, must-revalidate
+      - path: /login
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /register
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /verify-email
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /verify-login
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /forgot-password
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /reset-password
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /homepage
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /today
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /workout
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /workouts
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /nutrition
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /equipment
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /history
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /profile
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /settings
+        name: X-Robots-Tag
+        value: noindex, nofollow
     routes:
       - type: rewrite
         source: /*
@@ -71,4 +116,6 @@ services:
     envVars:
       - key: API_BASE_URL
         value: https://adaptive-fit-api.onrender.com
-        
+      # If a custom domain is configured, keep this and backend FRONTEND_ORIGIN aligned with it.
+      - key: PUBLIC_SITE_URL
+        value: https://adaptive-fit-web.onrender.com
