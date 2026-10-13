@@ -84,7 +84,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
         const exerciseIds = new Set(state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => row.id));
         return { count: state.sets.filter((row) => row.completed && exerciseIds.has(row.workoutExerciseId)).length } as unknown as T;
       }
-      if (sql.includes("SELECT userId,status,equipmentMode,equipmentSnapshot FROM Workout WHERE id = ?")) {
+      if (sql.includes("SELECT userId,status,equipmentMode,equipmentSnapshot,durationMin FROM Workout WHERE id = ?")) {
         return state.workouts.find((row) => row.id === params[0]) as T | undefined;
       }
       if (sql.includes("SELECT userId,status FROM Workout WHERE id = ?")) return state.workouts.find((row) => row.id === params[0]) as T | undefined;
@@ -321,7 +321,7 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
       });
       expect(secondSwapResponse.status).toBe(422);
-      expect((await secondSwapResponse.json() as any).error).toMatch(/no dataset exercise matches/i);
+      expect((await secondSwapResponse.json() as any).error).toMatch(/no (?:dataset|CSV or configured AI) exercise matches/i);
       expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
 
       const refreshResponse = await fetch(`${baseUrl}/workouts/generate`, {
