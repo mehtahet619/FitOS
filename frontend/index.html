@@ -6,10 +6,24 @@
 <meta name="theme-color" content="#f4f2ec" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Adaptive Fit" />
+<meta name="apple-mobile-web-app-title" content="FitOS" />
+<meta name="description" content="FitOS is a personalized AI workout planner based on your gym equipment, training goals, workout history, and available time." />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<link rel="canonical" href="https://adaptive-fit-web.onrender.com/" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="FitOS" />
+<meta property="og:title" content="Your Gym. Your Goals. A Workout That Adapts. | FitOS" />
+<meta property="og:description" content="A personalized AI workout planner built around your equipment, training goals, and available time." />
+<meta property="og:url" content="https://adaptive-fit-web.onrender.com/" />
+<meta property="og:image" content="https://adaptive-fit-web.onrender.com/assets/gym-intro.webp" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Your Gym. Your Goals. A Workout That Adapts. | FitOS" />
+<meta name="twitter:description" content="A personalized AI workout planner built around your equipment, training goals, and available time." />
+<meta name="twitter:image" content="https://adaptive-fit-web.onrender.com/assets/gym-intro.webp" />
 <base id="app-base" href="./" />
 <script>
   if (location.protocol !== "file:") document.getElementById("app-base").href = "/";
+  if (location.pathname !== "/") document.documentElement.classList.add("private-route");
 </script>
 <script>
   // Migration cleanup for clients that still have the old cache-first worker.
@@ -36,14 +50,181 @@
 </script>
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-<title>Adaptive Fit</title>
-<link rel="stylesheet" href="styles.css?v=fitos-20261010-grow-impact-v1" />
+<title>Personalized AI Workout Planner Based on Gym Equipment | FitOS</title>
+<link rel="stylesheet" href="styles.css?v=fitos-public-landing-v1" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "FitOS",
+      "url": "https://adaptive-fit-web.onrender.com/",
+      "logo": "https://adaptive-fit-web.onrender.com/assets/site-logo.png",
+      "description": "A fitness application for equipment-aware workout planning and training support."
+    },
+    {
+      "@type": "WebSite",
+      "name": "FitOS",
+      "url": "https://adaptive-fit-web.onrender.com/",
+      "publisher": { "@type": "Organization", "name": "FitOS" },
+      "inLanguage": "en"
+    }
+  ]
+}
+</script>
 </head>
 <body>
 <div id="app">
 
+  <!-- Public, crawlable landing page. The app shell remains separate below. -->
+  <section id="screen-landing" class="screen active landing-page" aria-label="FitOS overview">
+    <header class="site-header">
+      <a class="site-brand" href="/" aria-label="FitOS home">
+        <img src="assets/site-logo.png" alt="" width="48" height="48" />
+        <span>FitOS</span>
+      </a>
+      <button class="site-menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="site-navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <nav id="site-navigation" class="site-navigation" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#food-discovery">Food discovery</a>
+        <a href="#faq">FAQ</a>
+        <a class="site-login" href="/login">Log in</a>
+        <a class="button button-dark button-nav" href="/register" data-cta-placement="navigation">Get started <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="landing-hero" aria-labelledby="landing-title">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> Your training, made personal</p>
+          <h1 id="landing-title">Your Gym.<br />Your Goals.<br /><span>A Workout That Adapts.</span></h1>
+          <p class="hero-intro">FitOS connects your available gym equipment, training history, workout goals, and nearby food options to help you make smarter fitness decisions.</p>
+          <div class="hero-actions">
+            <a class="button button-mint" href="/register" data-cta-placement="hero">Get Started <span aria-hidden="true">↗</span></a>
+            <a class="button button-glass" href="#how-it-works">See How It Works <span aria-hidden="true">↓</span></a>
+          </div>
+          <div class="hero-note"><span class="hero-note-mark" aria-hidden="true">✳</span><span>Built around the equipment, time, and goals you actually have.</span></div>
+        </div>
+        <div class="hero-visual" aria-label="Illustrative FitOS product preview">
+          <div class="hero-scene">
+            <img src="assets/gym-intro.webp" alt="Illustrative isometric view of a modern gym with cardio, strength, and free-weight areas." width="1536" height="1024" fetchpriority="high" />
+            <div class="scene-shade" aria-hidden="true"></div>
+            <div class="scene-caption"><span class="scene-caption-dot"></span> A plan shaped around your space</div>
+          </div>
+          <div class="preview-card preview-workout">
+            <div class="preview-card-head"><span class="preview-icon">↗</span><span class="preview-overline">YOUR WORKOUT</span><span class="preview-live">READY</span></div>
+            <h2>Pull day</h2>
+            <p>Matched to your saved equipment</p>
+            <div class="preview-exercise"><span class="exercise-number">01</span><span><strong>Lat pulldown</strong><small>Back · Cable machine</small></span><span class="exercise-arrow">↗</span></div>
+            <div class="preview-exercise"><span class="exercise-number">02</span><span><strong>Dumbbell row</strong><small>Back · Dumbbells</small></span><span class="exercise-arrow">↗</span></div>
+            <div class="preview-equipment"><span>YOUR SETUP</span><b>Dumbbells</b><b>Cable</b><b>Bench</b></div>
+          </div>
+          <div class="preview-float"><span class="preview-float-check">✓</span><span><b>Made for your gym</b><small>Equipment-aware planning</small></span></div>
+          <p class="visual-disclaimer">Illustrative product preview</p>
+        </div>
+        <a class="hero-scroll" href="#features"><span>Explore FitOS</span><span aria-hidden="true">↓</span></a>
+      </section>
+
+      <section class="value-strip" aria-label="FitOS capabilities">
+        <span>Equipment-aware workouts</span><i aria-hidden="true"></i><span>Flexible training plans</span><i aria-hidden="true"></i><span>Food discovery, when configured</span>
+      </section>
+
+      <section id="features" class="section features-section" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow eyebrow-light">Less guesswork. More intention.</p>
+          <h2 id="features-title">A fitness and nutrition planner<br /><span>that starts with your real life.</span></h2>
+          <p>Tell FitOS what you have, what you’re working toward, and how much time you can make. Your plan starts there.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card feature-card-equipment">
+            <div class="feature-art equipment-art" aria-hidden="true"><span class="art-rack"></span><span class="art-bench"></span><span class="art-dumbbell"></span><span class="art-glow"></span><span class="art-scan">SCAN AREA</span></div>
+            <div class="feature-copy"><p class="feature-kicker">01 / YOUR SPACE</p><h3>A workout planner based on gym equipment</h3><p>Save your equipment or use the gym equipment scanner where the configured vision model is available. FitOS can build a workout generator using available equipment, then you choose a target muscle or follow your plan.</p><a href="#how-it-works" class="text-link">See how planning works <span aria-hidden="true">↗</span></a></div>
+          </article>
+          <article class="feature-card feature-card-swap">
+            <div class="feature-art swap-art" aria-hidden="true"><div class="swap-node">Cable<br />row</div><span class="swap-path">↘</span><div class="swap-node swap-node-next">Dumbbell<br />row</div><span class="swap-caption">SAME TARGET</span></div>
+            <div class="feature-copy"><p class="feature-kicker">02 / KEEP MOVING</p><h3>Find a same-muscle alternative</h3><p>If an exercise doesn’t work for you, FitOS supports substitutions that preserve the movement intent and target muscle. Live camera-based crowd or machine-occupancy detection is not currently offered.</p><a href="#guides" class="text-link">Explore exercise alternatives <span aria-hidden="true">↗</span></a></div>
+          </article>
+          <article id="food-discovery" class="feature-card feature-card-food">
+            <div class="feature-art food-art" aria-hidden="true"><div class="food-orbit food-orbit-one"></div><div class="food-orbit food-orbit-two"></div><span class="food-leaf">✦</span><span class="food-bowl">◒</span><span class="food-pin">⌖</span><span class="food-label">NEAR YOU</span></div>
+            <div class="feature-copy"><p class="feature-kicker">03 / AROUND YOU</p><h3>Healthy food near me, with context</h3><p>When a nearby menu provider is configured, explore real listings with options shaped by dietary preferences and budget. Menu availability can change; nutrition values may be estimates and should be checked with the restaurant.</p><a href="#nutrition-notes" class="text-link">How food discovery works <span aria-hidden="true">↗</span></a></div>
+          </article>
+          <article class="feature-card feature-card-adaptive">
+            <div class="feature-art adaptive-art" aria-hidden="true"><span class="adaptive-ring ring-one"></span><span class="adaptive-ring ring-two"></span><span class="adaptive-ring ring-three"></span><span class="adaptive-center">F</span><span class="adaptive-label label-history">HISTORY</span><span class="adaptive-label label-time">TIME</span><span class="adaptive-label label-goal">GOAL</span></div>
+            <div class="feature-copy"><p class="feature-kicker">04 / YOUR RHYTHM</p><h3>An adaptive workout planner</h3><p>Workout plans can use your chosen split, available equipment, target muscles, session duration, and workout history to guide what comes next. Your plan follows its progression rules while offering recovery context from recent training.</p><a href="#how-it-works" class="text-link">Build your own rhythm <span aria-hidden="true">↗</span></a></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section how-section" aria-labelledby="how-title">
+        <div class="how-visual">
+          <div class="how-image-frame"><img src="assets/gym-intro.webp" alt="A modern gym floor plan with strength, cardio, and free-weight areas." width="1536" height="1024" loading="lazy" /></div>
+          <div class="how-stamp"><span>YOUR</span><b>GYM</b><span>YOUR RULES</span></div>
+          <div class="how-callout"><span class="callout-icon">✳</span><span><b>Start with what you have</b><small>Your equipment shapes the plan.</small></span></div>
+        </div>
+        <div class="how-copy">
+          <p class="eyebrow">A simple way to begin</p>
+          <h2 id="how-title">How FitOS<br /><span>works for you.</span></h2>
+          <p class="how-lede">A personalized workout planner should fit your setup—not ask you to start over every time you walk into a different gym.</p>
+          <ol class="steps-list">
+            <li><span class="step-number">01</span><span><b>Set your direction</b><small>Choose a goal, training level, weekly rhythm, and food preferences.</small></span></li>
+            <li><span class="step-number">02</span><span><b>Tell us what’s available</b><small>Select equipment manually or scan an image when equipment recognition is configured.</small></span></li>
+            <li><span class="step-number">03</span><span><b>Train, log, adapt</b><small>Generate a session for your available time, record your work, and use your history to guide the next one.</small></span></li>
+          </ol>
+          <a class="button button-dark" href="/register" data-cta-placement="how-it-works">Create your plan <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+
+      <section id="nutrition-notes" class="nutrition-note" aria-label="Food discovery details">
+        <span class="nutrition-symbol" aria-hidden="true">✳</span>
+        <div><p class="feature-kicker">A NOTE ON FOOD DATA</p><h2>Useful context. Honest about the details.</h2><p>FitOS can filter meal suggestions using your diet, allergies, and budget. Nearby discovery depends on an active places/menu provider. Protein and calorie figures may be estimated from available menu data—not independently verified—and listings can change.</p></div>
+        <a href="/register" class="text-link" data-cta-placement="food-note">Set your preferences <span aria-hidden="true">↗</span></a>
+      </section>
+
+      <section id="guides" class="section guide-section" aria-labelledby="guides-title">
+        <div class="section-heading guide-heading"><p class="eyebrow">A better starting point</p><h2 id="guides-title">Small guides for<br /><span>real gym decisions.</span></h2><p>Practical notes built into the page—no empty blog, no filler.</p></div>
+        <div class="guide-grid">
+          <article class="guide-card"><span>01 / EQUIPMENT</span><h3>Build around what’s available</h3><p>Start with the target you want to train, list the equipment you can actually use, then choose movements that fit both. If a machine is missing, use a substitute for the same movement and target rather than forcing the original exercise.</p><a href="#features" class="text-link">Equipment-aware planning <span aria-hidden="true">↗</span></a></article>
+          <article class="guide-card"><span>02 / ALTERNATIVES</span><h3>When a station is taken</h3><p>Choose an alternative that keeps the target muscle and movement pattern close to the original. A dumbbell row can cover a similar pull when a cable row is unavailable; adjust the load to what you can control.</p><a href="#features" class="text-link">Same-muscle substitutions <span aria-hidden="true">↗</span></a></article>
+          <article class="guide-card"><span>03 / FOOD</span><h3>Look beyond a “high-protein” label</h3><p>Compare the menu description, ingredients, portion, and price. Restaurant nutrition can vary; treat estimated calories and protein as a guide and ask the restaurant about ingredients or allergens.</p><a href="#food-discovery" class="text-link">Food discovery details <span aria-hidden="true">↗</span></a></article>
+        </div>
+      </section>
+
+      <section class="faq-section section" id="faq" aria-labelledby="faq-title">
+        <div class="faq-intro"><p class="eyebrow eyebrow-light">Good questions</p><h2 id="faq-title">A few things<br /><span>to know.</span></h2><p>Clear expectations make a better plan.</p></div>
+        <div class="faq-list">
+          <details><summary>Does FitOS work if my gym has different equipment?</summary><p>Yes. You can save the equipment available to you and generate workouts against that selection. You can also update your inventory when your setup changes.</p></details>
+          <details><summary>Does Live Scan know when a machine is occupied?</summary><p>No. FitOS can recognize equipment from an image when the vision provider is configured, but person detection does not establish machine occupancy. Camera-based crowd or occupancy detection is not currently available.</p></details>
+          <details><summary>Are nearby food nutrition details verified?</summary><p>No. Nearby menu access depends on the configured provider, and calorie or protein values may be estimates. Confirm current availability, ingredients, and nutrition with the restaurant.</p></details>
+          <details><summary>Can I change my training plan later?</summary><p>Your plan uses your selected training split, goals, equipment, and time. You can update your profile and equipment inventory as your preferences or gym access change.</p></details>
+          <details><summary>Is FitOS a medical or nutrition service?</summary><p>No. FitOS is a fitness planning tool and does not replace advice from a qualified health professional.</p></details>
+        </div>
+      </section>
+
+      <section class="closing-cta" aria-labelledby="closing-title">
+        <div class="closing-glow" aria-hidden="true"></div>
+        <img src="assets/site-logo.png" alt="" width="64" height="64" loading="lazy" />
+        <p class="eyebrow eyebrow-light">Make room for your next session</p>
+        <h2 id="closing-title">Start with the gym<br /><span>you have today.</span></h2>
+        <p>Your first plan begins with your goals, your gear, and your time.</p>
+        <a class="button button-mint" href="/register" data-cta-placement="closing">Get Started <span aria-hidden="true">↗</span></a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="site-brand footer-brand" href="/" aria-label="FitOS home"><img src="assets/site-logo.png" alt="" width="38" height="38" loading="lazy" /><span>FitOS</span></a>
+      <p>Train for your life. Start with what you have.</p>
+      <nav aria-label="Footer navigation"><a href="#features">Features</a><a href="#faq">FAQ</a><a href="/login">Log in</a><a href="/register" data-cta-placement="footer">Get started</a></nav>
+      <small>© <span id="landing-year">2026</span> FitOS</small>
+    </footer>
+  </section>
+
   <!-- ============ FULL-SCREEN GYM INTRO ============ -->
-  <section id="screen-intro" class="screen active intro-screen" aria-label="Loading animation">
+  <section id="screen-intro" class="screen intro-screen" aria-label="Loading animation">
     <div class="intro-image-fallback" aria-hidden="true">
       <img src="assets/gym-intro.webp" alt="" width="1536" height="1024" fetchpriority="high" />
     </div>

@@ -105,13 +105,50 @@ const AuthState = {
     if (this.status === "UNAUTHENTICATED") return;
     this.status = "UNAUTHENTICATED"; this.user = null; this.profileComplete = null; this.generation += 1;
     Api.clearTokens(); clearProtectedContent();
-    if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/verify-login") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
+    if (normalizePath(location.pathname) === "/") void routeCurrent();
+    else if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/verify-login") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
   },
 };
 let authBootGeneration = 0;
 window.AuthState = AuthState;
 
 const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/history": "history", "/profile": "profile", "/settings": "settings" };
+const publicSiteUrl = "https://adaptive-fit-web.onrender.com";
+const routeMetadata = {
+  "/": ["Personalized AI Workout Planner Based on Gym Equipment | FitOS", "FitOS connects your available gym equipment, training history, workout goals, and nearby food options to help you make smarter fitness decisions."],
+  "/login": ["Log in to FitOS | Personalized Workout Planner", "Log in to your FitOS account to continue your workout and nutrition plan."],
+  "/register": ["Create your FitOS account | Adaptive Workout Planner", "Create a FitOS account to build an equipment-aware training plan around your goals."],
+  "/verify-email": ["Verify your email | FitOS", "Verify your email address to finish setting up your FitOS account."],
+  "/verify-login": ["Verify sign-in code | FitOS", "Enter your one-time sign-in code to access your FitOS account."],
+  "/forgot-password": ["Reset your FitOS password | FitOS", "Request a secure password reset code for your FitOS account."],
+  "/reset-password": ["Choose a new password | FitOS", "Set a new password for your FitOS account."],
+  "/homepage": ["Your training dashboard | FitOS", "Your FitOS training, workout history, and fitness plan."],
+  "/today": ["Today’s training | FitOS", "Review today’s training plan and progress in FitOS."],
+  "/workout": ["Your workout plan | FitOS", "Build and follow a workout based on your goals and available equipment."],
+  "/workouts": ["Your workouts | FitOS", "View and manage your FitOS workout plan."],
+  "/nutrition": ["Food and nutrition planner | FitOS", "Explore meal planning and nearby food discovery in FitOS."],
+  "/equipment": ["Gym equipment planner | FitOS", "Review equipment and build workouts for your gym setup."],
+  "/history": ["Workout history | FitOS", "Review your logged FitOS training history."],
+  "/profile": ["Your profile and training goals | FitOS", "Manage your FitOS fitness profile, goals, and equipment."],
+  "/settings": ["FitOS settings | FitOS", "Manage your FitOS profile and preferences."],
+};
+function updateRouteMetadata(path) {
+  const [title, description] = routeMetadata[path] || ["FitOS | Your adaptive fitness planner", "Equipment-aware workouts and training support from FitOS."];
+  document.title = title;
+  const descriptionTag = document.querySelector('meta[name="description"]');
+  const robotsTag = document.querySelector('meta[name="robots"]');
+  const canonicalTag = document.querySelector('link[rel="canonical"]');
+  const canonicalUrl = `${publicSiteUrl}${path === "/" ? "/" : path}`;
+  if (descriptionTag) descriptionTag.content = description;
+  if (robotsTag) robotsTag.content = path === "/" ? "index, follow, max-image-preview:large" : "noindex, nofollow";
+  if (canonicalTag) canonicalTag.href = canonicalUrl;
+  document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
+  document.querySelector('meta[property="og:description"]')?.setAttribute("content", description);
+  document.querySelector('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
+}
+function trackMarketingEvent(eventName, placement) {
+  window.dispatchEvent(new CustomEvent("fitos:conversion", { detail: { eventName, placement } }));
+}
 function normalizePath(path) { return path.length > 1 ? path.replace(/\/$/, "") : path; }
 function navigate(path, replace = false) {
   if (replace) history.replaceState({}, "", path); else if (location.pathname !== path) history.pushState({}, "", path);
@@ -146,13 +183,15 @@ function startResendCountdown(seconds, buttonId = "verify-resend", countdownId =
 }
 async function routeCurrent() {
   const path = normalizePath(location.pathname);
+  updateRouteMetadata(path);
   const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
   if (AuthState.status === "AUTH_LOADING") {
-    showScreen("screen-intro");
+    showScreen(path === "/" ? "screen-landing" : "screen-intro");
     return;
   }
   if (path === "/" || path === "/login" || path === "/register") {
     if (AuthState.status === "AUTHENTICATED") { if (path !== "/homepage") navigate("/homepage", true); return; }
+    if (path === "/") { showScreen("screen-landing"); return; }
     State.isRegisterMode = path === "/register";
     updateAuthMode(); showScreen("screen-auth"); return;
   }
@@ -242,16 +281,19 @@ function showScreen(id) {
   async function boot() {
     const generation = ++authBootGeneration;
     AuthState.status = "AUTH_LOADING";
-  window.FitOSIntroStart?.();
-  showScreen("screen-intro");
+  const isLandingRoute = normalizePath(location.pathname) === "/";
+  updateRouteMetadata(normalizePath(location.pathname));
+  if (isLandingRoute) showScreen("screen-landing");
+  else { window.FitOSIntroStart?.(); showScreen("screen-intro"); }
   $("auth-submit").disabled = true;
   try {
     const data = await Api.get("/auth/me");
-      await keepIntroVisible();
+      if (!isLandingRoute) await keepIntroVisible();
     if (generation !== authBootGeneration) return;
     if (!data.authenticated) {
       Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent();
       if (["/verify-email", "/forgot-password", "/reset-password"].includes(normalizePath(location.pathname))) await routeCurrent();
+      else if (normalizePath(location.pathname) === "/") await routeCurrent();
       else navigate("/login", true);
       return;
     }
@@ -259,10 +301,12 @@ function showScreen(id) {
     if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
     if (["/", "/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
-      await keepIntroVisible();
+      if (!isLandingRoute) await keepIntroVisible();
     if (generation !== authBootGeneration) return;
     if (e?.status === 401) Api.clearTokens();
-    AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; clearProtectedContent(); navigate("/login", true);
+    AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; clearProtectedContent();
+    if (isLandingRoute) { await routeCurrent(); return; }
+    navigate("/login", true);
     const message = e?.status === 401
       ? "Your session has expired. Please sign in again."
       : "Couldn't check your session. Your sign-in is saved; retry the check or log in again.";
@@ -372,6 +416,7 @@ $("verify-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/register/verify-otp", { email: verifyEmail, otp: $("verify-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
+    trackMarketingEvent("signup_verified", "email_otp");
     sessionStorage.removeItem("pendingVerifyEmail"); AuthState.authenticated(data.user); navigate("/homepage", true);
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify your email."); }
 });
@@ -2192,6 +2237,28 @@ function renderGymScan(equipment, plan) {
     }
   });
 }
+
+/* ---------------- Public landing interactions ---------------- */
+const siteMenuButton = document.querySelector(".site-menu-toggle");
+const siteNavigation = document.getElementById("site-navigation");
+siteMenuButton?.addEventListener("click", () => {
+  const isOpen = siteNavigation?.classList.toggle("is-open") ?? false;
+  siteMenuButton.setAttribute("aria-expanded", String(isOpen));
+  siteMenuButton.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+});
+siteNavigation?.addEventListener("click", (event) => {
+  if (event.target.closest("a")) {
+    siteNavigation.classList.remove("is-open");
+    siteMenuButton?.setAttribute("aria-expanded", "false");
+    siteMenuButton?.setAttribute("aria-label", "Open navigation");
+  }
+});
+document.addEventListener("click", (event) => {
+  const cta = event.target.closest("a[data-cta-placement]");
+  if (cta) trackMarketingEvent("signup_cta_click", cta.dataset.ctaPlacement || "unknown");
+});
+const landingYear = document.getElementById("landing-year");
+if (landingYear) landingYear.textContent = String(new Date().getFullYear());
 
 /* ---------------- Kickoff ---------------- */
 void boot();
