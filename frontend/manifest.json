@@ -1,7 +1,7 @@
 {
-  "name": "Adaptive Fit",
-  "short_name": "Adaptive Fit",
-  "description": "Equipment-aware workouts, nutrition, vision coaching, and gym check-in.",
+  "name": "FitOS",
+  "short_name": "FitOS",
+  "description": "Equipment-aware workouts, adaptive training, food discovery, vision coaching, and gym check-in.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
