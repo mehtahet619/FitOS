@@ -391,6 +391,22 @@ describe("workout API CSV flow", () => {
         .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
 
       const editSlotId = reorderIds[0];
+      // Reproduce the reported stale-plan case with concrete catalogue slots:
+      // a row replacement must rebalance the two next movements from the new
+      // Deadlift selection, rather than treating the old names as cached output.
+      const addCatalogExercise = (id: string, name: string, primaryMuscle = "back") => {
+        state.exercises.push({ id, name, primaryMuscle, secondaryMuscles: "", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" });
+      };
+      addCatalogExercise("catalog-seated-cable-row", "Seated Cable Row");
+      addCatalogExercise("catalog-lat-pulldown", "Lat Pulldown");
+      addCatalogExercise("catalog-face-pull", "Face Pull");
+      const orderedWorkoutRows = state.workoutExercises
+        .filter((exercise) => exercise.workoutId === before.id)
+        .sort((left, right) => left.orderIndex - right.orderIndex);
+      Object.assign(orderedWorkoutRows[0], { exerciseId: "catalog-seated-cable-row", sourceExerciseName: "Seated Cable Row", sourcePrimaryMuscle: "Back", sourceMachine: "Cable Machine" });
+      Object.assign(orderedWorkoutRows[1], { exerciseId: "catalog-lat-pulldown", sourceExerciseName: "Lat Pulldown", sourcePrimaryMuscle: "Back", sourceMachine: "Lat Pulldown" });
+      Object.assign(orderedWorkoutRows[2], { exerciseId: "catalog-face-pull", sourceExerciseName: "Face Pull", sourcePrimaryMuscle: "Back", sourceMachine: "Cable Machine" });
+      const priorSuggestionIds = [orderedWorkoutRows[1].id, orderedWorkoutRows[2].id];
       const originalEditedExercise = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       const typoResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -454,13 +470,22 @@ describe("workout API CSV flow", () => {
 
       const editResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "  dUmBbElL dEaDlIfT  ", targetMuscle: "back", equipmentName: "Dumbbells" }),
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(editResponse.status).toBe(200);
       expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
-      expect(editedSlot).toMatchObject({ sourceExerciseName: "Dumbbell Deadlift", sourcePrimaryMuscle: "Back", sourceMachine: "Dumbbells" });
-      expect(editedSlot?.exerciseId).toBe(state.exercises.find((exercise) => exercise.name === "Dumbbell Deadlift")?.id);
+      expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "Back", sourceMachine: "Dumbbells" });
+      expect(editedSlot?.exerciseId).toBe("catalog-deadlift");
+      const rebalancedRows = state.workoutExercises.filter((exercise) => exercise.workoutId === before.id && exercise.id !== editSlotId);
+      expect(rebalancedRows.every((exercise) => exerciseFamilyKey(exercise.sourceExerciseName || "") !== exerciseFamilyKey("Deadlift"))).toBe(true);
+      expect(rebalancedRows.some((exercise) => priorSuggestionIds.includes(exercise.id))).toBe(true);
+      const afterRebalance = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
+      for (const row of rebalancedRows) {
+        expect(afterRebalance.exercises).toEqual(expect.arrayContaining([
+          expect.objectContaining({ workoutExerciseId: row.id, exerciseId: row.exerciseId, exerciseName: row.sourceExerciseName }),
+        ]));
+      }
       const confirmedResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
