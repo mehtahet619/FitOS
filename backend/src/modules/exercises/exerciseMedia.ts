@@ -30,12 +30,12 @@ const CURATED_DEMOS: readonly CuratedExerciseDemo[] = [
   {
     exerciseNames: ["Seated Cable Row"],
     equipment: ["Cable Machine"],
-    provider: "vimeo",
-    videoId: "756788734?h=145dc3923d",
+    provider: "youtube",
+    videoId: "xQNrFHEMhI4",
     title: "Seated Cable Row",
-    sourceName: "Muscle & Strength",
-    sourceUrl: "https://www.muscleandstrength.com/exercises/seated-row.html",
-    thumbnailUrl: "https://vumbnail.com/756788734.jpg",
+    sourceName: "Bodybuilding.com",
+    sourceUrl: "https://www.youtube.com/watch?v=xQNrFHEMhI4",
+    thumbnailUrl: "https://i.ytimg.com/vi/xQNrFHEMhI4/hqdefault.jpg",
   },
   {
     exerciseNames: ["Dumbbell Row"],
