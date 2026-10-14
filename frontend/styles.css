@@ -128,8 +128,7 @@
 .screen { overflow-x: hidden; }
 
 /* ---------- Guided workout exercise media ---------- */
-.workout-exercise-support {
-  grid-column: 2 / 4;
+.workout-exercise-support { grid-column: 2 / 4;
   display: grid;
   justify-items: start;
   gap: 9px;
