@@ -784,7 +784,7 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, gro
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-    "&": "&", "<": "<", ">": ">", '"': """, "'": "'",
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character]);
 }
 

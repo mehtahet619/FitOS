@@ -69,7 +69,7 @@ services:
   - type: web
     name: adaptive-fit-web
     runtime: static
-    buildCommand: node scripts/inject-frontend-api-url.cjs
+    buildCommand: node scripts/inject-frontend-api-url.cjs && node --check frontend/app.js
     staticPublishPath: frontend
     autoDeploy: false
     headers:

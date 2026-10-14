@@ -1343,6 +1343,3 @@ html, body {
   .today-grow-tree-option small { font-size: 8px; }
 }
 
-@media (min-width: 600px) {
-  .today-stats-grid { grid-template-columns: repeat(4, 1fr); }
-}
