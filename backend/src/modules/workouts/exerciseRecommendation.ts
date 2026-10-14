@@ -13,6 +13,8 @@ export interface ExerciseRecommendationInput {
   sessionDurationMinutes: number;
   requestedCount?: number;
   excludedExerciseNames?: Iterable<string>;
+  /** Movement families already represented by an exercise selected for this workout. */
+  excludedExerciseFamilyKeys?: Iterable<string>;
   /** Equipment names and aliases from the existing FitOS equipment catalog. */
   availableEquipment: Iterable<string>;
   equipmentMode: RecommendationEquipmentMode;
@@ -298,6 +300,9 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
 
     const availableEquipment = new Set([...input.availableEquipment].map(normalizeExerciseValue).filter(Boolean));
     const excludedExerciseNames = new Set([...(input.excludedExerciseNames ?? [])].map(normalizeExerciseValue));
+    const excludedExerciseFamilyKeys = new Set([
+      ...(input.excludedExerciseFamilyKeys ?? []),
+    ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
       // A target term may match a CSV category containing that same full word
@@ -312,6 +317,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
 
       const exerciseKey = normalizeExerciseValue(row.exercise);
       if (excludedExerciseNames.has(exerciseKey)) continue;
+      if (excludedExerciseFamilyKeys.has(normalizeExerciseValue(exerciseFamilyKey(row.exercise)))) continue;
       if (!uniqueCandidates.has(exerciseKey)) uniqueCandidates.set(exerciseKey, {
         row,
         matchingMuscles,

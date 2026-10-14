@@ -1186,7 +1186,11 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
       requestedCount: otherSlots.length,
       availableEquipment: recommendationEquipment,
       equipmentMode: fullGym ? "FULL_GYM" : workout.equipmentMode === "SCANNED" ? "SCANNED" : "USER_EQUIPMENT",
-      excludedExerciseNames: [canonicalExerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean)],
+      // Recalculate against the replacement's movement family. Existing
+      // suggestions remain eligible and are kept only if the new selection
+      // still ranks them for this workout's targets and equipment.
+      excludedExerciseNames: [canonicalExerciseName],
+      excludedExerciseFamilyKeys: [exerciseFamilyKey(canonicalExerciseName)],
     }).exercises
     : [];
   if (recommendations.length < otherSlots.length) {
@@ -1205,12 +1209,19 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
       sessionDurationMinutes: workout.durationMin,
       count: missingCount,
       equipment: fallbackEquipment,
-      excludedExerciseNames: [canonicalExerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean), ...recommendations.map((exercise) => exercise.exercise)],
+      excludedExerciseNames: [canonicalExerciseName, ...recommendations.map((exercise) => exercise.exercise)],
+      excludedFamilyKeys: [exerciseFamilyKey(canonicalExerciseName), ...recommendations.map((exercise) => exercise.exercise)],
     });
     recommendations = [...recommendations, ...aiRecommendations.map((exercise, index) => ({
       ...exercise,
       sourceIndex: -1000 - index,
     }))];
+  }
+  if (recommendations.length !== otherSlots.length) {
+    return res.status(422).json({
+      code: "WORKOUT_REBALANCE_UNAVAILABLE",
+      error: "FitOS couldn't find enough distinct exercises for this workout with the selected equipment. Your current workout was left unchanged.",
+    });
   }
   const persisted = await ensureExerciseRows(db, recommendations);
   await db.run(

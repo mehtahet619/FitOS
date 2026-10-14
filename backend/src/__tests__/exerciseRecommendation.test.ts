@@ -367,6 +367,31 @@ describe("bundled CSV exercise recommendations", () => {
     expect(result.limitedByDataset).toBe(true);
   });
 
+  it("rebalances without selecting variants of the newly chosen movement family", () => {
+    const rebalanceService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("rebalance.csv", () => [
+        "exercise,machine,muscle",
+        "Lat Pulldown,Cable Machine,Back",
+        "Face Pull,Cable Machine,Back",
+        "Deadlift,Barbell,Back",
+        "Standard Deadlift,Barbell,Back",
+      ].join("\n")),
+    );
+
+    const result = rebalanceService.getRecommendedExercises({
+      targetMuscles: ["Back"],
+      sessionDurationMinutes: 45,
+      requestedCount: 2,
+      availableEquipment: ["Cable Machine", "Barbell"],
+      equipmentMode: "USER_EQUIPMENT",
+      excludedExerciseNames: ["Deadlift"],
+      excludedExerciseFamilyKeys: [exerciseFamilyKey("Deadlift")],
+    });
+
+    expect(result.exercises.map((exercise) => exercise.exercise)).toEqual(["Lat Pulldown", "Face Pull"]);
+    expect(result.exercises.every((exercise) => exerciseFamilyKey(exercise.exercise) !== exerciseFamilyKey("Deadlift"))).toBe(true);
+  });
+
   it("does not fall back when the target is absent", () => {
     expect(
       fullGym(["Unlisted Target"], 60).exercises,
