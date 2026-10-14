@@ -1645,10 +1645,29 @@ function renderWorkout(workout, plan) {
           <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
       : swapButton;
+    const demo = exercise.demoVideo;
+    const exerciseSupport = `<div class="workout-exercise-support">
+      ${demo
+        ? `<div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
+            <button class="exercise-demo-preview" type="button" data-action="play-demo" aria-label="Play ${escapeWorkoutText(exercise.exerciseName)} demonstration">
+              <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
+              <span class="exercise-demo-play" aria-hidden="true">▶</span>
+            </button>
+            <div class="exercise-demo-meta"><span>Demonstration · <a href="${escapeWorkoutText(demo.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeWorkoutText(demo.sourceName)} source</a></span><span>Use the player’s captions control when available.</span></div>
+            <div class="exercise-demo-player" hidden aria-live="polite"></div>
+          </div>`
+        : `<p class="exercise-video-unavailable">Video unavailable for this exact exercise variation.</p>`}
+      <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
+      <form class="exercise-chat-form" data-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
+        <label>Ask about ${escapeWorkoutText(exercise.exerciseName)}<textarea name="question" maxlength="500" rows="2" required placeholder="Form, setup, breathing, common mistakes, or alternatives"></textarea></label>
+        <button class="btn btn-primary" type="submit">Ask</button>
+        <div class="exercise-chat-answer" aria-live="polite" hidden></div>
+      </form>
+    </div>`;
     return `<article class="workout-exercise-row ${stateClass}" data-index="${index}">
       ${dragHandle}
       <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.exerciseName)}</strong><span>${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")} · ${escapeWorkoutText(equipmentLine(exercise))} · ${setLabel} · ${repLabel}</span></div>
-      <span class="workout-exercise-state">${stateLabel}</span>${controls}
+      <span class="workout-exercise-state">${stateLabel}</span>${controls}${exerciseSupport}
     </article>`;
   }).join("");
 
@@ -1808,6 +1827,63 @@ function renderWorkout(workout, plan) {
       if (form) form.hidden = !form.hidden;
     });
   });
+  el.querySelectorAll('[data-action="play-demo"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = button.closest(".workout-exercise-row");
+      const exerciseId = row?.querySelector(".exercise-demo")?.dataset.videoId;
+      const exercise = exercises.find((item) => item.exerciseId === exerciseId);
+      const demo = exercise?.demoVideo;
+      const player = row?.querySelector(".exercise-demo-player");
+      if (!demo || !player || player.querySelector("iframe")) return;
+      player.hidden = false;
+      player.textContent = "Loading demonstration…";
+      const frame = document.createElement("iframe");
+      frame.src = demo.embedUrl;
+      frame.title = `${exercise.exerciseName} demonstration video`;
+      frame.loading = "lazy";
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      frame.allow = "encrypted-media; picture-in-picture; fullscreen";
+      frame.allowFullscreen = true;
+      player.dataset.loading = "true";
+      frame.addEventListener("load", () => { delete player.dataset.loading; });
+      frame.addEventListener("error", () => {
+        delete player.dataset.loading;
+        player.textContent = "This demonstration could not be played. Video unavailable.";
+      });
+      player.replaceChildren(frame);
+      button.hidden = true;
+    });
+  });
+  el.querySelectorAll('[data-action="ask-exercise"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest(".workout-exercise-row")?.querySelector(".exercise-chat-form");
+      if (!form) return;
+      form.hidden = !form.hidden;
+      if (!form.hidden) form.elements.question.focus();
+    });
+  });
+  el.querySelectorAll(".exercise-chat-form").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('[type="submit"]');
+      const answer = form.querySelector(".exercise-chat-answer");
+      const question = form.elements.question.value.trim();
+      if (!question) return;
+      button.disabled = true;
+      button.textContent = "Thinking…";
+      answer.hidden = false;
+      answer.textContent = "Preparing exercise-specific guidance…";
+      try {
+        const result = await Api.post(`/exercises/${encodeURIComponent(form.dataset.exerciseId)}/ask`, { question }, { timeoutMs: 20000 });
+        answer.textContent = result.answer;
+      } catch (error) {
+        answer.textContent = error.message || "Exercise chat is temporarily unavailable. Please try again later.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Ask";
+      }
+    });
+  });
   el.querySelectorAll('[data-action="cancel-edit"]').forEach((button) => {
     button.addEventListener("click", () => {
       const form = button.closest(".workout-edit-form");
@@ -1933,15 +2009,7 @@ function renderWorkout(workout, plan) {
           workoutExerciseId: button.dataset.id,
           reason: "user_preference",
         });
-        const slotId = result.workoutExerciseId;
-        const replacement = result.exercise;
-        const updatedWorkout = {
-          ...workout,
-          exercises: workout.exercises.map((exercise) => exercise.workoutExerciseId === slotId
-            ? { ...exercise, ...replacement }
-            : exercise),
-        };
-        renderWorkout(updatedWorkout, plan);
+        await loadWorkout();
         showWorkoutNotice(result.explanation || "Exercise updated to match your available equipment.", "success");
       } catch (error) {
         showWorkoutNotice(error.message, "error");
