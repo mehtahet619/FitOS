@@ -3,8 +3,10 @@ import {
   CsvExerciseRepository,
   csvExerciseAlternativesRepository,
   csvExerciseRepository,
+  normalizeExerciseLookupName,
   normalizeExerciseValue,
 } from "./exerciseCsvRepository";
+import { muscleCategoryMatchesTarget } from "./muscleTaxonomy";
 
 export type RecommendationEquipmentMode = "FULL_GYM" | "SCANNED" | "USER_EQUIPMENT";
 
@@ -78,7 +80,7 @@ const familyEquipmentWords = new Set([
  * such as "pullover" are retained.
  */
 export function exerciseFamilyKey(exerciseName: string): string {
-  let normalized = normalizeExerciseValue(exerciseName);
+  let normalized = normalizeExerciseLookupName(exerciseName);
   for (const phrase of familyVariationPhrases) normalized = normalized.replace(phrase, " ");
   normalized = normalized
     .replace(/\bpull down\b/g, "pulldown")
@@ -252,7 +254,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       const score = (row: CsvExercise) =>
         (normalizeExerciseValue(row.exercise) === nameKey ? 4 : 0)
         + (normalizeExerciseValue(row.machine) === machineKey ? 2 : 0)
-        + (row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey) ? 1 : 0);
+        + (row.muscleCategories.some((muscle) => muscleCategoryMatchesTarget(slotPrimaryMuscle, muscle)) ? 1 : 0);
       return score(right) - score(left) || left.sourceIndex - right.sourceIndex;
     })[0];
     const selectedAnchor = sourceAnchor;
@@ -270,7 +272,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       : alternativesRows
         .filter((row) => row.targetedMuscles.length > 0
           && row.timeTakenOneSet
-          && row.muscleCategories.some((muscle) => normalizeExerciseValue(muscle) === slotPrimaryMuscleKey)
+          && row.muscleCategories.some((muscle) => muscleCategoryMatchesTarget(slotPrimaryMuscle, muscle))
           && targetedMuscleKey(row.targetedMuscles) === targetKey
           && exactDatasetValue(row.timeTakenOneSet) === durationKey)
         .sort((left, right) => left.sourceIndex - right.sourceIndex);
@@ -305,13 +307,12 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
-      // A target term may match a CSV category containing that same full word
-      // (for example Back -> Upper Back). This derives relevance only from
-      // words present in the plan and dataset; it adds no muscle taxonomy.
-      const matchingMuscles = row.muscleCategories.filter((muscle) => {
-        const categoryWords = normalizeExerciseValue(muscle).split(" ");
-        return [...targetKeys].some((target) => categoryWords.includes(target));
-      });
+      // Apply the same explicit group relationships as edit validation:
+      // a Back target can include Lats and Upper Back, but not Biceps merely
+      // because both may appear on a pull-day exercise.
+      const matchingMuscles = row.muscleCategories.filter((muscle) =>
+        [...targetKeys].some((target) => muscleCategoryMatchesTarget(target, muscle)),
+      );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
 

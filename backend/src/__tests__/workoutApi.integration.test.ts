@@ -11,6 +11,7 @@ type Row = Record<string, any>;
 function makeDatabase(plan: Row, sessionMinutes = 60) {
   const state: {
     exercises: Row[];
+    exerciseMuscles: Row[];
     equipment: Row[];
     equipmentAliases: Row[];
     userEquipment: Row[];
@@ -20,7 +21,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
     sets: Row[];
     swapHistory: Row[];
     plan: Row;
-  } = { exercises: [], equipment: [], equipmentAliases: [], userEquipment: [], links: [], workouts: [], workoutExercises: [], sets: [], swapHistory: [], plan };
+  } = { exercises: [], exerciseMuscles: [], equipment: [], equipmentAliases: [], userEquipment: [], links: [], workouts: [], workoutExercises: [], sets: [], swapHistory: [], plan };
 
   const db: DatabaseLike = {
     async all<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
@@ -44,7 +45,13 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
         return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => state.equipment.find((equipment) => equipment.id === row.equipmentId)).filter(Boolean) as T[];
       }
       if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return state.exercises as T[];
-      if (sql.includes("SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment FROM Exercise")) return state.exercises as T[];
+      if (sql.includes("SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment")) return state.exercises as T[];
+      if (sql.includes("SELECT em.exerciseId,m.name FROM ExerciseMuscle")) {
+        return state.exerciseMuscles.filter((row) => row.role === "PRIMARY").map((row) => ({ exerciseId: row.exerciseId, name: row.muscleName })) as unknown as T[];
+      }
+      if (sql.includes("SELECT ee.exerciseId,eq.id,eq.name FROM ExerciseEquipment")) {
+        return state.links.map((link) => ({ exerciseId: link.exerciseId, id: link.equipmentId, name: state.equipment.find((item) => item.id === link.equipmentId)?.name })) as unknown as T[];
+      }
       if (sql.includes("SELECT name FROM Muscle ORDER BY name")) return ["back", "chest", "glutes", "hamstrings"].map((name) => ({ name })) as unknown as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return state.equipment as T[];
       if (sql.includes("SELECT id FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC")) {
@@ -106,6 +113,10 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       if (sql.includes("SELECT * FROM Equipment WHERE name = ?")) return state.equipment.find((row) => row.name === params[0]) as T | undefined;
       if (sql.includes("SELECT id FROM Equipment WHERE lower(name)=lower(?)")) return state.equipment.find((row) => row.name.toLowerCase() === String(params[0]).toLowerCase()) as T | undefined;
       if (sql.includes("SELECT id FROM Exercise WHERE lower(name)=lower(?)")) return state.exercises.find((row) => row.name.toLowerCase() === String(params[0]).toLowerCase()) as T | undefined;
+      if (sql.includes("SELECT m.name FROM ExerciseMuscle em JOIN Muscle")) {
+        const muscle = state.exerciseMuscles.find((row) => row.exerciseId === params[0] && row.role === "PRIMARY");
+        return muscle ? ({ name: muscle.muscleName } as unknown as T) : undefined;
+      }
       if (sql.includes("SELECT * FROM Exercise WHERE id = ?")) return state.exercises.find((row) => row.id === params[0]) as T | undefined;
       if (sql.includes("SELECT repRangeHigh FROM Exercise WHERE id = ?")) return state.exercises.find((row) => row.id === params[0]) as T | undefined;
       throw new Error(`Unexpected integration-test lookup: ${sql}`);
@@ -208,7 +219,7 @@ describe("workout API CSV flow", () => {
       units: [{ key: "back", label: "Back", muscles: ["back"] }],
     };
     const { db, state } = makeDatabase(planState);
-    const selectedEquipment = ["Lat Pulldown", "Dumbbells", "Cable Machine"];
+    const selectedEquipment = ["Lat Pulldown", "Dumbbells", "Cable Machine", "Bench"];
     state.equipment = selectedEquipment.concat("Barbell").map((name) => ({ id: `equipment-${name}`, name }));
     state.exercises.push({
       id: "catalog-dumbbell-deadlift", name: "Dumbbell Deadlift", primaryMuscle: "back", secondaryMuscles: "legs",
@@ -217,8 +228,19 @@ describe("workout API CSV flow", () => {
     state.links.push({ id: "catalog-dumbbell-deadlift-equipment", exerciseId: "catalog-dumbbell-deadlift", equipmentId: "equipment-Dumbbells" });
     state.exercises.push(
       { id: "catalog-deadlift", name: "Deadlift", primaryMuscle: "back", secondaryMuscles: "legs", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
-      { id: "catalog-dumbbell-rows", name: "Dumbbell Rows", primaryMuscle: "back", secondaryMuscles: "", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+      { id: "catalog-dumbbell-rows", name: "Dumbbell Rows", primaryMuscle: "biceps", secondaryMuscles: "back", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+      { id: "catalog-biceps-row-test", name: "Biceps Curl", primaryMuscle: "biceps", secondaryMuscles: "back", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
       { id: "catalog-bench-press", name: "Bench Press", primaryMuscle: "chest", secondaryMuscles: "", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+    );
+    state.exerciseMuscles.push(
+      { exerciseId: "catalog-dumbbell-rows", muscleName: "Upper Back", role: "PRIMARY" },
+      { exerciseId: "catalog-dumbbell-rows", muscleName: "Biceps", role: "SECONDARY" },
+      { exerciseId: "catalog-biceps-row-test", muscleName: "Biceps", role: "PRIMARY" },
+      { exerciseId: "catalog-biceps-row-test", muscleName: "Back", role: "SECONDARY" },
+    );
+    state.links.push(
+      { id: "catalog-dumbbell-rows-dumbbells", exerciseId: "catalog-dumbbell-rows", equipmentId: "equipment-Dumbbells" },
+      { id: "catalog-dumbbell-rows-bench", exerciseId: "catalog-dumbbell-rows", equipmentId: "equipment-Bench" },
     );
     const oldCycleWorkout = {
       id: "old-cycle-back-session", userId: "integration-user", focus: "Back", status: "pending",
@@ -450,9 +472,10 @@ describe("workout API CSV flow", () => {
       });
       expect(nonsenseResponse.status).toBe(422);
       expect(await nonsenseResponse.json()).toMatchObject({
-        code: "EXERCISE_NOT_FOUND",
-        error: "We couldn't find that exercise. Choose an exercise from the suggestions or keep your current exercise.",
+        code: "EXERCISE_CATALOG_ENTRY_MISSING",
+        error: expect.stringContaining("No matching exercise record exists"),
       });
+      expect(state.exercises.some((exercise) => exercise.name === "hate")).toBe(false);
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
 
       const emptyResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
@@ -467,15 +490,80 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Bench Press", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(wrongMuscleResponse.status).toBe(422);
+      const wrongSecondaryMuscleResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Biceps Curl", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(wrongSecondaryMuscleResponse.status).toBe(422);
+      expect((await wrongSecondaryMuscleResponse.json() as any).error).toMatch(/not mapped to Back/i);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
 
+      // Reproduce the reported transition directly: the original row is
+      // replaced with Deadlift, then the same slot is restored for the row
+      // primary/secondary muscle regression below.
+      const recommendationSpy = vi.spyOn(service, "getRecommendedExercises");
+      const directDeadliftResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(directDeadliftResponse.status).toBe(200);
+      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
+        targetMuscles: expect.arrayContaining(["back"]),
+        requestedCount: 3,
+        excludedExerciseNames: expect.arrayContaining(["Deadlift"]),
+        excludedExerciseFamilyKeys: expect.arrayContaining([exerciseFamilyKey("Deadlift")]),
+      }));
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-deadlift");
+      const restoreSeatedRowResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Seated Cable Row", targetMuscle: "back", equipmentName: "Cable Machine" }),
+      });
+      expect(restoreSeatedRowResponse.status).toBe(200);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-seated-cable-row");
+      recommendationSpy.mockClear();
+
+      // A primary Upper Back mapping belongs to the Back workout target even
+      // when the legacy Exercise row says biceps and biceps is secondary.
+      const originalProgramming = (({ orderIndex, targetSets, repRangeLow, repRangeHigh }) => ({
+        orderIndex, targetSets, repRangeLow, repRangeHigh,
+      }))(state.workoutExercises.find((exercise) => exercise.id === editSlotId)!);
+      const dumbbellRowEditResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "  DUMBBELL ROWS  ", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(dumbbellRowEditResponse.status).toBe(200);
+      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
+        targetMuscles: expect.arrayContaining(["Upper Back"]),
+        requestedCount: 3,
+      }));
+      const dumbbellRow = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
+      expect(dumbbellRow).toMatchObject({
+        exerciseId: "catalog-dumbbell-rows", sourceExerciseName: "Dumbbell Rows", sourcePrimaryMuscle: "Upper Back",
+        ...originalProgramming,
+      });
+      const canonicalDumbbellRowWorkout = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
+      expect(canonicalDumbbellRowWorkout.exercises).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          workoutExerciseId: editSlotId, exerciseId: "catalog-dumbbell-rows", exerciseName: "Dumbbell Rows",
+          primaryMuscle: "Upper Back", muscle: "Upper Back", machine: "Dumbbells",
+          equipmentRequired: ["Dumbbells", "Bench"],
+        }),
+      ]));
+
+      recommendationSpy.mockClear();
       const editResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(editResponse.status).toBe(200);
       expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
+      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
+        requestedCount: 3,
+        excludedExerciseNames: expect.arrayContaining(["Deadlift"]),
+        excludedExerciseFamilyKeys: expect.arrayContaining([exerciseFamilyKey("Deadlift")]),
+      }));
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
-      expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "Back", sourceMachine: "Dumbbells" });
+      expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "back", sourceMachine: "Dumbbells" });
       expect(editedSlot?.exerciseId).toBe("catalog-deadlift");
       const rebalancedRows = state.workoutExercises.filter((exercise) => exercise.workoutId === before.id && exercise.id !== editSlotId);
       expect(rebalancedRows.every((exercise) => exerciseFamilyKey(exercise.sourceExerciseName || "") !== exerciseFamilyKey("Deadlift"))).toBe(true);
