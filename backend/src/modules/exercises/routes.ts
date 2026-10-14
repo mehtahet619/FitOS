@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { db } from "../../db/client";
+import { requireAuth, AuthedRequest } from "../../common/auth";
 import { primaryMuscleMatchesTarget } from "../workouts/muscleTaxonomy";
+import { findExerciseDemo, exerciseDemoEmbedUrl } from "./exerciseMedia";
+import { answerExerciseQuestion } from "./exerciseAssistant";
+import { z } from "zod";
 
 export const exerciseRouter = Router();
 
@@ -188,4 +192,37 @@ exerciseRouter.get("/:id/substitutions", async (req, res) => {
     });
   }
   return res.json(results);
+});
+
+exerciseRouter.get("/:id/demo-video", async (req, res) => {
+  const exercise = await db.get<{ id: string; name: string }>(`SELECT id,name FROM Exercise WHERE id = ?`, req.params.id);
+  if (!exercise) return res.status(404).json({ code: "EXERCISE_NOT_FOUND", error: "Exercise not found in the catalog." });
+  const equipment = await equipmentNamesFor(exercise.id);
+  const demo = findExerciseDemo(exercise.name, equipment);
+  return res.json({ exerciseId: exercise.id, demoVideo: demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null });
+});
+
+const exerciseQuestionSchema = z.object({ question: z.string().trim().min(1).max(500) });
+exerciseRouter.post("/:id/ask", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = exerciseQuestionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Enter a question about this exercise (up to 500 characters)." });
+  const exercise = await db.get<{
+    id: string; name: string; primaryMuscle: string; secondaryMuscles: string; instructions: string; movementPattern: string;
+  }>(`SELECT id,name,primaryMuscle,secondaryMuscles,instructions,movementPattern FROM Exercise WHERE id = ?`, req.params.id);
+  if (!exercise) return res.status(404).json({ code: "EXERCISE_NOT_FOUND", error: "Exercise not found in the catalog." });
+  const primary = await db.get<{ name: string }>(
+    `SELECT m.name FROM ExerciseMuscle em JOIN Muscle m ON m.id=em.muscleId WHERE em.exerciseId = ? AND em.role='PRIMARY' LIMIT 1`, exercise.id);
+  const secondary = await db.all<{ name: string }>(
+    `SELECT m.name FROM ExerciseMuscle em JOIN Muscle m ON m.id=em.muscleId WHERE em.exerciseId = ? AND em.role='SECONDARY' ORDER BY m.name`, exercise.id);
+  const equipment = await equipmentNamesFor(exercise.id);
+  const answer = await answerExerciseQuestion({
+    name: exercise.name,
+    primaryMuscle: primary?.name || exercise.primaryMuscle,
+    secondaryMuscles: secondary.length ? secondary.map((muscle) => muscle.name) : (exercise.secondaryMuscles || "").split(",").filter(Boolean),
+    equipment,
+    instructions: exercise.instructions || "",
+    movementPattern: exercise.movementPattern,
+  }, parsed.data.question);
+  if (!answer) return res.status(503).json({ error: "Exercise chat is temporarily unavailable. Please try again later." });
+  return res.json({ exerciseId: exercise.id, answer });
 });

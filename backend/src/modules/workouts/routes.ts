@@ -35,6 +35,7 @@ import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseReco
 import type { RecommendedExercise } from "./exerciseRecommendation";
 import { primaryMuscleMatchesTarget } from "./muscleTaxonomy";
 import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
+import { findExerciseDemo, exerciseDemoEmbedUrl } from "../exercises/exerciseMedia";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -580,7 +581,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
   }
   if (!workout) return res.status(404).json({ error: "No workout generated today yet. POST /workouts/generate" });
   const exercises = await db.all<any>(
-    `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
+    `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.secondaryMuscles, e.movementPattern, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
     workout.id
   );
   const primaryMuscleRows = await db.all<{ exerciseId: string; name: string }>(
@@ -616,6 +617,12 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       muscle: primaryMuscle,
       machine: equipmentRequired[0] ?? "Bodyweight",
       instructions: exercise.instructions,
+      secondaryMuscles: (exercise.secondaryMuscles || "").split(",").map((muscle: string) => muscle.trim()).filter(Boolean),
+      movementPattern: exercise.movementPattern,
+      demoVideo: (() => {
+        const demo = findExerciseDemo(exerciseName, equipmentRequired);
+        return demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null;
+      })(),
       targetSets: exercise.targetSets,
       repRangeLow: exercise.repRangeLow,
       repRangeHigh: exercise.repRangeHigh,
