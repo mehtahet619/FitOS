@@ -91,45 +91,6 @@ const State = {
 };
 let workoutExerciseCatalogPromise;
 
-/* ---------------- SVG Icons (Lucide-style) ---------------- */
-const Icons = {
-  activity: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>`,
-  arrowRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`,
-  barbell: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="9" x2="12" y2="15"></line><line x1="2" y1="9" x2="22" y2="9"></line><line x1="2" y1="15" x2="22" y2="15"></line><circle cx="6" cy="6" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="6" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>`,
-  calendar: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
-  check: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-  checkCircle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`,
-  chevronDown: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
-  chevronRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
-  clock: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
-  dumbbell: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v4"></path><path d="M5 17h14"></path><circle cx="5" cy="17" r="3"></circle><circle cx="19" cy="17" r="3"></circle></svg>`,
-  fire: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>`,
-  flame: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>`,
-  gym: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>`,
-  home: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`,
-  info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
-  lock: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`,
-  mapPin: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`,
-  menu: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`,
-  minus: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-  plus: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-  refresh: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>`,
-  search: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
-  settings: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
-  target: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>`,
-  tree: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5l-2-2"></path><path d="M17 16.5c-2.5 0-4.5-2-4.5-4.5S14.5 7.5 17 7.5s4.5 2 4.5 4.5-2 4.5-4.5 4.5"></path><path d="M12 7.5V4"></path><path d="M7 16.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"></path></svg>`,
-  trophy: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H15a2.5 2.5 0 0 1 0 5H13"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H9a2.5 2.5 0 0 0 0 5H7"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 2.5-2 2.5-2 5h0c0-2.5-2-2.5-2-5v-2.34"></path><path d="M14 14.66V17c0 2.5 2 2.5 2 5h0c0-2.5 2-2.5 2-5v-2.34"></path></svg>`,
-  user: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
-  utensils: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h4Z"></path><path d="M18 15h.01"></path></svg>`,
-  volume: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M9 4h.01"></path><path d="M15 4h.01"></path></svg>`,
-  workout: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>`,
-  x: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-};
-
-function icon(name) {
-  return Icons[name] || "";
-}
-
 function normalizeWorkoutExerciseName(value) {
   return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
     .replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ")
@@ -693,285 +654,62 @@ async function loadTodayData(generation) {
 }
 
 function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false) {
-  const greetingEl = $("today-greeting");
-  const profile = AuthState.user;
-  greetingEl.textContent = `Hi, ${profile?.name?.split(" ")[0] || "Owner"}`;
-
   const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
   const nextWod = plan?.nextWorkout?.label || null;
-  const workoutLabel = plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete" : "No active plan");
-  const splitLabel = activePlanLabel || "Choose a workout structure";
-  const statusText = plan?.cycleStatus || "—";
-  const recentlyTrained = plan?.recentlyTrainedMuscles?.[0]?.muscle || null;
-  const planLocked = plan?.planSwitchAllowed === false && plan?.activePlan;
-  const totalUnits = plan?.units?.length || 0;
+  const statusInfo = activePlanLabel
+    ? `${activePlanLabel} · ${plan.cycleStatus}${nextWod ? " · Next: " + nextWod : ""}`
+    : "Choose a workout structure in the Workout tab";
 
   el.innerHTML = `
-    <section class="today-card today-workout-card" aria-labelledby="today-workout-title">
-      <header class="today-card-header">
-        <span class="today-card-label" id="today-workout-title">TODAY'S WORKOUT</span>
-        ${planLocked ? `<span class="today-lock-badge" aria-label="Plan locked">${icon("lock")}</span>` : ""}
-      </header>
-      <div class="today-workout-main">
-        <div class="today-workout-info">
-          <h2 class="today-workout-name">${escapeHtml(workoutLabel)}</h2>
-          <div class="today-workout-meta">
-            <span class="today-workout-status ${statusText === "COMPLETED" ? "completed" : "in-progress"}">
-              ${icon(statusText === "COMPLETED" ? "checkCircle" : "activity")}
-              ${statusText === "COMPLETED" ? "Completed" : "In progress"}
-            </span>
-            <span class="today-workout-split">${escapeHtml(splitLabel)}</span>
-          </div>
-        </div>
-      </div>
-      ${recentlyTrained ? `<div class="today-workout-recent">
-        <span class="today-recent-label">Recently trained</span>
-        <span class="today-recent-muscle">${escapeHtml(recentlyTrained)}</span>
-      </div>` : ""}
-      ${planLocked ? `<div class="today-lock-notice">
-        ${icon("lock")}
-        <div>
-          <strong>Plan switching locked</strong>
-          <span>Complete all ${totalUnits} workouts in this cycle to switch plans.</span>
-        </div>
-      </div>` : ""}
-      ${plan?.decision?.warning ? `<div class="today-warning-banner">
-        ${icon("info")}
-        <span>${escapeHtml(plan.decision.warning)}</span>
-      </div>` : ""}
-    </section>
-
-    <div class="today-stats-grid">
-      <article class="today-stat-card">
-        <div class="today-stat-icon">${icon("flame")}</div>
-        <div class="today-stat-content">
-          <span class="today-stat-label">Calories</span>
-          <span class="today-stat-value">${nutrition ? nutrition.totals.calories : "—"}</span>
-          <span class="today-stat-sub">${nutrition ? "planned today" : "no plan yet"}</span>
-        </div>
-      </article>
-      <article class="today-stat-card">
-        <div class="today-stat-icon">${icon("utensils")}</div>
-        <div class="today-stat-content">
-          <span class="today-stat-label">Nearby Food</span>
-          <span class="today-stat-value">${nutrition ? nutrition.meals.length : 0}</span>
-          <span class="today-stat-sub">meals available</span>
-        </div>
-      </article>
-      <article class="today-stat-card">
-        <div class="today-stat-icon">${icon("dumbbell")}</div>
-        <div class="today-stat-content">
-          <span class="today-stat-label">Weekly Volume</span>
-          <span class="today-stat-value">${dashboard.progress.weeklyVolumeKg}kg</span>
-          <span class="today-stat-sub">${dashboard.progress.workoutsThisWeek} workouts</span>
-        </div>
-      </article>
-      <article class="today-stat-card">
-        <div class="today-stat-icon">${icon("gym")}</div>
-        <div class="today-stat-content">
-          <span class="today-stat-label">Gym Check-in</span>
-          <span class="today-stat-value">${gym && gym.checkedIn ? "Done" : "—"}</span>
-          <span class="today-stat-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</span>
-        </div>
-      </article>
+    <div class="card">
+      <div class="card-label">🏋️ Today's Workout Plan</div>
+      <div class="card-value">${plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete — new cycle or switch plan" : "No active plan")}</div>
+      <div class="card-sub">${statusInfo}</div>
+      ${plan?.recentlyTrainedMuscles?.length
+        ? `<div class="card-sub">Recently trained: ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
+        : ""}
+      ${plan?.planSwitchAllowed === false && plan?.activePlan
+        ? `<div class="banner banner-info" style="margin-top:8px;">🔒 Plan switching locked — finish all ${plan.units?.length || 0} workouts in this cycle first.</div>`
+        : ""}
+      ${plan?.decision?.warning
+        ? `<div class="banner banner-info" style="margin-top:8px;">⚠️ ${plan.decision.warning}</div>`
+        : ""}
     </div>
-
-    ${growImpact ? renderGrowImpactCompact(growImpact) : renderGrowImpactUnavailableCompact(growImpactError)}
+      <div class="card-grid-2">
+      <div class="card">
+        <div class="card-label">🔥 Calories</div>
+        <div class="card-value">${nutrition ? nutrition.totals.calories : "—"}</div>
+        <div class="card-sub">${nutrition ? "planned today" : "no plan yet"}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🍽️ Nearby food</div>
+        <div class="card-value">${nutrition ? nutrition.meals.length : 0}</div>
+        <div class="card-sub">meals to find nearby</div>
+      </div>
+    </div>
+    <div class="card-grid-2">
+      <div class="card">
+        <div class="card-label">📊 Weekly Volume</div>
+        <div class="card-value">${dashboard.progress.weeklyVolumeKg}kg</div>
+        <div class="card-sub">${dashboard.progress.workoutsThisWeek} workouts this week</div>
+      </div>
+      <div class="card">
+        <div class="card-label">📇 Gym</div>
+        <div class="card-value">${gym && gym.checkedIn ? "✓" : "—"}</div>
+        <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
+      </div>
+    </div>
+    ${growImpact ? renderGrowImpact(growImpact) : renderGrowImpactUnavailable(growImpactError)}
   `;
-
   bindGrowImpactActions(el);
 }
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]);
-}
-
-function renderGrowImpactUnavailableCompact(failed) {
-  return `<section class="today-card today-grow-card" aria-labelledby="grow-impact-title" role="status">
-    <header class="today-card-header">
-      <span class="today-card-label" id="grow-impact-title">${icon("tree")} Monthly Consistency</span>
-    </header>
-    <div class="today-grow-unavailable">
-      <p class="today-grow-message">${failed ? "Your monthly progress could not be loaded." : "Loading your monthly progress…"}</p>
-      ${failed ? '<button class="btn btn-outline btn-sm" type="button" data-retry-grow-impact>Try again</button>' : ""}
-    </div>
+function renderGrowImpactUnavailable(failed) {
+  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title" role="status">
+    <div class="card-label" id="grow-impact-title">🌱 Grow Your Impact</div>
+    <p class="card-sub">${failed ? "Your saved workout progress could not be loaded." : "Loading your saved workout progress…"}</p>
+    ${failed ? '<button class="btn btn-secondary" type="button" data-retry-grow-impact>Try again</button>' : ""}
   </section>`;
-}
-
-function renderGrowImpactCompact(impact) {
-  const percent = Math.max(0, Math.min(100, Number(impact.progressPercent) || 0));
-  const count = Number(impact.sessions) || 0;
-  const target = Math.max(0, Number(impact.target) || 0);
-  const completed = count >= target && target > 0;
-  const monthLabel = impact.month || "";
-  const regionName = impact.location?.regionName || "";
-  const countryName = impact.location?.countryName || "";
-  const streak = impact.completedSessionDates ? calculateStreak(impact.completedSessionDates) : 0;
-
-  return `<section class="today-card today-grow-card" aria-labelledby="grow-impact-title" data-month="${escapeHtml(monthLabel)}" data-open-holiday-dates="${escapeHtml(JSON.stringify(impact.settings?.gymOpenOnHolidayDates || []))}" data-additional-closure-dates="${escapeHtml(JSON.stringify(impact.settings?.additionalClosureDates || []))}">
-    <header class="today-card-header">
-      <span class="today-card-label" id="grow-impact-title">${icon("tree")} Monthly Consistency</span>
-      <label class="today-grow-month-select" aria-label="Choose month">
-        <input class="grow-impact-month" type="month" data-impact-month value="${escapeHtml(monthLabel)}" />
-        ${icon("chevronDown")}
-      </label>
-    </header>
-    <div class="today-grow-progress">
-      <div class="today-grow-progress-main">
-        <div class="today-grow-sessions">
-          <span class="today-grow-count">${count}</span>
-          <span class="today-grow-target">of ${target} sessions</span>
-        </div>
-        <div class="today-grow-bar-wrap" role="progressbar" aria-label="Monthly gym session progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}">
-          <div class="today-grow-bar" style="width:${percent}%"></div>
-        </div>
-      </div>
-      <div class="today-grow-metrics">
-        <div class="today-grow-metric">
-          <span class="today-grow-metric-value">${impact.calendarDays || 0}</span>
-          <span class="today-grow-metric-label">Days in month</span>
-        </div>
-        <div class="today-grow-metric">
-          <span class="today-grow-metric-value">${streak}</span>
-          <span class="today-grow-metric-label">Current streak</span>
-        </div>
-        <div class="today-grow-metric">
-          <span class="today-grow-metric-value">${impact.remaining || 0}</span>
-          <span class="today-grow-metric-label">Sessions left</span>
-        </div>
-      </div>
-      ${completed ? `<p class="today-grow-complete">${icon("checkCircle")} Monthly target reached — reward unlocked</p>` : `<p class="today-grow-remaining">${icon("target")} ${impact.remaining || 0} more session${impact.remaining === 1 ? "" : "s"} to reach target</p>`}
-    </div>
-    <details class="today-grow-details">
-      <summary>View details</summary>
-      <div class="today-grow-details-content">
-        <div class="today-grow-stats">
-          <span><strong>${impact.calendarDays}</strong> total days</span>
-          <span><strong>${impact.sundayRestDays}</strong> Sundays</span>
-          <span><strong>${impact.holidayCount}</strong> public holidays</span>
-          <span><strong>${impact.additionalClosureCount || 0}</strong> additional closures</span>
-          <span><strong>${impact.eligibleDays}</strong> eligible gym days</span>
-          <span><strong>${count}</strong> completed</span>
-          <span><strong>${impact.remaining}</strong> remaining</span>
-        </div>
-        <p class="today-grow-location">${escapeHtml(regionName)}, ${escapeHtml(countryName)} · ${escapeHtml(impact.timeZone)}</p>
-        ${impact.holidayCalendarConfigured === false ? `<p class="today-grow-warning">No public holiday calendar configured for ${escapeHtml(String(impact.year))}. Target excludes Sundays and closures only.</p>` : ""}
-        <div class="today-grow-tree-preview">
-          ${renderGrowImpactTreePreview(impact)}
-        </div>
-        <details class="today-grow-calendar-settings">
-          <summary>Calendar & gym closures</summary>
-          <div class="today-grow-settings-content">
-            <label class="today-grow-setting-label">Holiday location
-              <select data-impact-location>${renderGrowImpactLocations(impact.locations, impact.location?.key)}</select>
-            </label>
-            <p class="today-grow-setting-note">Public holidays are excluded by default. Check a holiday if your gym stays open. Add other dates when your gym is closed.</p>
-            ${renderGrowImpactHolidays(impact.holidayDates, impact.settings?.gymOpenOnHolidayDates || [])}
-            <label class="today-grow-setting-label">Additional gym closure
-              <input type="date" data-impact-new-closure />
-            </label>
-            <button type="button" class="btn btn-outline btn-sm today-grow-add-closure">Add closure</button>
-            ${renderGrowImpactClosures(impact.settings?.additionalClosureDates || [], impact.month)}
-            <button type="button" class="btn btn-primary btn-sm today-grow-save-settings">Save settings</button>
-          </div>
-        </details>
-        <p class="today-grow-feedback" role="status" aria-live="polite"></p>
-        <p class="today-grow-disclaimer">Pilot reward · virtual commitment only. FitOS does not claim a real tree has been planted.</p>
-      </div>
-    </details>
-  </section>`;
-}
-
-function calculateStreak(dates) {
-  if (!dates || !dates.length) return 0;
-  const sorted = [...dates].sort((a, b) => new Date(b) - new Date(a));
-  let streak = 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < sorted.length; i++) {
-    const date = new Date(sorted[i]);
-    date.setHours(0, 0, 0, 0);
-    const diff = Math.floor((today - date) / (1000 * 60 * 60 * 24));
-    if (i === 0 && diff > 1) return 0;
-    if (diff === i) streak++;
-    else break;
-  }
-  return streak;
-}
-
-function renderGrowImpactLocations(locations, selectedKey) {
-  return (locations || []).map((loc) =>
-    `<option value="${escapeHtml(loc.key)}" ${loc.key === selectedKey ? "selected" : ""}>${escapeHtml(loc.regionName)}, ${escapeHtml(loc.countryName)}</option>`
-  ).join("");
-}
-
-function renderGrowImpactHolidays(holidays, openDates) {
-  const openSet = new Set(openDates || []);
-  const publicHolidays = (holidays || []).filter((h) => h.source === "public");
-  if (!publicHolidays.length) return `<p class="today-grow-setting-note">No public holidays this month.</p>`;
-  return `<div class="today-grow-holiday-list">${publicHolidays.map((holiday) => {
-    const checked = openSet.has(holiday.date);
-    return `<label class="today-grow-holiday"><input type="checkbox" data-impact-open-holiday value="${escapeHtml(holiday.date)}" ${checked ? "checked" : ""} /><span>${escapeHtml(holiday.date)} · ${escapeHtml(holiday.name)}${holiday.sunday ? " (Sunday)" : ""}</span></label>`;
-  }).join("")}</div>`;
-}
-
-function renderGrowImpactClosures(closures, month) {
-  const monthClosures = (closures || []).filter((d) => d.startsWith(`${month}-`));
-  if (!monthClosures.length) return "";
-  return `<ul class="today-grow-closure-list">${monthClosures.map((date) =>
-    `<li><span>${escapeHtml(date)}</span><button type="button" data-remove-impact-closure="${escapeHtml(date)}" aria-label="Remove closure on ${escapeHtml(date)}">${icon("x")}</button></li>`
-  ).join("")}</ul>`;
-}
-
-function renderGrowImpactTreePreview(impact) {
-  const reward = impact.reward;
-  const trees = impact.trees || [];
-  const completed = (impact.sessions || 0) >= (impact.target || 0) && (impact.target || 0) > 0;
-
-  if (!reward && completed) {
-    return `<p class="today-grow-unlocked">Reward unlocked. Choose a tree:</p>
-      <div class="today-grow-tree-options">${trees.map((t) => renderGrowImpactTreeOption(t, null)).join("")}</div>`;
-  }
-  if (reward?.status === "unlocked" && completed) {
-    return `<p class="today-grow-unlocked">Reward unlocked. Choose a tree:</p>
-      <div class="today-grow-tree-options">${trees.map((t) => renderGrowImpactTreeOption(t, null)).join("")}</div>`;
-  }
-  if (reward?.status === "selected") {
-    const tree = trees.find((t) => t.id === reward.selectedSpeciesId) || { name: reward.selectedTreeName, species: reward.selectedSpecies, image: reward.selectedTreeImage, description: "" };
-    return `<div class="today-grow-tree-selected">
-      <img src="${escapeHtml(tree.image)}" alt="" loading="lazy" />
-      <div><strong>${escapeHtml(tree.name)}</strong><span>${escapeHtml(tree.species)}</span><small>${escapeHtml(tree.description)}</small></div>
-    </div>
-    <button class="btn btn-primary btn-sm today-grow-confirm">Confirm this tree</button>
-    <div class="today-grow-tree-options">${trees.map((t) => renderGrowImpactTreeOption(t, tree.id)).join("")}</div>`;
-  }
-  if (reward?.status === "confirmed") {
-    const tree = trees.find((t) => t.id === reward.selectedSpeciesId) || { name: reward.selectedTreeName, species: reward.selectedSpecies, image: reward.selectedTreeImage, description: "" };
-    const isVerified = reward.plantingStatus === "planted_verified";
-    const stage = reward.virtualStage || { label: "Choice saved", elapsedDays: 0 };
-    const latestUpdate = reward.verifiedUpdates?.[0];
-    const plantingLocation = latestUpdate?.location || reward.plantingLocation;
-    const plantedAt = latestUpdate?.plantedAt || reward.plantedAt;
-    const verifiedPhotos = isVerified ? (latestUpdate?.verifiedPhotos?.length ? latestUpdate.verifiedPhotos : reward.verifiedPhotos || []) : [];
-    return `<div class="today-grow-tree-confirmed">
-      <img src="${escapeHtml(tree.image)}" alt="" loading="lazy" />
-      <div><strong>${escapeHtml(tree.name)}</strong><span>${escapeHtml(tree.species)}</span><small>${isVerified ? "Planting verified by partner" : "Virtual growth journey — illustrative only"}</small></div>
-    </div>
-    ${isVerified && plantingLocation ? `<p class="today-grow-partner-note">Verified: ${escapeHtml(plantingLocation)}${plantedAt ? ` · ${escapeHtml(plantedAt)}` : ""}</p>` : ""}
-    ${verifiedPhotos.length ? `<div class="today-grow-photos">${verifiedPhotos.map((src) => `<img src="${escapeHtml(src)}" alt="Partner update" loading="lazy" />`).join("")}</div>` : ""}`;
-  }
-  return `<p class="today-grow-remaining">${icon("target")} Complete ${impact.target || 0} sessions to unlock a tree reward</p>`;
-}
-
-function renderGrowImpactTreeOption(option, selectedId) {
-  const selected = selectedId === option.id;
-  return `<button class="today-grow-tree-option${selected ? " selected" : ""}" type="button" data-grow-tree="${escapeHtml(option.id)}" aria-pressed="${selected}">
-    <img src="${escapeHtml(option.image)}" alt="" loading="lazy" />
-    <span><strong>${escapeHtml(option.name)}</strong><small>${escapeHtml(option.species)}</small></span>
-    <span class="today-grow-tree-check" aria-hidden="true">${selected ? icon("check") : icon("plus")}</span>
-  </button>`;
 }
 
 function escapeImpactText(value) {
@@ -1174,12 +912,12 @@ function bindGrowImpactActions(root) {
       await Api.post("/grow-impact/select", { speciesId: button.dataset.growTree, month });
       await refreshCard(month);
     } catch (error) {
-      const feedback = root.querySelector(".today-grow-feedback");
+      const feedback = root.querySelector(".grow-impact-feedback");
       if (feedback) feedback.textContent = error?.message || "Could not save your tree choice.";
       button.disabled = false;
     }
   }));
-  const confirmButton = root.querySelector(".today-grow-confirm");
+  const confirmButton = root.querySelector(".grow-impact-confirm");
   confirmButton?.addEventListener("click", async () => {
     confirmButton.disabled = true;
     try {
@@ -1187,21 +925,21 @@ function bindGrowImpactActions(root) {
       await Api.post("/grow-impact/confirm", { month });
       await refreshCard(month);
     } catch (error) {
-      const feedback = root.querySelector(".today-grow-feedback");
+      const feedback = root.querySelector(".grow-impact-feedback");
       if (feedback) feedback.textContent = error?.message || "Could not confirm your tree choice.";
       confirmButton.disabled = false;
     }
   });
 
   const refreshCard = async (month, settingsPayload) => {
-    const feedback = root.querySelector(".today-grow-feedback");
+    const feedback = root.querySelector(".grow-impact-feedback");
     try {
       if (settingsPayload) await Api.put("/grow-impact/settings", settingsPayload);
       const query = new URLSearchParams();
       if (month) query.set("month", month);
       const impact = await Api.get(`/grow-impact/?${query.toString()}`);
-      const card = root.querySelector(".today-grow-card");
-      if (card) card.outerHTML = renderGrowImpactCompact(impact);
+      const card = root.querySelector(".grow-impact-card");
+      if (card) card.outerHTML = renderGrowImpact(impact);
       bindGrowImpactActions(root);
     } catch (error) {
       if (feedback) feedback.textContent = error?.message || "Could not update the monthly calendar.";
@@ -1214,7 +952,7 @@ function bindGrowImpactActions(root) {
   });
 
   const buildSettingsPayload = (clearOpenHolidayDates = false) => {
-    const card = root.querySelector(".today-grow-card");
+    const card = root.querySelector(".grow-impact-card");
     const locationKey = card?.querySelector("[data-impact-location]")?.value;
     const month = card?.querySelector("[data-impact-month]")?.value;
     const currentOpenDates = card?.querySelectorAll("[data-impact-open-holiday]:checked") || [];
@@ -1234,13 +972,13 @@ function bindGrowImpactActions(root) {
     void refreshCard(root.querySelector("[data-impact-month]")?.value, payload);
   });
 
-  root.querySelector(".today-grow-save-settings")?.addEventListener("click", () => {
+  root.querySelector(".grow-impact-save-settings")?.addEventListener("click", () => {
     const payload = buildSettingsPayload(false);
     void refreshCard(root.querySelector("[data-impact-month]")?.value, payload);
   });
 
-  root.querySelector(".today-grow-add-closure")?.addEventListener("click", () => {
-    const card = root.querySelector(".today-grow-card");
+  root.querySelector(".grow-impact-add-closure")?.addEventListener("click", () => {
+    const card = root.querySelector(".grow-impact-card");
     const date = card?.querySelector("[data-impact-new-closure]")?.value;
     if (!date) return;
     const payload = buildSettingsPayload(false);
@@ -1249,7 +987,7 @@ function bindGrowImpactActions(root) {
   });
 
   root.querySelectorAll("[data-remove-impact-closure]").forEach((button) => button.addEventListener("click", () => {
-    const card = root.querySelector(".today-grow-card");
+    const card = root.querySelector(".grow-impact-card");
     const payload = buildSettingsPayload(false);
     payload.additionalClosureDates = payload.additionalClosureDates.filter((date) => date !== button.dataset.removeImpactClosure);
     void refreshCard(card?.querySelector("[data-impact-month]")?.value, payload);
@@ -1273,9 +1011,8 @@ function handleTodayError(el, error) {
 function renderTodayError(el, message) {
   el.dataset.loadState = "error";
   el.innerHTML = `
-    <div class="today-error" role="alert">
-      <div class="today-error-icon">${icon("info")}</div>
-      <p class="today-error-message">${escapeHtml(message)}</p>
+    <div class="empty-state">
+      <div style="margin-bottom: 12px;">${message}</div>
       <button class="btn btn-primary" onclick="loadToday()">Retry</button>
     </div>
   `;
