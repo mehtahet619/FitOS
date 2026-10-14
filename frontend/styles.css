@@ -575,6 +575,9 @@ html, body {
 .workout-edit-form label { display: grid; gap: 5px; color: #68707a; font-size: 11px; font-weight: 700; }
 .workout-edit-form input, .workout-edit-form select { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--ink); font-size: 13px; }
 .workout-edit-form small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.workout-edit-suggestions { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--ink); font-size: 12px; }
+.workout-edit-suggestions[hidden] { display: none; }
+.workout-edit-suggestions select { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--ink); }
 .workout-finish-note { margin: 12px 4px 8px; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: center; }
 .workout-complete-card { padding: 25px 18px; margin-bottom: 14px; border: 1px solid #c9ecd9; border-radius: var(--radius-lg); background: #e8f9f1; text-align: center; }
 .workout-complete-mark { display: grid; width: 48px; height: 48px; margin: 0 auto 11px; place-items: center; border-radius: 50%; background: var(--mint-strong); font-size: 24px; font-weight: 900; }

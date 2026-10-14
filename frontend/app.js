@@ -1621,6 +1621,7 @@ function renderWorkout(workout, plan) {
           <label>Target muscle<select name="targetMuscle" required>${targetMuscles.map((muscle) => `<option value="${escapeWorkoutText(muscle)}" ${muscle.toLowerCase() === String(exercise.primaryMuscle || "").toLowerCase() ? "selected" : ""}>${escapeWorkoutText(muscle)}</option>`).join("")}</select></label>
           <label>Equipment<input name="equipmentName" list="workout-equipment-options" maxlength="80" required value="${escapeWorkoutText(equipment)}"></label>
           <button class="btn btn-primary" type="submit">Save and rebalance workout</button>
+          <div class="workout-edit-suggestions" hidden></div>
           <button class="btn btn-outline" type="button" data-action="cancel-edit">Cancel</button>
           <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
@@ -1791,10 +1792,21 @@ function renderWorkout(workout, plan) {
   el.querySelectorAll('[data-action="cancel-edit"]').forEach((button) => {
     button.addEventListener("click", () => {
       const form = button.closest(".workout-edit-form");
-      if (form) form.hidden = true;
+      if (form) {
+        form.hidden = true;
+        delete form.dataset.confirmedExerciseId;
+        const suggestions = form.querySelector(".workout-edit-suggestions");
+        if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
+      }
     });
   });
   el.querySelectorAll(".workout-edit-form").forEach((form) => {
+    const nameInput = form.elements.exerciseName;
+    nameInput.addEventListener("input", () => {
+      delete form.dataset.confirmedExerciseId;
+      const suggestions = form.querySelector(".workout-edit-suggestions");
+      if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
+    });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const submitButton = form.querySelector('[type="submit"]');
@@ -1803,6 +1815,7 @@ function renderWorkout(workout, plan) {
         exerciseName: form.elements.exerciseName.value,
         targetMuscle: form.elements.targetMuscle.value,
         equipmentName: form.elements.equipmentName.value,
+        ...(form.dataset.confirmedExerciseId ? { confirmedExerciseId: form.dataset.confirmedExerciseId } : {}),
       };
       submitButton.disabled = true;
       submitButton.textContent = "Rebalancing workout…";
@@ -1811,7 +1824,38 @@ function renderWorkout(workout, plan) {
         await loadWorkout();
         showWorkoutNotice(`Exercise updated. FitOS refreshed ${result.rebalancedExerciseCount} other movement${result.rebalancedExerciseCount === 1 ? "" : "s"} for workout coverage.`, "success");
       } catch (error) {
-        showWorkoutNotice(error.message || "Could not edit the exercise.", "error");
+        if (error.body?.code === "EXERCISE_CONFIRMATION_REQUIRED" && Array.isArray(error.body.suggestions)) {
+          const suggestions = form.querySelector(".workout-edit-suggestions");
+          const select = document.createElement("select");
+          select.setAttribute("aria-label", "Choose a matching exercise");
+          select.required = true;
+          select.innerHTML = `<option value="">Choose a matching exercise</option>`;
+          error.body.suggestions.forEach((candidate) => {
+            const option = document.createElement("option");
+            option.value = candidate.id;
+            option.textContent = `${candidate.name} (${candidate.score}% match)`;
+            option.dataset.name = candidate.name;
+            select.append(option);
+          });
+          const confirm = document.createElement("button");
+          confirm.type = "button";
+          confirm.className = "btn btn-outline";
+          confirm.textContent = "Use selected exercise";
+          confirm.addEventListener("click", () => {
+            const option = select.selectedOptions[0];
+            if (!option?.value) { select.focus(); return; }
+            nameInput.value = option.dataset.name;
+            form.dataset.confirmedExerciseId = option.value;
+            suggestions.hidden = true;
+            form.requestSubmit();
+          });
+          suggestions.replaceChildren(document.createTextNode("Did you mean one of these catalogue exercises?"), select, confirm);
+          suggestions.hidden = false;
+        } else {
+          showWorkoutNotice(error.body?.code === "EXERCISE_NOT_FOUND"
+            ? "We couldn't find that exercise. Choose an exercise from the suggestions or keep your current exercise."
+            : error.message || "Could not edit the exercise.", "error");
+        }
         submitButton.disabled = false;
         submitButton.textContent = "Save and rebalance workout";
       }

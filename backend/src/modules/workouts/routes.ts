@@ -767,7 +767,36 @@ const editExerciseSchema = z.object({
   exerciseName: z.string().trim().min(2).max(100),
   targetMuscle: z.string().trim().min(1).max(80),
   equipmentName: z.string().trim().min(1).max(80),
+  confirmedExerciseId: z.string().min(1).optional(),
 });
+
+const exerciseEditMatchThreshold = (() => {
+  const configured = Number(process.env.EXERCISE_EDIT_MATCH_THRESHOLD);
+  return Number.isFinite(configured) && configured >= 0.5 && configured <= 1 ? configured : 0.72;
+})();
+
+function editNameSimilarity(left: string, right: string): number {
+  const a = normalizeExerciseValue(left);
+  const b = normalizeExerciseValue(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = previous[j];
+      previous[j] = Math.min(previous[j] + 1, previous[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return 1 - previous[b.length] / Math.max(a.length, b.length);
+}
+
+function editMuscles(exercise: { primaryMuscle?: string; secondaryMuscles?: string }): string[] {
+  return [exercise.primaryMuscle, ...(exercise.secondaryMuscles || "").split(",")]
+    .filter((muscle): muscle is string => Boolean(muscle?.trim()));
+}
 
 workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   const parsed = replaceSchema.safeParse(req.body);
@@ -981,11 +1010,6 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     `SELECT * FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC`, req.params.id);
   const slot = slots.find((exercise) => exercise.id === workoutExerciseId);
   if (!slot) return res.status(404).json({ error: "Workout exercise not found" });
-  if (slots.some((exercise) => exercise.id !== slot.id
-    && normalizeExerciseValue(exercise.sourceExerciseName || "") === normalizeExerciseValue(exerciseName))) {
-    return res.status(409).json({ error: "That exercise is already in this workout." });
-  }
-
   const targetMuscles = [...new Set([
     ...musclesForFocus(workout.focus),
     ...slots.map((exercise) => exercise.sourcePrimaryMuscle).filter(Boolean),
@@ -995,6 +1019,50 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   if (!selectedTargetMuscle) {
     return res.status(400).json({ error: "Choose a target muscle already included in this workout." });
   }
+
+  const catalogueExercises = await db.all<{
+    id: string; name: string; primaryMuscle?: string; secondaryMuscles?: string; requiresEquipment?: number;
+  }>(`SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment FROM Exercise ORDER BY name`);
+  const selectedExercise = parsed.data.confirmedExerciseId
+    ? catalogueExercises.find((exercise) => exercise.id === parsed.data.confirmedExerciseId)
+    : catalogueExercises.find((exercise) => normalizeExerciseValue(exercise.name) === normalizeExerciseValue(exerciseName));
+  if (parsed.data.confirmedExerciseId && !selectedExercise) {
+    return res.status(400).json({ error: "Choose an exercise from the FitOS exercise catalog." });
+  }
+  if (!selectedExercise) {
+    const suggestions = catalogueExercises
+      .map((exercise) => ({ ...exercise, score: editNameSimilarity(exerciseName, exercise.name) }))
+      .filter((exercise) => {
+        const muscles = editMuscles(exercise);
+        return !muscles.length || muscles.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(selectedTargetMuscle));
+      })
+      .filter((exercise) => exercise.score >= exerciseEditMatchThreshold)
+      .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+      .slice(0, 5)
+      .map(({ id, name, score }) => ({ id, name, score: Math.round(score * 100) }));
+    if (suggestions.length) {
+      return res.status(422).json({
+        code: "EXERCISE_CONFIRMATION_REQUIRED",
+        error: "Choose the matching exercise to continue.",
+        suggestions,
+      });
+    }
+    return res.status(422).json({
+      code: "EXERCISE_NOT_FOUND",
+      error: "We couldn't find that exercise. Choose an exercise from the suggestions or keep your current exercise.",
+      suggestions: [],
+    });
+  }
+  const selectedExerciseMuscles = editMuscles(selectedExercise);
+  if (selectedExerciseMuscles.length && !selectedExerciseMuscles.some((muscle) =>
+    normalizeExerciseValue(muscle) === normalizeExerciseValue(selectedTargetMuscle))) {
+    return res.status(422).json({ error: `${selectedExercise.name} is not mapped to ${selectedTargetMuscle}. Choose a compatible exercise and target muscle.` });
+  }
+  if (slots.some((exercise) => exercise.id !== slot.id
+    && normalizeExerciseValue(exercise.sourceExerciseName || "") === normalizeExerciseValue(selectedExercise.name))) {
+    return res.status(409).json({ error: "That exercise is already in this workout." });
+  }
+  const canonicalExerciseName = selectedExercise.name;
 
   const allEquipment = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
   const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
@@ -1030,18 +1098,20 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   }
 
   const chosenMachine = isBodyweight ? "Bodyweight" : selectedEquipment!.name;
-  const manualExercise: RecommendedExercise = {
-    sourceIndex: -1,
-    exercise: exerciseName,
-    machine: chosenMachine,
-    muscle: selectedTargetMuscle,
-    primaryMuscle: selectedTargetMuscle,
-    muscleCategories: [selectedTargetMuscle],
-    timeTakenOneSet: "User-selected",
-    targetedMuscle: selectedTargetMuscle,
-    targetedMuscles: [selectedTargetMuscle],
-  };
-
+  if (selectedExercise.requiresEquipment === 0 && !isBodyweight) {
+    return res.status(422).json({ error: `${selectedExercise.name} does not require equipment. Choose Bodyweight.` });
+  }
+  if (selectedExercise.requiresEquipment === 1 && isBodyweight) {
+    return res.status(422).json({ error: `${selectedExercise.name} requires equipment. Choose compatible equipment.` });
+  }
+  const mappedEquipment = await db.all<{ name: string }>(
+    `SELECT eq.name FROM ExerciseEquipment ee JOIN Equipment eq ON eq.id = ee.equipmentId WHERE ee.exerciseId = ?`,
+    selectedExercise.id,
+  );
+  if (mappedEquipment.length && !isBodyweight
+    && !mappedEquipment.some((row) => normalizeExerciseValue(row.name) === normalizeExerciseValue(chosenMachine))) {
+    return res.status(422).json({ error: `${selectedExercise.name} is not mapped to ${chosenMachine}. Choose compatible equipment.` });
+  }
   const otherSlots = slots.filter((exercise) => exercise.id !== slot.id);
   const remainingCoverage = targetMuscles.filter((muscle) => normalizeExerciseValue(muscle) !== normalizeExerciseValue(selectedTargetMuscle));
   const coverageTargets = remainingCoverage.length ? remainingCoverage : targetMuscles;
@@ -1057,7 +1127,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
       requestedCount: otherSlots.length,
       availableEquipment: recommendationEquipment,
       equipmentMode: fullGym ? "FULL_GYM" : workout.equipmentMode === "SCANNED" ? "SCANNED" : "USER_EQUIPMENT",
-      excludedExerciseNames: [exerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean)],
+      excludedExerciseNames: [canonicalExerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean)],
     }).exercises
     : [];
   if (recommendations.length < otherSlots.length) {
@@ -1076,19 +1146,17 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
       sessionDurationMinutes: workout.durationMin,
       count: missingCount,
       equipment: fallbackEquipment,
-      excludedExerciseNames: [exerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean), ...recommendations.map((exercise) => exercise.exercise)],
+      excludedExerciseNames: [canonicalExerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName).filter(Boolean), ...recommendations.map((exercise) => exercise.exercise)],
     });
     recommendations = [...recommendations, ...aiRecommendations.map((exercise, index) => ({
       ...exercise,
       sourceIndex: -1000 - index,
     }))];
   }
-  const persisted = await ensureExerciseRows(db, [manualExercise, ...recommendations]);
-  const manualRecord = persisted.get(manualExercise.sourceIndex);
-  if (!manualRecord) throw new Error(`Could not persist the user-selected exercise "${exerciseName}".`);
+  const persisted = await ensureExerciseRows(db, recommendations);
   await db.run(
     `UPDATE WorkoutExercise SET exerciseId=?,status='pending',sourceExerciseName=?,sourceMuscle=?,sourcePrimaryMuscle=?,sourceMachine=? WHERE id=? AND workoutId=?`,
-    manualRecord.id, exerciseName, selectedTargetMuscle, selectedTargetMuscle, chosenMachine, slot.id, req.params.id,
+    selectedExercise.id, canonicalExerciseName, selectedTargetMuscle, selectedTargetMuscle, chosenMachine, slot.id, req.params.id,
   );
   for (const [index, exercise] of recommendations.entries()) {
     const exerciseRecord = persisted.get(exercise.sourceIndex);
