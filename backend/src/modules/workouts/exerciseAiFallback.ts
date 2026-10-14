@@ -24,6 +24,22 @@ interface ProviderConfig {
   url: string;
 }
 
+export interface AiExerciseValidationInput {
+  exerciseName: string;
+  muscles: string[];
+  equipment: string[];
+}
+
+export interface AiExerciseValidation {
+  valid: boolean;
+  canonicalName?: string;
+  primaryMuscle?: string;
+  secondaryMuscles: string[];
+  equipmentName?: string;
+  confidence: number;
+  reason?: string;
+}
+
 function configuredProviders(): ProviderConfig[] {
   const providers: ProviderConfig[] = [];
   if (process.env.OPENAI_API_KEY) {
@@ -162,6 +178,126 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     : payload.content?.find((block: any) => block.type === "text")?.text;
   if (typeof content !== "string") throw new Error("Provider returned no text content.");
   return content;
+}
+
+async function callExerciseValidator(provider: ProviderConfig, input: AiExerciseValidationInput): Promise<string> {
+  const prompt = {
+    task: "Validate a user-entered strength-training exercise and identify its catalogue mapping.",
+    exerciseName: input.exerciseName,
+    allowedMuscles: input.muscles,
+    allowedEquipment: input.equipment,
+    rules: [
+      "Decide whether this is a real, recognized strength-training exercise, not an invented or nonsensical phrase.",
+      "If valid, return its conventional canonical exercise name, primary muscle, any secondary muscles, and the equipment needed.",
+      "Use only exact values from allowedMuscles and allowedEquipment. If a muscle or equipment cannot be mapped, return valid=false.",
+      "Do not claim an exercise targets a muscle just because it may stabilize it; distinguish primary and secondary muscles.",
+      "Return confidence from 0 to 1 and a short reason.",
+      "Return only JSON with valid, canonicalName, primaryMuscle, secondaryMuscles, equipmentName, confidence, and reason fields.",
+    ],
+  };
+  const system = "You validate conventional resistance-training movements conservatively. Do not invent exercises, muscles, or equipment. Return valid JSON only.";
+  const body = provider.name !== "Anthropic"
+    ? {
+      model: provider.model,
+      temperature: 0,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(prompt) },
+      ],
+    }
+    : {
+      model: provider.model,
+      temperature: 0,
+      max_tokens: 500,
+      system,
+      messages: [{ role: "user", content: JSON.stringify(prompt) }],
+    };
+  const response = await fetch(provider.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(provider.name !== "Anthropic"
+        ? { Authorization: `Bearer ${provider.apiKey}` }
+        : { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" }),
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(7_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const payload = await response.json() as any;
+  const content = provider.name !== "Anthropic"
+    ? payload.choices?.[0]?.message?.content
+    : payload.content?.find((block: any) => block.type === "text")?.text;
+  if (typeof content !== "string") throw new Error("Provider returned no text content.");
+  return content;
+}
+
+/** Uses configured LLM providers only to validate and structure a new catalogue entry. */
+export async function validateUncataloguedExercise(
+  input: AiExerciseValidationInput,
+): Promise<AiExerciseValidation | null> {
+  const configured = configuredProviders();
+  const providers = [
+    ...configured.filter((provider) => provider.name === "OpenRouter" || provider.name === "Anthropic"),
+    ...configured.filter((provider) => provider.name === "OpenAI"),
+  ];
+  const muscleByKey = new Map(input.muscles.map((muscle) => [normalizeExerciseValue(muscle), muscle]));
+  const equipmentByKey = new Map(input.equipment.map((equipment) => [normalizeExerciseValue(equipment), equipment]));
+  const configuredThreshold = Number(process.env.EXERCISE_CATALOG_VALIDATION_THRESHOLD);
+  const confidenceThreshold = Number.isFinite(configuredThreshold) && configuredThreshold >= 0.5 && configuredThreshold <= 1
+    ? configuredThreshold
+    : 0.8;
+  let rejected: AiExerciseValidation | null = null;
+  for (const provider of providers) {
+    try {
+      const parsed = parseJson(await callExerciseValidator(provider, input)) as Record<string, unknown>;
+      const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
+      if (parsed.valid !== true) {
+        rejected = {
+          valid: false,
+          secondaryMuscles: [],
+          confidence,
+          reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : undefined,
+        };
+        continue;
+      }
+      if (confidence < confidenceThreshold || confidence > 1 || typeof parsed.canonicalName !== "string" || !parsed.canonicalName.trim()
+        || parsed.canonicalName.trim().length > 100) {
+        rejected = { valid: false, secondaryMuscles: [], confidence, reason: "The exercise could not be validated confidently." };
+        continue;
+      }
+      const primaryMuscle = typeof parsed.primaryMuscle === "string"
+        ? muscleByKey.get(normalizeExerciseValue(parsed.primaryMuscle))
+        : undefined;
+      const equipmentName = typeof parsed.equipmentName === "string"
+        ? equipmentByKey.get(normalizeExerciseValue(parsed.equipmentName))
+        : undefined;
+      const secondaryMuscles = Array.isArray(parsed.secondaryMuscles)
+        ? parsed.secondaryMuscles.map((muscle) => typeof muscle === "string"
+          ? muscleByKey.get(normalizeExerciseValue(muscle))
+          : undefined)
+        : [];
+      if (!primaryMuscle || !equipmentName || !Array.isArray(parsed.secondaryMuscles)
+        || secondaryMuscles.some((muscle) => !muscle)) {
+        rejected = { valid: false, secondaryMuscles: [], confidence, reason: "The exercise could not be mapped to FitOS muscles and equipment." };
+        continue;
+      }
+      return {
+        valid: true,
+        canonicalName: parsed.canonicalName.trim(),
+        primaryMuscle,
+        secondaryMuscles: [...new Set(secondaryMuscles as string[])],
+        equipmentName,
+        confidence,
+        reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : undefined,
+      };
+    } catch (error) {
+      console.warn(`[workouts] ${provider.name} exercise validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return rejected;
 }
 
 /** Dataset rows remain first choice. Call configured providers in order only for missing exercises. */
