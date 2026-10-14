@@ -44,6 +44,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
         return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => state.equipment.find((equipment) => equipment.id === row.equipmentId)).filter(Boolean) as T[];
       }
       if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return state.exercises as T[];
+      if (sql.includes("SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment FROM Exercise")) return state.exercises as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return state.equipment as T[];
       if (sql.includes("SELECT id FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0])
@@ -196,6 +197,8 @@ describe("workout API CSV flow", () => {
       'Dumbbell Pullover,Dumbbells,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Face Pull,Cable Machine,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
       'Bodyweight Row,Bodyweight,Back,25-45 sec,"Latissimus Dorsi, Rhomboid Major"',
+      'Deadlift,Barbell,Back,20-40 sec,"Gluteus Maximus, Hamstrings"',
+      'Dumbbell Deadlift,Dumbbells,Back,20-40 sec,"Gluteus Maximus, Hamstrings"',
       'Bench Press,Barbell,Chest,20-40 sec,"Pectoralis Major, Triceps Brachii"',
     ].join("\n");
     const service = new CsvExerciseRecommendationService(new CsvExerciseRepository("integration.csv", () => sampleCsv));
@@ -206,6 +209,16 @@ describe("workout API CSV flow", () => {
     const { db, state } = makeDatabase(planState);
     const selectedEquipment = ["Lat Pulldown", "Dumbbells", "Cable Machine"];
     state.equipment = selectedEquipment.concat("Barbell").map((name) => ({ id: `equipment-${name}`, name }));
+    state.exercises.push({
+      id: "catalog-dumbbell-deadlift", name: "Dumbbell Deadlift", primaryMuscle: "back", secondaryMuscles: "legs",
+      defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "",
+    });
+    state.links.push({ id: "catalog-dumbbell-deadlift-equipment", exerciseId: "catalog-dumbbell-deadlift", equipmentId: "equipment-Dumbbells" });
+    state.exercises.push(
+      { id: "catalog-deadlift", name: "Deadlift", primaryMuscle: "back", secondaryMuscles: "legs", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+      { id: "catalog-dumbbell-rows", name: "Dumbbell Rows", primaryMuscle: "back", secondaryMuscles: "", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+      { id: "catalog-bench-press", name: "Bench Press", primaryMuscle: "chest", secondaryMuscles: "", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "" },
+    );
     const oldCycleWorkout = {
       id: "old-cycle-back-session", userId: "integration-user", focus: "Back", status: "pending",
       durationMin: 60, planStepIndex: 0, cycleId: "previous-cycle", createdAt: "2026-09-01T00:00:00.000Z",
@@ -357,14 +370,80 @@ describe("workout API CSV flow", () => {
         .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
 
       const editSlotId = reorderIds[0];
+      const originalEditedExercise = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
+      const typoResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "dumbel deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(typoResponse.status).toBe(422);
+      const typoBody = await typoResponse.json() as any;
+      expect(typoBody.code).toBe("EXERCISE_CONFIRMATION_REQUIRED");
+      expect(typoBody.suggestions).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Dumbbell Deadlift" })]));
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
+
+      const typoRowResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "dumbel row", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      const typoRow = await typoRowResponse.json() as any;
+      expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Row", "Dumbbell Rows"]));
+      // The UI cancellation path hides these suggestions without issuing a confirmation request.
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
+
+      const bedliftResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "bedlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect((await bedliftResponse.json() as any).suggestions).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Deadlift" })]));
+
+      const nonsenseResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "hate", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(nonsenseResponse.status).toBe(422);
+      expect(await nonsenseResponse.json()).toMatchObject({
+        code: "EXERCISE_NOT_FOUND",
+        error: "We couldn't find that exercise. Choose an exercise from the suggestions or keep your current exercise.",
+      });
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
+
+      const emptyResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(emptyResponse.status).toBe(400);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
+
+      const wrongMuscleResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Bench Press", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(wrongMuscleResponse.status).toBe(422);
+
       const editResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Dumbbell Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "  dUmBbElL dEaDlIfT  ", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(editResponse.status).toBe(200);
       expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       expect(editedSlot).toMatchObject({ sourceExerciseName: "Dumbbell Deadlift", sourcePrimaryMuscle: "Back", sourceMachine: "Dumbbells" });
+      expect(editedSlot?.exerciseId).toBe(state.exercises.find((exercise) => exercise.name === "Dumbbell Deadlift")?.id);
+      const confirmedResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutExerciseId: editSlotId, exerciseName: "dumbel deadlift", confirmedExerciseId: "catalog-dumbbell-deadlift",
+          targetMuscle: "back", equipmentName: "Dumbbells",
+        }),
+      });
+      expect(confirmedResponse.status).toBe(200);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-dumbbell-deadlift");
+      const refreshedWorkoutResponse = await fetch(`${baseUrl}/workouts/today`);
+      expect(refreshedWorkoutResponse.status).toBe(200);
+      const refreshedWorkout = await refreshedWorkoutResponse.json() as any;
+      expect(refreshedWorkout.exercises).toEqual(expect.arrayContaining([
+        expect.objectContaining({ exerciseId: "catalog-dumbbell-deadlift", exerciseName: "Dumbbell Deadlift" }),
+      ]));
       expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)
         .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
 
