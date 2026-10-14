@@ -89,6 +89,25 @@ const State = {
   selectedEquipment: new Set(),
   isRegisterMode: false,
 };
+let workoutExerciseCatalogPromise;
+
+function normalizeWorkoutExerciseName(value) {
+  return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ")
+    .split(" ").map((word) => word.length > 3 && word.endsWith("ies")
+      ? `${word.slice(0, -3)}y`
+      : word.length > 2 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word).join(" ");
+}
+
+function loadWorkoutExerciseCatalog() {
+  if (!workoutExerciseCatalogPromise) {
+    workoutExerciseCatalogPromise = Api.get("/exercises").catch((error) => {
+      workoutExerciseCatalogPromise = null;
+      throw error;
+    });
+  }
+  return workoutExerciseCatalogPromise;
+}
 
 const AuthState = {
   status: "AUTH_LOADING",
@@ -1616,7 +1635,7 @@ function renderWorkout(workout, plan) {
           <button class="btn btn-outline" data-action="edit-exercise" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Edit exercise</button>
           ${swapButton}
         </div>
-        <form class="workout-edit-form" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}" hidden>
+        <form class="workout-edit-form" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}" data-original-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" data-confirmed-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
           <label>Exercise name<input name="exerciseName" maxlength="100" required value="${escapeWorkoutText(exercise.exerciseName)}"></label>
           <label>Target muscle<select name="targetMuscle" required>${targetMuscles.map((muscle) => `<option value="${escapeWorkoutText(muscle)}" ${muscle.toLowerCase() === String(exercise.primaryMuscle || "").toLowerCase() ? "selected" : ""}>${escapeWorkoutText(muscle)}</option>`).join("")}</select></label>
           <label>Equipment<input name="equipmentName" list="workout-equipment-options" maxlength="80" required value="${escapeWorkoutText(equipment)}"></label>
@@ -1793,8 +1812,9 @@ function renderWorkout(workout, plan) {
     button.addEventListener("click", () => {
       const form = button.closest(".workout-edit-form");
       if (form) {
+        form.reset();
         form.hidden = true;
-        delete form.dataset.confirmedExerciseId;
+        form.dataset.confirmedExerciseId = form.dataset.originalExerciseId || "";
         delete form.dataset.validateWithAi;
         const suggestions = form.querySelector(".workout-edit-suggestions");
         if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
@@ -1803,14 +1823,30 @@ function renderWorkout(workout, plan) {
   });
   el.querySelectorAll(".workout-edit-form").forEach((form) => {
     const nameInput = form.elements.exerciseName;
+    const equipmentInput = form.elements.equipmentName;
+    const syncCatalogSelection = async () => {
+      const catalog = await loadWorkoutExerciseCatalog();
+      const key = normalizeWorkoutExerciseName(nameInput.value);
+      const matches = catalog.filter((exercise) => normalizeWorkoutExerciseName(exercise.name) === key);
+      if (matches.length !== 1) return;
+      const [exercise] = matches;
+      nameInput.value = exercise.name;
+      form.dataset.confirmedExerciseId = exercise.id;
+      delete form.dataset.validateWithAi;
+      const required = Array.isArray(exercise.equipmentRequired) ? exercise.equipmentRequired : [];
+      if (required.length) equipmentInput.value = required[0];
+      else if (!exercise.requiresEquipment) equipmentInput.value = "Bodyweight";
+    };
     nameInput.addEventListener("input", () => {
       delete form.dataset.confirmedExerciseId;
       delete form.dataset.validateWithAi;
       const suggestions = form.querySelector(".workout-edit-suggestions");
       if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
+      void syncCatalogSelection().catch(() => {});
     });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      try { await syncCatalogSelection(); } catch { /* The server remains the authoritative catalog validator. */ }
       const submitButton = form.querySelector('[type="submit"]');
       const body = {
         workoutExerciseId: form.dataset.id,
@@ -1840,6 +1876,7 @@ function renderWorkout(workout, plan) {
               ? `${candidate.name} (AI validated)`
               : `${candidate.name} (${candidate.score}% match)`;
             option.dataset.name = candidate.name;
+            option.dataset.equipment = candidate.equipmentRequired?.[0] || (candidate.aiValidated ? "Bodyweight" : "");
             select.append(option);
           });
           const confirm = document.createElement("button");
@@ -1851,6 +1888,8 @@ function renderWorkout(workout, plan) {
             if (!option?.value) { select.focus(); return; }
             nameInput.value = option.dataset.name;
             form.dataset.confirmedExerciseId = option.value;
+            if (option.dataset.equipment) equipmentInput.value = option.dataset.equipment;
+            delete form.dataset.validateWithAi;
             suggestions.hidden = true;
             form.requestSubmit();
           });
@@ -1875,7 +1914,7 @@ function renderWorkout(workout, plan) {
           );
           suggestions.hidden = false;
         } else {
-          showWorkoutNotice(error.body?.code === "EXERCISE_NOT_FOUND"
+          showWorkoutNotice(error.body?.code === "EXERCISE_NOT_FOUND" || error.body?.code === "EXERCISE_CATALOG_ENTRY_MISSING"
             ? "We couldn't find that exercise. Choose an exercise from the suggestions or keep your current exercise."
             : error.message || "Could not edit the exercise.", "error");
         }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../../db/client";
+import { primaryMuscleMatchesTarget } from "../workouts/muscleTaxonomy";
 
 export const exerciseRouter = Router();
 
@@ -11,11 +12,23 @@ async function equipmentNamesFor(exerciseId: string): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
+async function useNormalizedPrimaryMuscles<T extends { id: string; primaryMuscle: string }>(exercises: T[]): Promise<T[]> {
+  if (exercises.length === 0) return exercises;
+  const rows = await db.all<{ exerciseId: string; name: string }>(
+    `SELECT em.exerciseId,m.name FROM ExerciseMuscle em JOIN Muscle m ON m.id=em.muscleId WHERE em.role='PRIMARY' AND em.exerciseId IN (${exercises.map(() => "?").join(",")})`,
+    ...exercises.map((exercise) => exercise.id),
+  );
+  const primaryById = new Map(rows.map((row) => [row.exerciseId, row.name]));
+  return exercises.map((exercise) => ({ ...exercise, primaryMuscle: primaryById.get(exercise.id) || exercise.primaryMuscle }));
+}
+
 exerciseRouter.get("/", async (req, res) => {
   const { muscle } = req.query;
+  const allExercises = await db.all<any>(`SELECT * FROM Exercise`);
+  const normalizedExercises = await useNormalizedPrimaryMuscles(allExercises);
   const exercises = muscle
-    ? await db.all<any>(`SELECT * FROM Exercise WHERE primaryMuscle = ?`, String(muscle))
-    : await db.all<any>(`SELECT * FROM Exercise`);
+    ? normalizedExercises.filter((exercise) => primaryMuscleMatchesTarget(String(muscle), exercise.primaryMuscle))
+    : normalizedExercises;
 
   const results: Array<{
     id: string;
@@ -46,12 +59,13 @@ exerciseRouter.get("/", async (req, res) => {
 
 exerciseRouter.get("/by-equipment/:equipmentId", async (req, res) => {
   const { equipmentId } = req.params;
-  const exercises = await db.all<any>(
+  const rows = await db.all<any>(
     `SELECT e.* FROM Exercise e
      JOIN ExerciseEquipment ee ON ee.exerciseId = e.id
      WHERE ee.equipmentId = ?`,
     equipmentId
   );
+  const exercises = await useNormalizedPrimaryMuscles(rows);
 
   const results: Array<{
     id: string;
@@ -85,12 +99,13 @@ exerciseRouter.get("/by-muscle/:muscleId", async (req, res) => {
   const muscle = await db.get<{ name: string }>(`SELECT name FROM Muscle WHERE id = ?`, muscleId);
   if (!muscle) return res.status(404).json({ error: "Muscle not found" });
 
-  const exercises = await db.all<any>(
+  const rows = await db.all<any>(
     `SELECT e.* FROM Exercise e
      JOIN ExerciseMuscle em ON em.exerciseId = e.id
      WHERE em.muscleId = ?`,
     muscleId
   );
+  const exercises = await useNormalizedPrimaryMuscles(rows);
 
   const results: Array<{
     id: string;
@@ -126,8 +141,9 @@ exerciseRouter.get("/by-muscle/:muscleId", async (req, res) => {
 });
 
 exerciseRouter.get("/:id", async (req, res) => {
-  const e = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, req.params.id);
-  if (!e) return res.status(404).json({ error: "Exercise not found" });
+  const record = await db.get<any>(`SELECT * FROM Exercise WHERE id = ?`, req.params.id);
+  if (!record) return res.status(404).json({ error: "Exercise not found" });
+  const [e] = await useNormalizedPrimaryMuscles([record]);
   const equipmentRequired = await equipmentNamesFor(e.id);
   return res.json({
     id: e.id,

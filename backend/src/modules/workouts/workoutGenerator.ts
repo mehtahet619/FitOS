@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
+import { canonicalMuscleKey } from "./muscleTaxonomy";
 import { exerciseRecommendationService } from "./exerciseRecommendation";
 import { getAiExerciseFallback, type ExerciseFallbackEquipment } from "./exerciseAiFallback";
 
@@ -44,7 +45,7 @@ const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   "Full Body C": ["chest", "back", "legs", "shoulders", "core"],
 };
 export function musclesForFocus(focus: string): string[] {
-  return FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"];
+  return (FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"]).map(canonicalMuscleKey);
 }
 
 /**

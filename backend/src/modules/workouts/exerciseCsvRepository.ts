@@ -28,6 +28,15 @@ export function normalizeExerciseValue(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+/** Normalizes harmless singular/plural name differences for catalog lookup. */
+export function normalizeExerciseLookupName(value: string): string {
+  return normalizeExerciseValue(value).split(" ").map((word) => {
+    if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+    if (word.length > 2 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+    return word;
+  }).join(" ");
+}
+
 function parseCsvRecords(source: string): string[][] {
   const text = source.replace(/^\uFEFF/, "");
   const records: string[][] = [];

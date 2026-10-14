@@ -1,4 +1,5 @@
 import type { DatabaseLike } from "../../db/types";
+import { primaryMusclesShareGroup } from "../workouts/muscleTaxonomy";
 
 export interface ExerciseWithLinks {
   id: string;
@@ -58,7 +59,7 @@ export function pickSubstitute(
   const scored = performable
     .map((c) => {
       let score = 0;
-      if (c.primaryMuscle === base.primaryMuscle) score += 10;
+      if (primaryMusclesShareGroup(c.primaryMuscle, base.primaryMuscle)) score += 10;
       if (c.movementPattern === base.movementPattern) score += 5;
       const diffDelta = Math.abs(
         (DIFFICULTY_RANK[c.difficulty] ?? 1) - (DIFFICULTY_RANK[base.difficulty] ?? 1)
@@ -70,7 +71,7 @@ export function pickSubstitute(
 
   // Never hand back a "substitute" that doesn't even share the primary
   // muscle group — that would violate the core promise of the product.
-  const best = scored.find((s) => s.candidate.primaryMuscle === base.primaryMuscle);
+  const best = scored.find((s) => primaryMusclesShareGroup(s.candidate.primaryMuscle, base.primaryMuscle));
   return best ? best.candidate : null;
 }
 
@@ -84,10 +85,14 @@ export async function loadExerciseWithLinks(
     `SELECT equipmentId FROM ExerciseEquipment WHERE exerciseId = ?`,
     exerciseId
   );
+  const normalizedPrimaryMuscle = await database.get<{ name: string }>(
+    `SELECT m.name FROM ExerciseMuscle em JOIN Muscle m ON m.id=em.muscleId WHERE em.exerciseId=? AND em.role='PRIMARY' ORDER BY em.weight DESC LIMIT 1`,
+    exerciseId,
+  );
   return {
     id: ex.id,
     name: ex.name,
-    primaryMuscle: ex.primaryMuscle,
+    primaryMuscle: normalizedPrimaryMuscle?.name ?? ex.primaryMuscle,
     secondaryMuscles: ex.secondaryMuscles,
     movementPattern: ex.movementPattern,
     difficulty: ex.difficulty,
