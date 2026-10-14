@@ -126,3 +126,134 @@
 }
 .today-grow-confirm { width: 100%; margin-top: 10px; }
 .screen { overflow-x: hidden; }
+
+/* ---------- Guided workout exercise media ---------- */
+.workout-exercise-support {
+  grid-column: 2 / 4;
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  width: min(100%, 520px);
+  padding: 4px 0 2px;
+}
+.exercise-demo { width: 100%; min-width: 0; }
+.exercise-demo-preview {
+  position: relative;
+  display: block;
+  width: min(100%, 380px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #19231f;
+  cursor: pointer;
+}
+.exercise-demo-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.exercise-demo-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 50%;
+  background: rgba(17,25,21,.82);
+  color: #fff;
+  font-size: 19px;
+  transform: translate(-50%, -50%);
+}
+.exercise-demo-preview:focus-visible,
+.exercise-chat-toggle:focus-visible {
+  outline: 3px solid var(--mint-strong);
+  outline-offset: 3px;
+}
+.exercise-demo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.exercise-demo-meta a { color: #238964; font-weight: 700; }
+.exercise-captions { color: #238964; font-weight: 700; }
+.exercise-demo-player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 11px;
+  background: #101613;
+}
+.exercise-demo-player[data-loading="true"]::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  content: "Loading demonstration…";
+  font-size: 12px;
+}
+.exercise-demo-player[hidden] { display: none; }
+.exercise-demo-player iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.exercise-video-unavailable {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.exercise-chat-form {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 520px);
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #f8fbf9;
+}
+.exercise-chat-form[hidden] { display: none; }
+.exercise-chat-form label {
+  display: grid;
+  gap: 5px;
+  color: #68707a;
+  font-size: 11px;
+  font-weight: 700;
+}
+.exercise-chat-form textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.exercise-chat-form .btn {
+  justify-self: start;
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.exercise-chat-answer {
+  white-space: pre-wrap;
+  color: #424b54;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.exercise-chat-answer[hidden] { display: none; }
