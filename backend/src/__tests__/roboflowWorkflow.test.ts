@@ -95,11 +95,11 @@ describe("RoboflowWorkflowProvider", () => {
     expect(result[0].boundingBox).toEqual({ x: 320, y: 240, width: 180, height: 120 });
   });
 
-  it("should deduplicate equipment by keeping highest confidence", async () => {
+  it("keeps separate machines with the same canonical label", async () => {
     const mockResponse = {
       predictions: [
-        { class: "dumbbell", confidence: 0.7 },
-        { class: "dumbbells", confidence: 0.95 }, // Higher confidence for same equipment
+        { class: "bench", confidence: 0.7, x: 100, y: 100, width: 80, height: 50 },
+        { class: "bench", confidence: 0.95, x: 300, y: 100, width: 80, height: 50 },
       ],
     };
 
@@ -110,8 +110,23 @@ describe("RoboflowWorkflowProvider", () => {
 
     const result = await provider.detectEquipment(testBase64, equipmentLabelMap);
 
+    expect(result).toHaveLength(2);
+    expect(result.map((detection) => detection.confidence)).toEqual([0.95, 0.7]);
+  });
+
+  it("merges near-identical overlapping boxes for the same machine", async () => {
+    const mockResponse = {
+      predictions: [
+        { class: "bench", confidence: 0.7, x: 100, y: 100, width: 80, height: 50 },
+        { class: "bench", confidence: 0.95, x: 101, y: 100, width: 80, height: 50 },
+      ],
+    };
+
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => mockResponse });
+    const result = await provider.detectEquipment(testBase64, equipmentLabelMap);
+
     expect(result).toHaveLength(1);
-    expect(result[0].confidence).toBe(0.95); // Uses highest
+    expect(result[0].confidence).toBe(0.95);
   });
 
   it("should handle empty predictions response", async () => {
@@ -127,7 +142,7 @@ describe("RoboflowWorkflowProvider", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("should clamp confidence values to 0-1 range", async () => {
+  it("ignores invalid confidence values", async () => {
     const mockResponse = {
       predictions: [
         { class: "dumbbell", confidence: 1.5 }, // Invalid: > 1
@@ -142,8 +157,7 @@ describe("RoboflowWorkflowProvider", () => {
 
     const result = await provider.detectEquipment(testBase64, equipmentLabelMap);
 
-    expect(result[0].confidence).toBe(1); // Clamped to max
-    expect(result[1].confidence).toBe(0); // Clamped to min
+    expect(result).toEqual([]);
   });
 
   it("should send correct request headers", async () => {

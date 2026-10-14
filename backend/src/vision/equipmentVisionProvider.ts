@@ -4,6 +4,8 @@ import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { db } from "../db/client";
+import { RoboflowWorkflowProvider } from "./roboflowWorkflowProvider";
+import { deduplicateOverlappingDetections } from "./detectionUtils";
 
 export interface EquipmentDetection {
   equipmentName: string;
@@ -20,6 +22,7 @@ export interface EquipmentVisionProvider {
     error?: string;
     latencyMs?: number;
     rawDetectionCount?: number;
+    promptLabels?: string[];
   }>;
   getProviderName(): string;
 }
@@ -173,21 +176,80 @@ class LocalYoloProvider implements EquipmentVisionProvider {
       });
     }
     console.info(`[CV] After confidence filtering: ${parsed.length}`);
-    const unique = new Map<string, EquipmentDetection>();
-    for (const detection of parsed) {
-      const existing = unique.get(detection.equipmentName);
-      if (!existing || detection.confidence > existing.confidence) unique.set(detection.equipmentName, detection);
-    }
-    console.info(`[CV] Normalized equipment: ${JSON.stringify([...unique.keys()])}`);
-    return { configured: true, detections: [...unique.values()], provider: this.getProviderName(), latencyMs: Date.now() - started, rawDetectionCount: raw.length };
+    const detections = deduplicateOverlappingDetections(parsed);
+    console.info(`[CV] Normalized equipment: ${JSON.stringify(detections.map((detection) => detection.equipmentName))}`);
+    return { configured: true, detections, provider: this.getProviderName(), latencyMs: Date.now() - started, rawDetectionCount: raw.length };
   }
 }
 
 const localProvider = new LocalYoloProvider();
-export function initializeEquipmentVisionProvider(): Promise<void> { return localProvider.initialize(); }
+const roboflowWorkflowEnabled = () => process.env.ROBOFLOW_WORKFLOW_MODE?.toLowerCase() === "true";
+
+export function initializeEquipmentVisionProvider(): Promise<void> {
+  return roboflowWorkflowEnabled() || getEquipmentModeConfig().mode === "FULL_GYM"
+    ? Promise.resolve()
+    : localProvider.initialize();
+}
 
 export function getEquipmentVisionProvider(): EquipmentVisionProvider {
-  return getEquipmentModeConfig().mode === "FULL_GYM" ? new FullGymEquipmentProvider() : localProvider;
+  if (getEquipmentModeConfig().mode === "FULL_GYM") return new FullGymEquipmentProvider();
+  if (roboflowWorkflowEnabled()) {
+    const apiKey = process.env.ROBOFLOW_API_KEY;
+    return apiKey ? new RoboflowWorkflowEquipmentProvider(apiKey) : new MissingRoboflowConfigurationProvider();
+  }
+  return localProvider;
+}
+
+/** Builds prompts only for canonical equipment rows present in this database. */
+async function getRoboflowEquipmentLabelMap(): Promise<Record<string, string>> {
+  const [equipment, aliases] = await Promise.all([
+    db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment WHERE name != 'No Equipment'`),
+    db.all<{ alias: string; name: string }>(`SELECT ea.alias,e.name FROM EquipmentAlias ea JOIN Equipment e ON e.id=ea.equipmentId`),
+  ]);
+  const canonicalByNormalizedName = new Map(equipment.map((item) => [normalize(item.name), item.name]));
+  const labelMap: Record<string, string> = {};
+  for (const item of equipment) labelMap[normalize(item.name)] = item.name;
+  for (const [alias, name] of Object.entries(LABELS)) {
+    const canonicalName = canonicalByNormalizedName.get(normalize(name));
+    if (canonicalName) labelMap[normalize(alias)] = canonicalName;
+  }
+  // Curated per-database aliases are authoritative when they differ from a
+  // generic built-in fallback mapping.
+  for (const alias of aliases) labelMap[normalize(alias.alias)] = alias.name;
+  return labelMap;
+}
+
+class RoboflowWorkflowEquipmentProvider implements EquipmentVisionProvider {
+  private readonly workflow: RoboflowWorkflowProvider;
+
+  constructor(apiKey: string) { this.workflow = new RoboflowWorkflowProvider(apiKey); }
+
+  getProviderName(): string { return "roboflow-workflow-sam3"; }
+
+  async detectEquipment(imageBase64: string) {
+    const promptMap = await getRoboflowEquipmentLabelMap();
+    const started = Date.now();
+    const detections = await this.workflow.detectEquipment(imageBase64, promptMap);
+    return {
+      configured: true,
+      detections,
+      provider: this.getProviderName(),
+      latencyMs: Date.now() - started,
+      promptLabels: Object.keys(promptMap),
+    };
+  }
+}
+
+class MissingRoboflowConfigurationProvider implements EquipmentVisionProvider {
+  getProviderName(): string { return "roboflow-workflow-sam3"; }
+  async detectEquipment() {
+    return {
+      configured: false,
+      detections: [],
+      provider: this.getProviderName(),
+      error: "Roboflow workflow mode requires ROBOFLOW_API_KEY.",
+    };
+  }
 }
 
 export class FullGymEquipmentProvider implements EquipmentVisionProvider {

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Real-image evaluation set for the FitOS Roboflow SAM3 workflow. Add gym photos and manually verified labels before drawing accuracy conclusions.",
+  "expectedProvider": "roboflow-workflow-sam3",
+  "iouThreshold": 0.5,
+  "cases": [
+    { "id": "single-lat-pulldown", "category": "single machine", "image": "images/01-single-lat-pulldown.jpg", "groundTruth": null, "notes": "One clearly visible lat pulldown machine." },
+    { "id": "wide-mixed-gym", "category": "multiple machines", "image": "images/02-wide-mixed-gym.jpg", "groundTruth": null, "notes": "Chest press, cable machine, treadmill, and dumbbell rack in one wide gym photo." },
+    { "id": "similar-equipment", "category": "similar equipment", "image": "images/03-similar-equipment.jpg", "groundTruth": null, "notes": "Multiple benches, dumbbells of different sizes, and several cable stations. Label individual objects separately." },
+    { "id": "overlapping-machines", "category": "overlapping equipment", "image": "images/04-overlapping-machines.jpg", "groundTruth": null, "notes": "Machines partially hidden behind other machines." },
+    { "id": "crowded-gym", "category": "crowded gym", "image": "images/05-crowded-gym.jpg", "groundTruth": null, "notes": "People stand between machines and partially block equipment." },
+    { "id": "people-using-machines", "category": "people using machines", "image": "images/06-people-using-machines.jpg", "groundTruth": null, "notes": "People use a chest press, lat pulldown, and treadmill. Label equipment; do not treat people as equipment or occupancy proof." },
+    { "id": "viewpoints", "category": "different viewpoints", "frames": ["images/07-view-front.jpg", "images/07-view-side.jpg", "images/07-view-diagonal.jpg", "images/07-view-elevated.jpg"], "groundTruth": null, "groundTruthByFrame": [null, null, null, null], "notes": "Front, side, diagonal, and elevated camera angles. Label each frame independently." },
+    { "id": "poor-lighting", "category": "poor lighting", "frames": ["images/08-dim-gym.jpg", "images/08-harsh-reflections.jpg", "images/08-backlit-gym.jpg"], "groundTruth": null, "groundTruthByFrame": [null, null, null], "notes": "Dim gym, harsh reflections, and backlighting. Label each frame independently." },
+    { "id": "distant-equipment", "category": "distant equipment", "image": "images/09-distant-equipment.jpg", "groundTruth": null, "notes": "Small machines across a large gym." },
+    { "id": "close-up-machine", "category": "close-up", "image": "images/10-close-up-machine.jpg", "groundTruth": null, "notes": "A machine occupies most of the image." },
+    { "id": "unfamiliar-equipment", "category": "unfamiliar equipment", "image": "images/11-unfamiliar-equipment.jpg", "groundTruth": null, "notes": "Equipment variant not explicitly represented by current prompt mappings; unknown labels should not be guessed into a canonical type." },
+    { "id": "no-equipment", "category": "no equipment", "frames": ["images/12-empty-room.jpg", "images/12-people-only.jpg", "images/12-unrelated-objects.jpg"], "groundTruth": null, "groundTruthByFrame": [null, null, null], "notes": "Empty room, people only, and unrelated objects. Use an empty ground-truth list for each verified no-equipment image." },
+    { "id": "bodyweight-area", "category": "bodyweight area", "frames": ["images/13-pull-up-bars.jpg", "images/13-mats-open-floor.jpg"], "groundTruth": null, "groundTruthByFrame": [null, null], "notes": "Pull-up bars and mats/open floor without conventional machines. Label only actual supported equipment such as a visible pull-up bar." },
+    { "id": "overlapping-video-frames", "category": "duplicate detection", "frames": ["images/14-overlap-frame-a.jpg", "images/14-overlap-frame-b.jpg"], "groundTruth": null, "notes": "Two overlapping frames containing the same machine. Manually verify that repeated detections refer to one tracked object while separate nearby machines remain distinct." },
+    { "id": "image-quality", "category": "image quality", "frames": ["images/15-blurry.jpg", "images/15-compressed.jpg", "images/15-low-resolution.jpg"], "groundTruth": null, "groundTruthByFrame": [null, null, null], "notes": "Blurry, compressed, and low-resolution images. Label each frame independently." }
+  ],
+  "liveScanCases": [
+    { "id": "walk-past-stationary-camera", "status": "manual", "steps": "Keep camera stationary while a person walks past one machine.", "equipmentRecognition": "Compare equipment labels before/during/after; they should remain stable.", "occupancy": "Not measured by the current equipment detector; do not infer occupancy from a person detection." },
+    { "id": "pan-across-machines", "status": "manual", "steps": "Move camera across several machines.", "equipmentRecognition": "Check that each visible canonical type appears and remains after the UI evidence threshold.", "occupancy": "Not measured by this detector." },
+    { "id": "same-machine-consecutive-frames", "status": "manual", "steps": "Keep one machine visible across consecutive frames.", "equipmentRecognition": "Confirm repeated frames do not create duplicate equipment types in the completed inventory.", "occupancy": "Not measured by this detector." },
+    { "id": "occlude-and-reveal", "status": "manual", "steps": "Partially obstruct a machine, then reveal it.", "equipmentRecognition": "Check the label recovers without adding an unrelated type.", "occupancy": "Not measured by this detector." },
+    { "id": "approach-use-leave", "status": "manual", "steps": "Have a person approach, use, and leave a machine.", "equipmentRecognition": "Check equipment recognition separately from the person's presence.", "occupancy": "No occupancy model/label is exposed by the current API; record as not implemented, not a pass/fail inference." }
+  ]
+}

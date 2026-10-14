@@ -6,7 +6,9 @@ import { exerciseDemoEmbedUrl, findExerciseDemo } from "../modules/exercises/exe
 describe("curated exercise demo matching", () => {
   it("matches canonical exercise metadata with normalized capitalization and spacing", () => {
     expect(findExerciseDemo("  LAT   PULLDOWN ", ["Cable Machine"])?.title).toBe("Lat Pull Down");
-    expect(findExerciseDemo("Seated Cable Row", ["Cable Machine"])?.provider).toBe("vimeo");
+    expect(findExerciseDemo("Seated Cable Row", ["Cable Machine"])?.provider).toBe("youtube");
+    expect(exerciseDemoEmbedUrl(findExerciseDemo("Seated Cable Row", ["Cable Machine"])!))
+      .toContain("youtube-nocookie.com/embed/xQNrFHEMhI4");
     expect(findExerciseDemo("Dumbbell Row", ["Dumbbell"])?.sourceName).toBe("Men's Health");
   });
 
