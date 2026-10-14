@@ -1,0 +1,307 @@
+{
+  "generatedAt": "2026-10-12T21:27:43.382Z",
+  "target": null,
+  "expectedProvider": "roboflow-workflow-sam3",
+  "promptSource": "Returned promptLabels from the production equipment API; generated from canonical Equipment rows and aliases.",
+  "counts": {
+    "cases": 15,
+    "plannedFrames": 26,
+    "availableImages": 0,
+    "missingImages": 26,
+    "framesAttempted": 0,
+    "scoredFrames": 0,
+    "unscoredFrames": 0
+  },
+  "metrics": null,
+  "apiErrors": [],
+  "configurationIssues": [],
+  "liveScanCases": [
+    {
+      "id": "walk-past-stationary-camera",
+      "status": "manual_not_run",
+      "steps": "Keep camera stationary while a person walks past one machine.",
+      "equipmentRecognition": "Compare equipment labels before/during/after; they should remain stable.",
+      "occupancy": "Not measured by the current equipment detector; do not infer occupancy from a person detection."
+    },
+    {
+      "id": "pan-across-machines",
+      "status": "manual_not_run",
+      "steps": "Move camera across several machines.",
+      "equipmentRecognition": "Check that each visible canonical type appears and remains after the UI evidence threshold.",
+      "occupancy": "Not measured by this detector."
+    },
+    {
+      "id": "same-machine-consecutive-frames",
+      "status": "manual_not_run",
+      "steps": "Keep one machine visible across consecutive frames.",
+      "equipmentRecognition": "Confirm repeated frames do not create duplicate equipment types in the completed inventory.",
+      "occupancy": "Not measured by this detector."
+    },
+    {
+      "id": "occlude-and-reveal",
+      "status": "manual_not_run",
+      "steps": "Partially obstruct a machine, then reveal it.",
+      "equipmentRecognition": "Check the label recovers without adding an unrelated type.",
+      "occupancy": "Not measured by this detector."
+    },
+    {
+      "id": "approach-use-leave",
+      "status": "manual_not_run",
+      "steps": "Have a person approach, use, and leave a machine.",
+      "equipmentRecognition": "Check equipment recognition separately from the person's presence.",
+      "occupancy": "No occupancy model/label is exposed by the current API; record as not implemented, not a pass/fail inference."
+    }
+  ],
+  "results": [
+    {
+      "id": "single-lat-pulldown",
+      "category": "single machine",
+      "status": "missing_image",
+      "notes": "One clearly visible lat pulldown machine.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/01-single-lat-pulldown.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "wide-mixed-gym",
+      "category": "multiple machines",
+      "status": "missing_image",
+      "notes": "Chest press, cable machine, treadmill, and dumbbell rack in one wide gym photo.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/02-wide-mixed-gym.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "similar-equipment",
+      "category": "similar equipment",
+      "status": "missing_image",
+      "notes": "Multiple benches, dumbbells of different sizes, and several cable stations. Label individual objects separately.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/03-similar-equipment.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "overlapping-machines",
+      "category": "overlapping equipment",
+      "status": "missing_image",
+      "notes": "Machines partially hidden behind other machines.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/04-overlapping-machines.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "crowded-gym",
+      "category": "crowded gym",
+      "status": "missing_image",
+      "notes": "People stand between machines and partially block equipment.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/05-crowded-gym.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "people-using-machines",
+      "category": "people using machines",
+      "status": "missing_image",
+      "notes": "People use a chest press, lat pulldown, and treadmill. Label equipment; do not treat people as equipment or occupancy proof.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/06-people-using-machines.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "viewpoints",
+      "category": "different viewpoints",
+      "status": "missing_image",
+      "notes": "Front, side, diagonal, and elevated camera angles. Label each frame independently.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/07-view-front.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/07-view-side.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 3,
+          "image": "images/07-view-diagonal.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 4,
+          "image": "images/07-view-elevated.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "poor-lighting",
+      "category": "poor lighting",
+      "status": "missing_image",
+      "notes": "Dim gym, harsh reflections, and backlighting. Label each frame independently.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/08-dim-gym.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/08-harsh-reflections.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 3,
+          "image": "images/08-backlit-gym.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "distant-equipment",
+      "category": "distant equipment",
+      "status": "missing_image",
+      "notes": "Small machines across a large gym.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/09-distant-equipment.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "close-up-machine",
+      "category": "close-up",
+      "status": "missing_image",
+      "notes": "A machine occupies most of the image.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/10-close-up-machine.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "unfamiliar-equipment",
+      "category": "unfamiliar equipment",
+      "status": "missing_image",
+      "notes": "Equipment variant not explicitly represented by current prompt mappings; unknown labels should not be guessed into a canonical type.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/11-unfamiliar-equipment.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "no-equipment",
+      "category": "no equipment",
+      "status": "missing_image",
+      "notes": "Empty room, people only, and unrelated objects. Use an empty ground-truth list for each verified no-equipment image.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/12-empty-room.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/12-people-only.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 3,
+          "image": "images/12-unrelated-objects.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "bodyweight-area",
+      "category": "bodyweight area",
+      "status": "missing_image",
+      "notes": "Pull-up bars and mats/open floor without conventional machines. Label only actual supported equipment such as a visible pull-up bar.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/13-pull-up-bars.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/13-mats-open-floor.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "overlapping-video-frames",
+      "category": "duplicate detection",
+      "status": "missing_image",
+      "notes": "Two overlapping frames containing the same machine. Manually verify that repeated detections refer to one tracked object while separate nearby machines remain distinct.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/14-overlap-frame-a.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/14-overlap-frame-b.jpg",
+          "status": "missing_image"
+        }
+      ]
+    },
+    {
+      "id": "image-quality",
+      "category": "image quality",
+      "status": "missing_image",
+      "notes": "Blurry, compressed, and low-resolution images. Label each frame independently.",
+      "frames": [
+        {
+          "frame": 1,
+          "image": "images/15-blurry.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 2,
+          "image": "images/15-compressed.jpg",
+          "status": "missing_image"
+        },
+        {
+          "frame": 3,
+          "image": "images/15-low-resolution.jpg",
+          "status": "missing_image"
+        }
+      ]
+    }
+  ]
+}

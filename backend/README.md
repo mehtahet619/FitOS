@@ -137,12 +137,15 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 
 ## Integrations
 
-### Equipment Vision — Self-hosted open-source detector
+### Equipment Vision — local detector by default, Roboflow SAM3 when enabled
 
-Production equipment detection uses a local Ultralytics YOLO model. The model
-is loaded once by a persistent Python worker; camera frames are sent from the
-backend to that worker over stdin/stdout. No hosted inference or paid CV API is
-used.
+The default `SCANNED` provider is a local Ultralytics YOLO model. The model is
+loaded once by a persistent Python worker; camera frames are sent from the
+backend to that worker over stdin/stdout. To explicitly select the existing
+Roboflow SAM3 Workflow instead, set `ROBOFLOW_WORKFLOW_MODE=true` and provide
+`ROBOFLOW_API_KEY`. When Roboflow mode is enabled but its key is missing, the
+API reports that the provider is not configured; it does not silently run a
+different model.
 
 Configure:
 
@@ -151,6 +154,8 @@ EQUIPMENT_MODE="SCANNED"
 EQUIPMENT_VISION_MODEL_PATH="models/best.pt"
 EQUIPMENT_VISION_PYTHON="python3"
 EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"
+ROBOFLOW_WORKFLOW_MODE="false"
+ROBOFLOW_API_KEY=""
 ```
 
 Install the worker dependencies with `python3 -m pip install -r vision-requirements.txt`.
@@ -165,7 +170,7 @@ cp runs/detect/train/weights/best.pt backend/models/best.pt
 Detection only determines available equipment; target muscles and exercise
 selection remain owned by the existing workout-plan and CSV flow.
 
-### Legacy hosted workflow (not used by FitOS equipment detection)
+### Roboflow SAM3 Workflow (opt-in)
 
 Integrates the Roboflow serverless workflow for real-time gym equipment detection from images.
 
@@ -178,7 +183,8 @@ Integrates the Roboflow serverless workflow for real-time gym equipment detectio
 **Setup:**
 
 1. Get your Roboflow API key from https://app.roboflow.com/settings/api
-2. Add to `.env`:
+2. Add these environment variables to the backend (for production, use the
+   Render backend service's Environment page and redeploy):
    ```
    ROBOFLOW_WORKFLOW_MODE="true"
    ROBOFLOW_API_KEY="your_api_key_here"
@@ -189,14 +195,24 @@ Integrates the Roboflow serverless workflow for real-time gym equipment detectio
 **How it works:**
 - `POST /equipment/detect` accepts a base64-encoded image
 - Roboflow workflow processes it and returns equipment detections
-- Detections are mapped to known equipment in the database using `EQUIPMENT_LABEL_MAP`
+- Prompt labels are built from canonical `Equipment` rows, aliases, and the
+  known label mappings. Unknown classes are ignored rather than guessed.
+- Multiple same-label objects are preserved. Only near-identical overlapping
+  same-label boxes (IoU >= 0.92) are merged; separate benches/stations remain
+  separate detections.
 - Results suggest applicable exercises based on detected equipment
 - Handles retries with exponential backoff and 30-second timeout
 
 **Troubleshooting:**
 - If workflow returns 401/403, verify API key in `.env`
 - If no detections: try better lighting, clearer angle, or verify workflow is trained
-- Check CloudWatch logs in your Roboflow workspace for detailed run diagnostics
+- Check the backend logs and Roboflow workflow run history for errors. API
+  responses include the provider, prompt labels, and inference latency.
+
+The detector recognizes equipment; it does not determine whether a person is
+using or occupying a machine. Use `vision-eval/manifest.json` and
+`npm run vision:eval` to evaluate real images with manually labeled ground
+truth. Do not report precision/recall/F1 until those labels and images exist.
 
 ### Food Discovery — Apify Swiggy Scraper
 

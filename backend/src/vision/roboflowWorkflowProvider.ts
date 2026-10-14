@@ -11,6 +11,7 @@
  */
 
 import type { EquipmentDetection } from "./equipmentVisionProvider";
+import { deduplicateOverlappingDetections } from "./detectionUtils";
 
 interface WorkflowRequest {
   inputs: {
@@ -141,8 +142,6 @@ export class RoboflowWorkflowProvider {
     data: WorkflowResponse,
     equipmentLabelMap: Record<string, string>
   ): EquipmentDetection[] {
-    const detections: EquipmentDetection[] = [];
-
     // Handle array response (workflow returns list of results)
     let predictions: any[] = [];
     if (Array.isArray(data)) {
@@ -155,36 +154,34 @@ export class RoboflowWorkflowProvider {
       predictions = this.extractPredictions(data);
     }
 
-    // Dedupe by mapped equipment name, keeping highest confidence
-    const best = new Map<string, EquipmentDetection>();
+    const detections: EquipmentDetection[] = [];
     for (const pred of predictions) {
       const rawClass = pred.class || pred.name || pred.label || "";
       if (!rawClass) continue;
 
-      const mapped = equipmentLabelMap[rawClass.toLowerCase().trim()];
+      const mapped = equipmentLabelMap[normalizeLabel(rawClass)];
       if (!mapped) continue; // Skip unmapped classes
 
-      const confidence = pred.confidence || 0;
-      const existing = best.get(mapped);
-      if (!existing || confidence > existing.confidence) {
-        best.set(mapped, {
-          equipmentName: mapped,
-          confidence: Math.min(1, Math.max(0, confidence)), // Clamp to 0-1
-          rawLabel: rawClass,
-          boundingBox: this.boundingBoxFor(pred),
-        });
-      }
+      const confidence = Number(pred.confidence);
+      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) continue;
+      detections.push({
+        equipmentName: mapped,
+        confidence,
+        rawLabel: rawClass,
+        boundingBox: this.boundingBoxFor(pred),
+      });
     }
 
-    return Array.from(best.values());
+    return deduplicateOverlappingDetections(detections);
   }
 
   private boundingBoxFor(prediction: any): EquipmentDetection["boundingBox"] {
+    if (prediction.x == null || prediction.y == null || prediction.width == null || prediction.height == null) return undefined;
     const x = Number(prediction.x);
     const y = Number(prediction.y);
     const width = Number(prediction.width);
     const height = Number(prediction.height);
-    if (![x, y, width, height].every(Number.isFinite)) return undefined;
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return undefined;
     return { x, y, width, height };
   }
 
@@ -220,4 +217,8 @@ export class RoboflowWorkflowProvider {
 
     return [];
   }
+}
+
+function normalizeLabel(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }

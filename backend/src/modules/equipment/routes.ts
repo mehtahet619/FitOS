@@ -197,9 +197,12 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
       configured: false,
       error: "MODEL_NOT_CONFIGURED",
       message: result.error,
+      provider: result.provider,
       detections: [],
       equipment: [],
       suggestedExercises: [],
+      latencyMs: result.latencyMs,
+      promptLabels: result.promptLabels,
     });
   }
 
@@ -207,9 +210,13 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
     return res.json({
       configured: true,
       message: "No known equipment was recognized in that photo — try a clearer angle or better lighting.",
+      provider: result.provider,
       detections: [],
       equipment: [],
       suggestedExercises: [],
+      latencyMs: result.latencyMs,
+      rawDetectionCount: result.rawDetectionCount,
+      promptLabels: result.promptLabels,
     });
   }
 
@@ -249,6 +256,10 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
 
   return res.json({
     configured: true,
+    provider: result.provider,
+    latencyMs: result.latencyMs,
+    rawDetectionCount: result.rawDetectionCount,
+    promptLabels: result.promptLabels,
     detections: result.detections,
     equipment: result.detections.map((detection) => ({
       name: detection.equipmentName,
