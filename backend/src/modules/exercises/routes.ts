@@ -3,7 +3,7 @@ import { db } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { primaryMuscleMatchesTarget } from "../workouts/muscleTaxonomy";
 import { findExerciseDemo, exerciseDemoEmbedUrl } from "./exerciseMedia";
-import { answerExerciseQuestion } from "./exerciseAssistant";
+import { answerExerciseQuestion, isExerciseAssistantConfigured } from "./exerciseAssistant";
 import { z } from "zod";
 
 export const exerciseRouter = Router();
@@ -223,6 +223,11 @@ exerciseRouter.post("/:id/ask", requireAuth, async (req: AuthedRequest, res) => 
     instructions: exercise.instructions || "",
     movementPattern: exercise.movementPattern,
   }, parsed.data.question);
-  if (!answer) return res.status(503).json({ error: "Exercise chat is temporarily unavailable. Please try again later." });
+  if (!answer) {
+    if (!isExerciseAssistantConfigured()) {
+      return res.status(503).json({ code: "EXERCISE_CHAT_NOT_CONFIGURED", error: "Exercise chat is not configured on the server yet." });
+    }
+    return res.status(503).json({ code: "EXERCISE_CHAT_UNAVAILABLE", error: "Exercise chat is temporarily unavailable. Please try again later." });
+  }
   return res.json({ exerciseId: exercise.id, answer });
 });

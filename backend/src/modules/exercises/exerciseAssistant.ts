@@ -54,6 +54,10 @@ function configuredProviders(): ExerciseAssistantProvider[] {
   return providers;
 }
 
+export function isExerciseAssistantConfigured(): boolean {
+  return configuredProviders().length > 0;
+}
+
 async function askProvider(provider: ExerciseAssistantProvider, messages: ReturnType<typeof buildExerciseAssistantMessages>): Promise<string> {
   const anthropic = provider.name === "Anthropic";
   const response = await fetch(provider.url, {
@@ -80,7 +84,10 @@ async function askProvider(provider: ExerciseAssistantProvider, messages: Return
 
 export async function answerExerciseQuestion(context: ExerciseAssistantContext, question: string): Promise<string | null> {
   const providers = configuredProviders();
-  if (!providers.length) return null;
+  if (!providers.length) {
+    console.warn("[exercises] Exercise assistant unavailable: configure OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY.");
+    return null;
+  }
   const messages = buildExerciseAssistantMessages(context, question);
   for (const provider of providers) {
     try {
