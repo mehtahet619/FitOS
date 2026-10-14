@@ -1346,3 +1346,31 @@ html, body {
 @media (min-width: 600px) {
   .today-stats-grid { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* --- Monthly Consistency: overflow fixes --- */
+.today-card, .today-grow-card { max-width: 100%; min-width: 0; }
+.today-grow-card .today-card-header { flex-wrap: wrap; gap: 8px; }
+.today-grow-month-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.today-grow-month-select .grow-impact-month {
+  min-width: 0;
+  width: 130px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  font-family: inherit;
+}
+.today-grow-month-select svg { flex: 0 0 auto; }
+.today-grow-setting-label { min-width: 0; }
+.today-grow-setting-label select,
+.today-grow-setting-label input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.today-grow-confirm { width: 100%; margin-top: 10px; }
+.screen { overflow-x: hidden; }
