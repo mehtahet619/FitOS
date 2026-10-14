@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { ensureExerciseRows, generateWorkout, musclesForFocus } from "./workoutGenerator";
-import { getAiExerciseFallback } from "./exerciseAiFallback";
+import { getAiExerciseFallback, validateUncataloguedExercise } from "./exerciseAiFallback";
 import { loadExerciseWithLinks } from "../exercises/substitutionEngine";
 import {
   canSwitchWorkoutPlan,
@@ -768,6 +768,7 @@ const editExerciseSchema = z.object({
   targetMuscle: z.string().trim().min(1).max(80),
   equipmentName: z.string().trim().min(1).max(80),
   confirmedExerciseId: z.string().min(1).optional(),
+  validateWithAi: z.boolean().optional(),
 });
 
 const exerciseEditMatchThreshold = (() => {
@@ -1020,6 +1021,9 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "Choose a target muscle already included in this workout." });
   }
 
+  const allEquipment = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
+  const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
+    `SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
   const catalogueExercises = await db.all<{
     id: string; name: string; primaryMuscle?: string; secondaryMuscles?: string; requiresEquipment?: number;
   }>(`SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment FROM Exercise ORDER BY name`);
@@ -1030,22 +1034,80 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "Choose an exercise from the FitOS exercise catalog." });
   }
   if (!selectedExercise) {
-    const suggestions = catalogueExercises
-      .map((exercise) => ({ ...exercise, score: editNameSimilarity(exerciseName, exercise.name) }))
-      .filter((exercise) => {
-        const muscles = editMuscles(exercise);
-        return !muscles.length || muscles.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(selectedTargetMuscle));
-      })
-      .filter((exercise) => exercise.score >= exerciseEditMatchThreshold)
-      .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
-      .slice(0, 5)
-      .map(({ id, name, score }) => ({ id, name, score: Math.round(score * 100) }));
-    if (suggestions.length) {
-      return res.status(422).json({
-        code: "EXERCISE_CONFIRMATION_REQUIRED",
-        error: "Choose the matching exercise to continue.",
-        suggestions,
-      });
+    if (!parsed.data.validateWithAi) {
+      const suggestions = catalogueExercises
+        .map((exercise) => ({ ...exercise, score: editNameSimilarity(exerciseName, exercise.name) }))
+        .filter((exercise) => {
+          const muscles = editMuscles(exercise);
+          return !muscles.length || muscles.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(selectedTargetMuscle));
+        })
+        .filter((exercise) => exercise.score >= exerciseEditMatchThreshold)
+        .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+        .slice(0, 5)
+        .map(({ id, name, score }) => ({ id, name, score: Math.round(score * 100) }));
+      if (suggestions.length) {
+        return res.status(422).json({
+          code: "EXERCISE_CONFIRMATION_REQUIRED",
+          error: "Choose the matching exercise to continue.",
+          suggestions,
+        });
+      }
+    }
+    const muscleRows = await db.all<{ name: string }>(`SELECT name FROM Muscle ORDER BY name`);
+    const allowedMuscles = [...new Set([
+      ...targetMuscles,
+      ...muscleRows.map((row) => row.name),
+      ...catalogueExercises.flatMap(editMuscles),
+    ])];
+    const allowedEquipment = [...new Set([
+      ...allEquipment.filter((row) => normalizeExerciseValue(row.name) !== "no equipment").map((row) => row.name),
+      "Bodyweight",
+    ])];
+    const aiValidation = await validateUncataloguedExercise({
+      exerciseName,
+      muscles: allowedMuscles,
+      equipment: allowedEquipment,
+    });
+    if (aiValidation?.valid && aiValidation.canonicalName && aiValidation.primaryMuscle && aiValidation.equipmentName) {
+      let aiExercise = catalogueExercises.find((exercise) =>
+        normalizeExerciseValue(exercise.name) === normalizeExerciseValue(aiValidation.canonicalName!));
+      if (!aiExercise) {
+        const primaryMuscle = aiValidation.primaryMuscle;
+        const targetedMuscles = [...new Set([primaryMuscle, ...aiValidation.secondaryMuscles])];
+        const aiRecommendedExercise: RecommendedExercise = {
+          sourceIndex: -900000,
+          exercise: aiValidation.canonicalName,
+          machine: aiValidation.equipmentName,
+          muscle: primaryMuscle,
+          primaryMuscle,
+          muscleCategories: targetedMuscles,
+          timeTakenOneSet: "AI validated",
+          targetedMuscle: primaryMuscle,
+          targetedMuscles,
+        };
+        const persistedExercise = await ensureExerciseRows(db, [aiRecommendedExercise]);
+        const persistedId = persistedExercise.get(aiRecommendedExercise.sourceIndex)?.id;
+        aiExercise = persistedId
+          ? { id: persistedId, name: aiValidation.canonicalName, primaryMuscle, secondaryMuscles: aiValidation.secondaryMuscles.join(",") }
+          : undefined;
+      }
+      if (aiExercise) {
+        const muscles = editMuscles(aiExercise);
+        if (muscles.length && !muscles.some((muscle) => normalizeExerciseValue(muscle) === normalizeExerciseValue(selectedTargetMuscle))) {
+          return res.status(422).json({
+            code: "EXERCISE_TARGET_MISMATCH",
+            error: `${aiExercise.name} is a recognized exercise for ${[aiExercise.primaryMuscle, ...(aiExercise.secondaryMuscles || "").split(",").filter(Boolean)].join(" and ")}, so it cannot replace a ${selectedTargetMuscle} movement in this workout.`,
+            exerciseId: aiExercise.id,
+            exerciseName: aiExercise.name,
+            muscles,
+          });
+        }
+        return res.status(422).json({
+          code: "EXERCISE_CONFIRMATION_REQUIRED",
+          error: "FitOS validated this exercise and added it to the exercise catalog. Confirm to use it in this workout.",
+          suggestions: [{ id: aiExercise.id, name: aiExercise.name, score: Math.round(aiValidation.confidence * 100), aiValidated: true }],
+        });
+      }
     }
     return res.status(422).json({
       code: "EXERCISE_NOT_FOUND",
@@ -1064,9 +1126,6 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   }
   const canonicalExerciseName = selectedExercise.name;
 
-  const allEquipment = await db.all<{ id: string; name: string }>(`SELECT id,name FROM Equipment`);
-  const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
-    `SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
   const aliasToEquipment = new Map<string, { id: string; name: string }>();
   allEquipment.filter((row) => normalizeExerciseValue(row.name) !== "no equipment")
     .forEach((row) => aliasToEquipment.set(normalizeExerciseValue(row.name), row));

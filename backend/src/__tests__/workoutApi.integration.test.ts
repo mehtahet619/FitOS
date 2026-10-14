@@ -45,6 +45,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       }
       if (sql.includes("SELECT id,name,defaultSets,repRangeLow,repRangeHigh FROM Exercise")) return state.exercises as T[];
       if (sql.includes("SELECT id,name,primaryMuscle,secondaryMuscles,requiresEquipment FROM Exercise")) return state.exercises as T[];
+      if (sql.includes("SELECT name FROM Muscle ORDER BY name")) return ["back", "chest", "glutes", "hamstrings"].map((name) => ({ name })) as unknown as T[];
       if (sql.includes("SELECT id,name FROM Equipment")) return state.equipment as T[];
       if (sql.includes("SELECT id FROM WorkoutExercise WHERE workoutId = ? ORDER BY orderIndex ASC")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0])
@@ -253,6 +254,26 @@ describe("workout API CSV flow", () => {
       ...await importOriginal<typeof import("../modules/workouts/exerciseRecommendation")>(),
       exerciseRecommendationService: service,
     }));
+    vi.doMock("../modules/workouts/exerciseAiFallback", async (importOriginal) => ({
+      ...await importOriginal<typeof import("../modules/workouts/exerciseAiFallback")>(),
+      validateUncataloguedExercise: async ({ exerciseName }: { exerciseName: string }) => {
+        const validations: Record<string, any> = {
+          "good morning": {
+            valid: true, canonicalName: "Good Morning", primaryMuscle: "hamstrings", secondaryMuscles: ["glutes"],
+            equipmentName: "Barbell", confidence: 0.98,
+          },
+          "meadows row": {
+            valid: true, canonicalName: "Meadows Row", primaryMuscle: "back", secondaryMuscles: ["biceps"],
+            equipmentName: "Dumbbells", confidence: 0.96,
+          },
+          "dumbel row": {
+            valid: true, canonicalName: "Single Arm Dumbbell Row", primaryMuscle: "back", secondaryMuscles: ["biceps"],
+            equipmentName: "Dumbbells", confidence: 0.93,
+          },
+        };
+        return validations[exerciseName.toLowerCase()] ?? null;
+      },
+    }));
 
     const { workoutRouter } = await import("../modules/workouts/routes.js");
     const { equipmentRouter } = await import("../modules/equipment/routes.js");
@@ -389,6 +410,17 @@ describe("workout API CSV flow", () => {
       expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Row", "Dumbbell Rows"]));
       // The UI cancellation path hides these suggestions without issuing a confirmation request.
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
+      const aiNewNearMatchResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "dumbel row", targetMuscle: "back", equipmentName: "Dumbbells", validateWithAi: true }),
+      });
+      const aiNewNearMatch = await aiNewNearMatchResponse.json() as any;
+      expect(aiNewNearMatch).toMatchObject({
+        code: "EXERCISE_CONFIRMATION_REQUIRED",
+        suggestions: [expect.objectContaining({ name: "Single Arm Dumbbell Row", aiValidated: true })],
+      });
+      expect(state.exercises.some((exercise) => exercise.name === "Single Arm Dumbbell Row")).toBe(true);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
 
       const bedliftResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -444,6 +476,36 @@ describe("workout API CSV flow", () => {
       expect(refreshedWorkout.exercises).toEqual(expect.arrayContaining([
         expect.objectContaining({ exerciseId: "catalog-dumbbell-deadlift", exerciseName: "Dumbbell Deadlift" }),
       ]));
+
+      const validOtherMuscleResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Good Morning", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(validOtherMuscleResponse.status).toBe(422);
+      expect(await validOtherMuscleResponse.json()).toMatchObject({ code: "EXERCISE_TARGET_MISMATCH", exerciseName: "Good Morning" });
+      expect(state.exercises.some((exercise) => exercise.name === "Good Morning" && exercise.primaryMuscle === "hamstrings")).toBe(true);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-dumbbell-deadlift");
+
+      const aiNewExerciseResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Meadows Row", targetMuscle: "back", equipmentName: "Dumbbells" }),
+      });
+      expect(aiNewExerciseResponse.status).toBe(422);
+      const aiNewExercise = await aiNewExerciseResponse.json() as any;
+      expect(aiNewExercise).toMatchObject({
+        code: "EXERCISE_CONFIRMATION_REQUIRED",
+        suggestions: [expect.objectContaining({ name: "Meadows Row", aiValidated: true })],
+      });
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-dumbbell-deadlift");
+      const confirmedNewExerciseResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutExerciseId: editSlotId, exerciseName: "Meadows Row", confirmedExerciseId: aiNewExercise.suggestions[0].id,
+          targetMuscle: "back", equipmentName: "Dumbbells",
+        }),
+      });
+      expect(confirmedNewExerciseResponse.status).toBe(200);
+      expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe(aiNewExercise.suggestions[0].id);
       expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)
         .sort((left, right) => left.orderIndex - right.orderIndex).map((exercise) => exercise.id)).toEqual(reorderIds);
 

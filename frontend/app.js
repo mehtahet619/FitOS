@@ -1795,6 +1795,7 @@ function renderWorkout(workout, plan) {
       if (form) {
         form.hidden = true;
         delete form.dataset.confirmedExerciseId;
+        delete form.dataset.validateWithAi;
         const suggestions = form.querySelector(".workout-edit-suggestions");
         if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
       }
@@ -1804,6 +1805,7 @@ function renderWorkout(workout, plan) {
     const nameInput = form.elements.exerciseName;
     nameInput.addEventListener("input", () => {
       delete form.dataset.confirmedExerciseId;
+      delete form.dataset.validateWithAi;
       const suggestions = form.querySelector(".workout-edit-suggestions");
       if (suggestions) { suggestions.hidden = true; suggestions.replaceChildren(); }
     });
@@ -1816,6 +1818,7 @@ function renderWorkout(workout, plan) {
         targetMuscle: form.elements.targetMuscle.value,
         equipmentName: form.elements.equipmentName.value,
         ...(form.dataset.confirmedExerciseId ? { confirmedExerciseId: form.dataset.confirmedExerciseId } : {}),
+        ...(form.dataset.validateWithAi === "true" ? { validateWithAi: true } : {}),
       };
       submitButton.disabled = true;
       submitButton.textContent = "Rebalancing workout…";
@@ -1833,7 +1836,9 @@ function renderWorkout(workout, plan) {
           error.body.suggestions.forEach((candidate) => {
             const option = document.createElement("option");
             option.value = candidate.id;
-            option.textContent = `${candidate.name} (${candidate.score}% match)`;
+            option.textContent = candidate.aiValidated
+              ? `${candidate.name} (AI validated)`
+              : `${candidate.name} (${candidate.score}% match)`;
             option.dataset.name = candidate.name;
             select.append(option);
           });
@@ -1849,7 +1854,25 @@ function renderWorkout(workout, plan) {
             suggestions.hidden = true;
             form.requestSubmit();
           });
-          suggestions.replaceChildren(document.createTextNode("Did you mean one of these catalogue exercises?"), select, confirm);
+          const validateNew = document.createElement("button");
+          validateNew.type = "button";
+          validateNew.className = "btn btn-outline";
+          validateNew.textContent = "None of these? Validate as a new exercise";
+          validateNew.hidden = error.body.suggestions.some((candidate) => candidate.aiValidated);
+          validateNew.addEventListener("click", () => {
+            delete form.dataset.confirmedExerciseId;
+            form.dataset.validateWithAi = "true";
+            suggestions.hidden = true;
+            form.requestSubmit();
+          });
+          suggestions.replaceChildren(
+            document.createTextNode(error.body.suggestions.some((candidate) => candidate.aiValidated)
+              ? "FitOS validated this exercise and added it to the catalogue. Confirm to use it in this workout."
+              : "Did you mean one of these catalogue exercises?"),
+            select,
+            confirm,
+            validateNew,
+          );
           suggestions.hidden = false;
         } else {
           showWorkoutNotice(error.body?.code === "EXERCISE_NOT_FOUND"
