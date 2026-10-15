@@ -1753,7 +1753,7 @@ async function fallbackExerciseDemoPlayback(player, button, exercise, demo) {
     }
   }
   showUnavailableExerciseDemo(player, exercise, exercise?.demoVideo || demo,
-    "This demonstration can't be embedded in FitOS. Follow the written guide or ask about this exercise.");
+    "Demonstration currently unavailable.");
 }
 
 function renderWorkout(workout, plan) {
@@ -1873,8 +1873,13 @@ function renderWorkout(workout, plan) {
         </form>`
       : swapButton;
     const demo = exercise.demoVideo || { kind: "instructions", title: `${exercise.exerciseName} instructions` };
-    const exerciseSupport = `<div class="workout-exercise-support">
-      ${demo.kind === "video"
+    const hasDemoVideo = demo.kind === "video" && Boolean(demo.videoId);
+    // The demonstration sits directly under the exercise name/muscle/equipment
+    // line so it is visible before the edit/swap controls, and it uses this
+    // exercise's own resolved demo — never a shared placeholder.
+    const demonstration = `<section class="exercise-demonstration" aria-label="Exercise Demonstration">
+      <div class="exercise-demonstration-label">Exercise Demonstration</div>
+      ${hasDemoVideo
         ? `<div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
             <button class="exercise-demo-preview" type="button" data-action="play-demo" aria-label="Play ${escapeWorkoutText(exercise.exerciseName)} demonstration">
               <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
@@ -1883,7 +1888,9 @@ function renderWorkout(workout, plan) {
             <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · Inline demonstration</span></div>
             <div class="exercise-demo-player" hidden aria-live="polite"></div>
           </div>`
-        : `<div class="exercise-demo-fallback" role="note"><strong>${escapeWorkoutText(exercise.exerciseName)} · Written guide</strong><p>${escapeWorkoutText(exerciseDemoInstructions(exercise, demo))}</p><span class="exercise-demo-fallback-hint">No embeddable video found yet. Ask about this exercise below for extra detail.</span></div>`}
+        : `<p class="exercise-demo-unavailable-note" role="note">Demonstration currently unavailable.</p>`}
+    </section>`;
+    const exerciseSupport = `<div class="workout-exercise-support">
       <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
       <form class="exercise-chat-form" data-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
         <label>Ask about ${escapeWorkoutText(exercise.exerciseName)}<textarea name="question" maxlength="500" rows="2" required placeholder="Form, setup, breathing, common mistakes, or alternatives"></textarea></label>
@@ -1894,7 +1901,7 @@ function renderWorkout(workout, plan) {
     return `<article class="workout-exercise-row ${stateClass}" data-index="${index}">
       ${dragHandle}
       <div class="workout-exercise-copy"><strong>${escapeWorkoutText(exercise.exerciseName)}</strong><span>${escapeWorkoutText(exercise.muscle || exercise.primaryMuscle || "Full body")} · ${escapeWorkoutText(equipmentLine(exercise))} · ${setLabel} · ${repLabel}</span></div>
-      <span class="workout-exercise-state">${stateLabel}</span>${controls}${exerciseSupport}
+      <span class="workout-exercise-state">${stateLabel}</span>${demonstration}${controls}${exerciseSupport}
     </article>`;
   }).join("");
 
