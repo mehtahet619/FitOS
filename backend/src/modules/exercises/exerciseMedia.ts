@@ -1,22 +1,29 @@
 import { normalizeExerciseValue } from "../workouts/exerciseCsvRepository";
 
 export interface ExerciseDemoMatch {
-  kind: "video" | "search";
-  provider: "youtube";
+  kind: "video" | "instructions";
+  provider?: "youtube";
   videoId?: string;
   title: string;
-  sourceName: string;
-  sourceUrl: string;
+  sourceName?: string;
+  sourceUrl?: string;
   thumbnailUrl?: string;
-  searchQuery: string;
-  searchUrl: string;
+  instructions?: string;
 }
 
-interface CuratedExerciseDemo extends Omit<ExerciseDemoMatch, "kind" | "searchQuery" | "searchUrl"> {
+interface CuratedExerciseDemo extends Omit<ExerciseDemoMatch, "kind" | "instructions"> {
   videoId: string;
   thumbnailUrl: string;
+  sourceName: string;
+  sourceUrl: string;
   exerciseNames: string[];
   equipment: string[];
+}
+
+export interface ExerciseInstructionContext {
+  instructions?: string | null;
+  primaryMuscle?: string | null;
+  movementPattern?: string | null;
 }
 
 // These records are manually matched to exercise guide pages and their exact
@@ -67,6 +74,7 @@ const CURATED_DEMOS: readonly CuratedExerciseDemo[] = [
 export function findExerciseDemo(
   exerciseName: string,
   equipmentRequired: readonly string[],
+  instructionContext: ExerciseInstructionContext = {},
 ): ExerciseDemoMatch {
   const name = normalizeExerciseValue(exerciseName);
   const equipment = new Set(equipmentRequired.map(normalizeExerciseValue));
@@ -74,31 +82,54 @@ export function findExerciseDemo(
     demo.exerciseNames.some((candidate) => normalizeExerciseValue(candidate) === name)
     && demo.equipment.some((candidate) => equipment.has(normalizeExerciseValue(candidate)))
   );
-  const searchQuery = buildExerciseSearchQuery(exerciseName, equipmentRequired);
-  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
   if (!match || !isValidYouTubeVideoId(match.videoId)) {
     return {
-      kind: "search",
-      provider: "youtube",
-      title: `${exerciseName.trim()} proper form demonstration`,
-      sourceName: "YouTube search",
-      sourceUrl: searchUrl,
-      searchQuery,
-      searchUrl,
+      kind: "instructions",
+      title: `${exerciseName.trim()} instructions`,
+      instructions: buildExerciseInstructionFallback(exerciseName, equipmentRequired, instructionContext),
     };
   }
   const { exerciseNames: _names, equipment: _equipment, ...publicMatch } = match;
-  return { ...publicMatch, kind: "video", searchQuery, searchUrl };
+  return {
+    ...publicMatch,
+    kind: "video",
+    instructions: buildExerciseInstructionFallback(exerciseName, equipmentRequired, instructionContext),
+  };
 }
 
-function buildExerciseSearchQuery(exerciseName: string, equipmentRequired: readonly string[]): string {
-  const canonicalName = exerciseName.trim();
-  const normalizedName = normalizeExerciseValue(canonicalName);
-  const equipmentQualifier = equipmentRequired.map((equipment) => equipment.trim()).find((equipment) => {
-    const normalizedEquipment = normalizeExerciseValue(equipment);
-    return normalizedEquipment && normalizedEquipment !== "no equipment" && !normalizedName.includes(normalizedEquipment);
-  });
-  return [canonicalName, equipmentQualifier, "proper form demonstration"].filter(Boolean).join(" ");
+export function buildExerciseInstructionFallback(
+  exerciseName: string,
+  equipmentRequired: readonly string[],
+  context: ExerciseInstructionContext = {},
+): string {
+  const savedInstructions = context.instructions?.trim();
+  if (savedInstructions) return savedInstructions;
+
+  const patternGuidance: Record<string, string> = {
+    horizontal_push: "Brace your torso, press the resistance away from your chest, then return it under control.",
+    vertical_push: "Brace your torso and press the resistance overhead through a comfortable range, then lower it under control.",
+    horizontal_pull: "Brace your torso and pull the resistance toward your ribs, then extend your arms under control.",
+    vertical_pull: "Keep your torso steady, pull down with your elbows toward your sides, then return overhead under control.",
+    squat: "Keep your whole foot grounded, sit your hips down and back with knees tracking over toes, then stand with control.",
+    hinge: "Keep a soft bend in your knees, hinge at your hips while keeping the load close, then extend your hips to stand.",
+    lunge: "Step into a stable split stance, lower with control while keeping your front knee aligned over your foot, then return to standing.",
+    elbow_flexion: "Keep your upper arms steady, flex your elbows to raise the resistance, then lower it slowly.",
+    elbow_extension: "Keep your upper arms steady, extend your elbows against the resistance, then return slowly.",
+    abduction: "Keep your torso steady, move the working limb away from your midline through a comfortable range, then return slowly.",
+    plantarflexion: "Rise through the balls of your feet, pause briefly, then lower your heels slowly through a comfortable range.",
+    anti_extension: "Brace your abdomen and keep your spine neutral while resisting movement through your trunk.",
+    flexion: "Brace your trunk and curl through a comfortable range without swinging, then return slowly.",
+    rotation: "Brace your hips and rotate through your trunk under control, then return to the starting position.",
+  };
+  const movementPattern = context.movementPattern?.trim().toLowerCase() || "";
+  const setup = equipmentRequired.length > 0
+    ? `Set up the ${exerciseName} with ${equipmentRequired.join(" and ")}.`
+    : `Set up for ${exerciseName} using bodyweight.`;
+  const movement = patternGuidance[movementPattern]
+    || "Move through a comfortable range with controlled tempo, then return to the starting position without swinging.";
+  const target = context.primaryMuscle?.trim();
+  return [setup, movement, target ? `Keep the ${target} muscles engaged.` : "Keep the target muscles engaged.", "Stop if you feel pain."]
+    .join(" ");
 }
 
 export function isValidYouTubeVideoId(videoId: string): boolean {

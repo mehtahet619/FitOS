@@ -1620,18 +1620,44 @@ function loadYouTubeIframeApi() {
   return youtubeIframeApiPromise;
 }
 
-function showUnavailableExerciseDemo(player, demo, exerciseName) {
+function exerciseDemoInstructions(exercise, demo) {
+  const storedInstructions = String(demo?.instructions || exercise?.instructions || "").trim();
+  if (storedInstructions) return storedInstructions;
+  const patterns = {
+    horizontal_push: "Brace your torso, press the resistance away from your chest, then return it under control.",
+    vertical_push: "Brace your torso and press the resistance overhead through a comfortable range, then lower it under control.",
+    horizontal_pull: "Brace your torso and pull the resistance toward your ribs, then extend your arms under control.",
+    vertical_pull: "Keep your torso steady, pull down with your elbows toward your sides, then return overhead under control.",
+    squat: "Keep your whole foot grounded, sit your hips down and back with knees tracking over toes, then stand with control.",
+    hinge: "Keep a soft bend in your knees, hinge at your hips with the load close, then extend your hips to stand.",
+    lunge: "Use a stable split stance, lower with control while keeping your front knee aligned over your foot, then return to standing.",
+    elbow_flexion: "Keep your upper arms steady, flex your elbows to raise the resistance, then lower it slowly.",
+    elbow_extension: "Keep your upper arms steady, extend your elbows against the resistance, then return slowly.",
+    abduction: "Keep your torso steady, move the working limb away from your midline, then return slowly.",
+    plantarflexion: "Rise through the balls of your feet, pause, then lower your heels slowly through a comfortable range.",
+    anti_extension: "Brace your abdomen and keep your spine neutral while resisting movement through your trunk.",
+    flexion: "Brace your trunk and curl through a comfortable range without swinging, then return slowly.",
+    rotation: "Brace your hips and rotate through your trunk under control, then return to the starting position.",
+  };
+  const name = String(exercise?.exerciseName || demo?.title || "Exercise");
+  const equipment = (exercise?.equipmentRequired || []).filter(Boolean);
+  const setup = equipment.length ? `Set up ${name} with ${equipment.join(" and ")}.` : `Set up for ${name} using bodyweight.`;
+  const movement = patterns[String(exercise?.movementPattern || "").toLowerCase()]
+    || "Move through a comfortable range with controlled tempo, then return to the starting position without swinging.";
+  const target = exercise?.primaryMuscle || exercise?.muscle;
+  return [setup, movement, target ? `Focus on ${target}.` : "Keep the target muscles engaged.", "Stop if you feel pain."]
+    .join(" ");
+}
+
+function showUnavailableExerciseDemo(player, exercise, demo) {
   delete player.dataset.loading;
   const fallback = document.createElement("div");
-  fallback.className = "exercise-demo-unavailable";
-  const message = document.createElement("p");
-  message.textContent = "This video is unavailable for this exercise.";
-  const link = document.createElement("a");
-  link.href = demo.searchUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exerciseName} proper form demonstration`)}`;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  link.textContent = `Search YouTube for ${exerciseName}`;
-  fallback.append(message, link);
+  fallback.className = "exercise-demo-fallback exercise-demo-unavailable";
+  const heading = document.createElement("strong");
+  heading.textContent = `${exercise.exerciseName} · Written guide`;
+  const instructions = document.createElement("p");
+  instructions.textContent = exerciseDemoInstructions(exercise, demo);
+  fallback.append(heading, instructions);
   player.replaceChildren(fallback);
 }
 
@@ -1751,11 +1777,7 @@ function renderWorkout(workout, plan) {
           <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
       : swapButton;
-    const demo = exercise.demoVideo || (() => {
-      const searchQuery = `${exercise.exerciseName} proper form demonstration`;
-      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
-      return { kind: "search", searchQuery, searchUrl };
-    })();
+    const demo = exercise.demoVideo || { kind: "instructions", title: `${exercise.exerciseName} instructions` };
     const exerciseSupport = `<div class="workout-exercise-support">
       ${demo.kind === "video"
         ? `<div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
@@ -1763,13 +1785,10 @@ function renderWorkout(workout, plan) {
               <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
               <span class="exercise-demo-play" aria-hidden="true">▶</span>
             </button>
-            <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName)} · <a href="https://www.youtube.com/watch?v=${encodeURIComponent(demo.videoId)}" target="_blank" rel="noopener noreferrer">Open on YouTube</a></span><span><a href="${escapeWorkoutText(demo.sourceUrl)}" target="_blank" rel="noopener noreferrer">Video source</a></span></div>
+            <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · Inline demonstration</span></div>
             <div class="exercise-demo-player" hidden aria-live="polite"></div>
           </div>`
-        : `<a class="exercise-demo-search" href="${escapeWorkoutText(demo.searchUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Search YouTube for ${escapeWorkoutText(demo.searchQuery || `${exercise.exerciseName} proper form demonstration`)}">
-            <span class="exercise-demo-search-thumbnail" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="exercise-demo-play">▶</span></span>
-            <span class="exercise-demo-search-copy"><strong>Find an exact demonstration</strong><small>${escapeWorkoutText(demo.searchQuery || `${exercise.exerciseName} proper form demonstration`)}</small><span>Search YouTube</span></span>
-          </a>`}
+        : `<div class="exercise-demo-fallback" role="note"><strong>${escapeWorkoutText(exercise.exerciseName)} · Written guide</strong><p>${escapeWorkoutText(exerciseDemoInstructions(exercise, demo))}</p></div>`}
       <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
       <form class="exercise-chat-form" data-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
         <label>Ask about ${escapeWorkoutText(exercise.exerciseName)}<textarea name="question" maxlength="500" rows="2" required placeholder="Form, setup, breathing, common mistakes, or alternatives"></textarea></label>
@@ -1965,7 +1984,7 @@ function renderWorkout(workout, plan) {
       player.textContent = "Loading demonstration…";
       const api = await loadYouTubeIframeApi();
       if (!api) {
-        showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+        showUnavailableExerciseDemo(player, exercise, demo);
         button.disabled = false;
         return;
       }
@@ -1984,14 +2003,14 @@ function renderWorkout(workout, plan) {
               button.hidden = true;
             },
             onError: () => {
-              showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+              showUnavailableExerciseDemo(player, exercise, demo);
               button.disabled = false;
               button.hidden = false;
             },
           },
         });
       } catch {
-        showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+        showUnavailableExerciseDemo(player, exercise, demo);
         button.disabled = false;
       }
     });

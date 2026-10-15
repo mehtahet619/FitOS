@@ -620,7 +620,11 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       secondaryMuscles: (exercise.secondaryMuscles || "").split(",").map((muscle: string) => muscle.trim()).filter(Boolean),
       movementPattern: exercise.movementPattern,
       demoVideo: (() => {
-        const demo = findExerciseDemo(exerciseName, equipmentRequired);
+        const demo = findExerciseDemo(exerciseName, equipmentRequired, {
+          instructions: exercise.instructions,
+          primaryMuscle,
+          movementPattern: exercise.movementPattern,
+        });
         return demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null;
       })(),
       targetSets: exercise.targetSets,

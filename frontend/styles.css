@@ -576,28 +576,19 @@ html, body {
 .exercise-demo-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .exercise-demo-thumbnail-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: #d9e7de; font-size: 12px; }
 .exercise-demo-play { position: absolute; top: 50%; left: 50%; display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; background: rgba(17,25,21,.82); color: #fff; font-size: 19px; transform: translate(-50%, -50%); }
-.exercise-demo-search { display: grid; grid-template-columns: minmax(92px, .65fr) minmax(0, 1fr); width: min(100%, 380px); aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; background: #fff; color: var(--ink); text-decoration: none; }
-.exercise-demo-search-thumbnail { position: relative; display: grid; place-items: center; min-width: 0; background: #e9efea; color: #456c53; }
-.exercise-demo-search-thumbnail > svg { width: 35px; height: 35px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.exercise-demo-search-thumbnail .exercise-demo-play { width: 34px; height: 34px; border-color: rgba(255,255,255,.8); font-size: 13px; }
-.exercise-demo-search-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: 5px; padding: 10px; }
-.exercise-demo-search-copy strong { font-size: 12px; }
-.exercise-demo-search-copy small { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.exercise-demo-search-copy > span { color: #238964; font-size: 10px; font-weight: 700; }
-.exercise-demo-search:hover { border-color: var(--mint-strong); background: #f8fbf8; }
 .exercise-demo-preview:focus-visible, .exercise-chat-toggle:focus-visible { outline: 3px solid var(--mint-strong); outline-offset: 3px; }
-.exercise-demo-search:focus-visible { outline: 3px solid var(--mint-strong); outline-offset: 3px; }
 .exercise-demo-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; color: var(--muted); font-size: 10px; }
-.exercise-demo-meta a { color: #238964; font-weight: 700; }
 .exercise-captions { color: #238964; font-weight: 700; }
+.exercise-demo-fallback { display: grid; gap: 6px; width: min(100%, 380px); padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: #fff; }
+.exercise-demo-fallback strong { color: var(--ink); font-size: 12px; }
+.exercise-demo-fallback p { margin: 0; color: #56645b; font-size: 12px; line-height: 1.5; }
 .exercise-demo-player { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 11px; background: #101613; }
 .exercise-demo-player[data-loading="true"]::before { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; color: #fff; content: "Loading demonstration…"; font-size: 12px; }
 .exercise-demo-player[hidden] { display: none; }
 .exercise-demo-player iframe { display: block; width: 100%; height: 100%; border: 0; }
-.exercise-demo-unavailable { display: grid; height: 100%; align-content: center; justify-items: center; gap: 8px; padding: 14px; color: #fff; text-align: center; }
-.exercise-demo-unavailable p { margin: 0; font-size: 12px; }
-.exercise-demo-unavailable a { color: #a8e0bd; font-size: 11px; font-weight: 700; }
-.exercise-video-unavailable { margin: 0; color: var(--muted); font-size: 11px; }
+.exercise-demo-player .exercise-demo-unavailable { width: 100%; height: 100%; align-content: center; border: 0; border-radius: 0; background: #101613; }
+.exercise-demo-player .exercise-demo-unavailable strong { color: #fff; }
+.exercise-demo-player .exercise-demo-unavailable p { color: #d6e2da; }
 .exercise-chat-form { display: grid; gap: 8px; width: min(100%, 520px); padding: 11px; border: 1px solid var(--border); border-radius: 11px; background: #f8fbf9; }
 .exercise-chat-form[hidden] { display: none; }
 .exercise-chat-form label { display: grid; gap: 5px; color: #68707a; font-size: 11px; font-weight: 700; }
