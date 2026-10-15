@@ -1589,6 +1589,52 @@ function escapeWorkoutText(value) {
   })[character]);
 }
 
+let youtubeIframeApiPromise = null;
+
+function loadYouTubeIframeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
+  youtubeIframeApiPromise = new Promise((resolve) => {
+    let settled = false;
+    const finish = (api) => {
+      if (settled) return;
+      settled = true;
+      resolve(api?.Player ? api : null);
+    };
+    const previousReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousReady === "function") previousReady();
+      finish(window.YT);
+    };
+    let script = document.querySelector('script[data-youtube-iframe-api]');
+    if (!script) {
+      script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      script.dataset.youtubeIframeApi = "true";
+      script.addEventListener("error", () => finish(null), { once: true });
+      document.head.append(script);
+    }
+    window.setTimeout(() => finish(window.YT), 10000);
+  });
+  return youtubeIframeApiPromise;
+}
+
+function showUnavailableExerciseDemo(player, demo, exerciseName) {
+  delete player.dataset.loading;
+  const fallback = document.createElement("div");
+  fallback.className = "exercise-demo-unavailable";
+  const message = document.createElement("p");
+  message.textContent = "This video is unavailable for this exercise.";
+  const link = document.createElement("a");
+  link.href = demo.searchUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exerciseName} proper form demonstration`)}`;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = `Search YouTube for ${exerciseName}`;
+  fallback.append(message, link);
+  player.replaceChildren(fallback);
+}
+
 function renderWorkout(workout, plan) {
   const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
   const el = $("workout-content");
@@ -1705,18 +1751,25 @@ function renderWorkout(workout, plan) {
           <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
       : swapButton;
-    const demo = exercise.demoVideo;
+    const demo = exercise.demoVideo || (() => {
+      const searchQuery = `${exercise.exerciseName} proper form demonstration`;
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
+      return { kind: "search", searchQuery, searchUrl };
+    })();
     const exerciseSupport = `<div class="workout-exercise-support">
-      ${demo
+      ${demo.kind === "video"
         ? `<div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
             <button class="exercise-demo-preview" type="button" data-action="play-demo" aria-label="Play ${escapeWorkoutText(exercise.exerciseName)} demonstration">
               <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
               <span class="exercise-demo-play" aria-hidden="true">▶</span>
             </button>
-            <div class="exercise-demo-meta"><span>Demonstration · <a href="${escapeWorkoutText(demo.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeWorkoutText(demo.sourceName)} source</a></span><span>Use the player’s captions control when available.</span></div>
+            <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName)} · <a href="https://www.youtube.com/watch?v=${encodeURIComponent(demo.videoId)}" target="_blank" rel="noopener noreferrer">Open on YouTube</a></span><span><a href="${escapeWorkoutText(demo.sourceUrl)}" target="_blank" rel="noopener noreferrer">Video source</a></span></div>
             <div class="exercise-demo-player" hidden aria-live="polite"></div>
           </div>`
-        : `<p class="exercise-video-unavailable">Video unavailable for this exact exercise variation.</p>`}
+        : `<a class="exercise-demo-search" href="${escapeWorkoutText(demo.searchUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Search YouTube for ${escapeWorkoutText(demo.searchQuery || `${exercise.exerciseName} proper form demonstration`)}">
+            <span class="exercise-demo-search-thumbnail" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span class="exercise-demo-play">▶</span></span>
+            <span class="exercise-demo-search-copy"><strong>Find an exact demonstration</strong><small>${escapeWorkoutText(demo.searchQuery || `${exercise.exerciseName} proper form demonstration`)}</small><span>Search YouTube</span></span>
+          </a>`}
       <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
       <form class="exercise-chat-form" data-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
         <label>Ask about ${escapeWorkoutText(exercise.exerciseName)}<textarea name="question" maxlength="500" rows="2" required placeholder="Form, setup, breathing, common mistakes, or alternatives"></textarea></label>
@@ -1887,31 +1940,60 @@ function renderWorkout(workout, plan) {
       if (form) form.hidden = !form.hidden;
     });
   });
+  el.querySelectorAll(".exercise-demo-preview img").forEach((image) => {
+    image.addEventListener("error", () => {
+      const preview = image.closest(".exercise-demo-preview");
+      if (!preview || preview.querySelector(".exercise-demo-thumbnail-fallback")) return;
+      image.hidden = true;
+      const fallback = document.createElement("span");
+      fallback.className = "exercise-demo-thumbnail-fallback";
+      fallback.textContent = "Video preview unavailable";
+      preview.append(fallback);
+    }, { once: true });
+  });
   el.querySelectorAll('[data-action="play-demo"]').forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const row = button.closest(".workout-exercise-row");
       const exerciseId = row?.querySelector(".exercise-demo")?.dataset.videoId;
       const exercise = exercises.find((item) => item.exerciseId === exerciseId);
       const demo = exercise?.demoVideo;
       const player = row?.querySelector(".exercise-demo-player");
-      if (!demo || !player || player.querySelector("iframe")) return;
+      if (!demo || demo.kind !== "video" || !player || player.dataset.loading === "true" || player.querySelector("iframe")) return;
       player.hidden = false;
-      player.textContent = "Loading demonstration…";
-      const frame = document.createElement("iframe");
-      frame.src = demo.embedUrl;
-      frame.title = `${exercise.exerciseName} demonstration video`;
-      frame.loading = "lazy";
-      frame.referrerPolicy = "strict-origin-when-cross-origin";
-      frame.allow = "encrypted-media; picture-in-picture; fullscreen";
-      frame.allowFullscreen = true;
       player.dataset.loading = "true";
-      frame.addEventListener("load", () => { delete player.dataset.loading; });
-      frame.addEventListener("error", () => {
-        delete player.dataset.loading;
-        player.textContent = "This demonstration could not be played. Video unavailable.";
-      });
-      player.replaceChildren(frame);
-      button.hidden = true;
+      button.disabled = true;
+      player.textContent = "Loading demonstration…";
+      const api = await loadYouTubeIframeApi();
+      if (!api) {
+        showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+        button.disabled = false;
+        return;
+      }
+      const host = document.createElement("div");
+      player.replaceChildren(host);
+      try {
+        new api.Player(host, {
+          width: "100%",
+          height: "100%",
+          videoId: demo.videoId,
+          playerVars: { autoplay: 0, controls: 1, enablejsapi: 1, playsinline: 1, rel: 0 },
+          events: {
+            onReady: () => {
+              delete player.dataset.loading;
+              button.disabled = false;
+              button.hidden = true;
+            },
+            onError: () => {
+              showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+              button.disabled = false;
+              button.hidden = false;
+            },
+          },
+        });
+      } catch {
+        showUnavailableExerciseDemo(player, demo, exercise.exerciseName);
+        button.disabled = false;
+      }
     });
   });
   el.querySelectorAll('[data-action="ask-exercise"]').forEach((button) => {
