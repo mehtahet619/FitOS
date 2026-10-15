@@ -603,6 +603,9 @@ html, body {
 .workout-exercise-actions .btn { min-height: 34px; padding: 6px 10px; font-size: 11px; }
 .workout-exercise-actions .btn:disabled { opacity: .45; }
 .workout-exercise-support { grid-column: 2 / 4; display: grid; justify-items: start; gap: 9px; width: min(100%, 520px); padding: 4px 0 2px; }
+.exercise-demonstration { grid-column: 2 / 4; display: grid; justify-items: start; gap: 7px; width: min(100%, 380px); padding: 2px 0; }
+.exercise-demonstration-label { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.exercise-demo-unavailable-note { margin: 0; color: var(--muted); font-size: 11px; }
 .exercise-demo { width: 100%; min-width: 0; }
 .exercise-demo-preview { position: relative; display: block; width: min(100%, 380px); aspect-ratio: 16 / 9; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 11px; background: #19231f; cursor: pointer; }
 .exercise-demo-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }

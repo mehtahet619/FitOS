@@ -104,4 +104,24 @@ describe("curated exercise demo matching", () => {
     expect(app).toContain('image.addEventListener("error"');
     expect(app).toContain('fallback.textContent = "Video preview unavailable"');
   });
+
+  it("places the labelled exercise demonstration above the edit and swap controls", () => {
+    const css = fs.readFileSync(path.resolve(__dirname, "../../../frontend/styles.css"), "utf8");
+    const app = fs.readFileSync(path.resolve(__dirname, "../../../frontend/app.js"), "utf8");
+    const demoStart = app.indexOf("const demonstration = `");
+    const demoBlock = app.slice(demoStart, app.indexOf("</section>`", demoStart));
+    const rowStart = app.indexOf('class="workout-exercise-row ${stateClass}"');
+    const row = app.slice(rowStart, app.indexOf("</article>", rowStart));
+
+    expect(demoStart).toBeGreaterThan(-1);
+    expect(demoBlock).toContain("Exercise Demonstration");
+    expect(demoBlock).toContain('data-action="play-demo"');
+    expect(demoBlock).toContain("Demonstration currently unavailable.");
+    expect(demoBlock).not.toContain("Written guide");
+    // The demonstration block must render before the edit/swap controls so it is
+    // visible without scrolling past the buttons.
+    expect(row.indexOf("${demonstration}")).toBeGreaterThan(-1);
+    expect(row.indexOf("${demonstration}")).toBeLessThan(row.indexOf("${controls}"));
+    expect(css).toContain(".exercise-demonstration { grid-column: 2 / 4");
+  });
 });
