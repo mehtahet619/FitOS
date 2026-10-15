@@ -3,7 +3,7 @@ import { db } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { primaryMuscleMatchesTarget } from "../workouts/muscleTaxonomy";
 import { findExerciseDemo, exerciseDemoEmbedUrl } from "./exerciseMedia";
-import { answerExerciseQuestion, isExerciseAssistantConfigured } from "./exerciseAssistant";
+import { answerExerciseQuestion } from "./exerciseAssistant";
 import { z } from "zod";
 
 export const exerciseRouter = Router();
@@ -217,6 +217,14 @@ exerciseRouter.post("/:id/ask", requireAuth, async (req: AuthedRequest, res) => 
   const secondary = await db.all<{ name: string }>(
     `SELECT m.name FROM ExerciseMuscle em JOIN Muscle m ON m.id=em.muscleId WHERE em.exerciseId = ? AND em.role='SECONDARY' ORDER BY m.name`, exercise.id);
   const equipment = await equipmentNamesFor(exercise.id);
+  const alternativeRows = await db.all<{ id: string; name: string }>(
+    `SELECT e.id,e.name FROM ExerciseSubstitution s JOIN Exercise e ON e.id=s.substituteId WHERE s.baseExerciseId=? ORDER BY s.priority ASC LIMIT 8`,
+    exercise.id,
+  );
+  const alternatives = await Promise.all(alternativeRows.map(async (alternative) => ({
+    name: alternative.name,
+    equipment: await equipmentNamesFor(alternative.id),
+  })));
   const answer = await answerExerciseQuestion({
     name: exercise.name,
     primaryMuscle: primary?.name || exercise.primaryMuscle,
@@ -224,12 +232,7 @@ exerciseRouter.post("/:id/ask", requireAuth, async (req: AuthedRequest, res) => 
     equipment,
     instructions: exercise.instructions || "",
     movementPattern: exercise.movementPattern,
+    alternatives,
   }, parsed.data.question);
-  if (!answer) {
-    if (!isExerciseAssistantConfigured()) {
-      return res.status(503).json({ code: "EXERCISE_CHAT_NOT_CONFIGURED", error: "Exercise chat is not configured on the server yet." });
-    }
-    return res.status(503).json({ code: "EXERCISE_CHAT_UNAVAILABLE", error: "Exercise chat is temporarily unavailable. Please try again later." });
-  }
   return res.json({ exerciseId: exercise.id, answer });
 });

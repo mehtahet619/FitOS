@@ -40,6 +40,15 @@ describe("curated exercise demo matching", () => {
     })).toContain("Keep your upper arms steady, flex your elbows");
   });
 
+  it("gives eccentric seated cable rows a slow-return guide when no exact video is mapped", () => {
+    const fallback = findExerciseDemo("Eccentric Emphasis Seated Cable Row", ["Cable Machine"], {
+      primaryMuscle: "Lats", movementPattern: "csv_recommendation", instructions: "",
+    });
+    expect(fallback.kind).toBe("instructions");
+    expect(fallback.instructions.toLowerCase()).toContain("pull the handle toward your lower ribs");
+    expect(fallback.instructions.toLowerCase()).toContain("over about 3 seconds");
+  });
+
   it("rejects malformed YouTube IDs before constructing an embed", () => {
     expect(isValidYouTubeVideoId("iKrKgWR9wbY")).toBe(true);
     expect(isValidYouTubeVideoId("not-a-video-id")).toBe(false);
@@ -78,6 +87,8 @@ describe("curated exercise demo matching", () => {
     expect(app).toContain("https://www.youtube.com/iframe_api");
     expect(app).toContain('demo.kind === "video"');
     expect(app).toContain("exerciseDemoInstructions(exercise, demo)");
+    expect(app).toContain("renderExerciseDemoVisual(exercise)");
+    expect(app).toContain("Return over 3 seconds");
     expect(app).not.toContain("Find an exact demonstration");
     expect(app).not.toContain("youtube.com/results?search_query");
     expect(app).not.toContain("Open on YouTube");
