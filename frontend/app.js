@@ -568,6 +568,7 @@ function enterMainApp() {
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+$("today-profile-btn")?.addEventListener("click", () => navigate("/profile"));
 document.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-logout]");
   if (!target) return;
@@ -605,6 +606,58 @@ async function showHistory() {
 let todayLoadGeneration = 0;
 let todayRequest = null;
 
+const TODAY_ICON_PATHS = {
+  calories: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.4 0 2.5-1.1 2.5-2.5 0-1.1-.6-1.8-1.5-2.5.2 1-.5 1.5-1 1.5-.8 0-1.5-.7-1.5-1.5 0-1.7 1.5-2.4 1.5-4.5 2.5 1.7 4 4.5 4 7.5a6 6 0 0 1-12 0c0-2.6 1.3-4.8 3.5-6.5-.2 2.3 2 3 2 5.5Z"/>',
+  food: '<path d="M3 2v7a4 4 0 0 0 4 4h1V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm-3 0v7"/>',
+  volume: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  gym: '<path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/>',
+  lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+};
+
+function todayIcon(name, size = 16) {
+  return `<svg class="today-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TODAY_ICON_PATHS[name] || ""}</svg>`;
+}
+
+function dateKeyInTimeZone(timeZone, date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: timeZone || undefined,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function daysRemainingInMonth(month, calendarDays, timeZone) {
+  const today = dateKeyInTimeZone(timeZone);
+  const currentMonth = today.slice(0, 7);
+  if (month < currentMonth) return 0;
+  if (month > currentMonth) return Number(calendarDays) || 0;
+  return Math.max(0, (Number(calendarDays) || 0) - Number(today.slice(8, 10)));
+}
+
+function currentWorkoutStreak(sessionDates, history, month, timeZone) {
+  const today = dateKeyInTimeZone(timeZone);
+  if (month !== today.slice(0, 7)) return null;
+  const completedDates = new Set((sessionDates || []).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)));
+  for (const workout of history || []) {
+    if (workout.status === "completed" && workout.completedAt) {
+      completedDates.add(dateKeyInTimeZone(timeZone, new Date(workout.completedAt)));
+    }
+  }
+  let cursor = Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)));
+  if (!completedDates.has(today)) cursor -= 86_400_000;
+  let streak = 0;
+  while (completedDates.has(new Date(cursor).toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor -= 86_400_000;
+  }
+  return streak >= 30 && history?.length >= 30 ? `${streak}+` : streak;
+}
+
 function loadToday() {
   if (todayRequest) return todayRequest;
   const generation = ++todayLoadGeneration;
@@ -630,10 +683,11 @@ async function loadTodayData(generation) {
 
     greetingEl.textContent = `Hi, ${profile.name?.split(" ")[0] || "there"}`;
 
-    const [nutritionResult, gymResult, growImpactResult] = await Promise.allSettled([
+    const [nutritionResult, gymResult, growImpactResult, historyResult] = await Promise.allSettled([
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
       Api.get("/grow-impact/"),
+      Api.get("/workouts/history"),
     ]);
     if (generation !== todayLoadGeneration) return;
 
@@ -641,8 +695,9 @@ async function loadTodayData(generation) {
     const gymData = gymResult.status === "fulfilled" ? gymResult.value : null;
     const growImpactData = growImpactResult.status === "fulfilled" ? growImpactResult.value : null;
     const growImpactError = growImpactResult.status === "rejected";
+    const workoutHistory = historyResult.status === "fulfilled" ? historyResult.value?.history || [] : [];
 
-    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData, growImpactError);
+    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData, growImpactError, workoutHistory);
     el.dataset.loadState = "success";
   } catch (e) {
     if (generation === todayLoadGeneration) handleTodayError(el, e);
@@ -653,62 +708,67 @@ async function loadTodayData(generation) {
   }
 }
 
-function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false) {
+function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false, workoutHistory = []) {
   const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
-  const nextWod = plan?.nextWorkout?.label || null;
-  const statusInfo = activePlanLabel
-    ? `${activePlanLabel} · ${plan.cycleStatus}${nextWod ? " · Next: " + nextWod : ""}`
-    : "Choose a workout structure in the Workout tab";
+  const workoutName = dashboard?.todaysPlan?.focus || plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete" : "No active plan");
+  const statusLabel = dashboard?.todaysPlan?.status === "completed" ? "Completed" : plan?.cycleStatus === "IN_PROGRESS" ? "In progress" : plan?.cycleStatus === "COMPLETED" ? "Cycle complete" : "Not started";
+  const nextWorkout = plan?.nextWorkout?.label || "No workout scheduled";
+  const recentlyTrained = plan?.recentlyTrainedMuscles?.[0]?.muscle || "No recent training";
+  const unitCount = Array.isArray(plan?.units) ? plan.units.length : 0;
+  const calories = nutrition?.totals?.calories;
+  const nearbyFoodCount = nutrition?.meals?.length;
+  const weeklyVolume = dashboard?.progress?.weeklyVolumeKg ?? 0;
+  const workoutsThisWeek = dashboard?.progress?.workoutsThisWeek ?? 0;
 
   el.innerHTML = `
-    <div class="card">
-      <div class="card-label">🏋️ Today's Workout Plan</div>
-      <div class="card-value">${plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete — new cycle or switch plan" : "No active plan")}</div>
-      <div class="card-sub">${statusInfo}</div>
-      ${plan?.recentlyTrainedMuscles?.length
-        ? `<div class="card-sub">Recently trained: ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
-        : ""}
-      ${plan?.planSwitchAllowed === false && plan?.activePlan
-        ? `<div class="banner banner-info" style="margin-top:8px;">🔒 Plan switching locked — finish all ${plan.units?.length || 0} workouts in this cycle first.</div>`
-        : ""}
-      ${plan?.decision?.warning
-        ? `<div class="banner banner-info" style="margin-top:8px;">⚠️ ${plan.decision.warning}</div>`
-        : ""}
-    </div>
-      <div class="card-grid-2">
-      <div class="card">
-        <div class="card-label">🔥 Calories</div>
-        <div class="card-value">${nutrition ? nutrition.totals.calories : "—"}</div>
-        <div class="card-sub">${nutrition ? "planned today" : "no plan yet"}</div>
+    <section class="today-workout-card" aria-labelledby="today-workout-title">
+      <div class="today-section-label">Today's workout</div>
+      <div class="today-workout-heading">
+        <h2 id="today-workout-title">${escapeImpactText(workoutName)}</h2>
+        <span class="today-workout-status"><span aria-hidden="true"></span>${statusLabel}</span>
       </div>
-      <div class="card">
-        <div class="card-label">🍽️ Nearby food</div>
-        <div class="card-value">${nutrition ? nutrition.meals.length : 0}</div>
-        <div class="card-sub">meals to find nearby</div>
+      <p class="today-workout-split">${escapeImpactText(typeof activePlanLabel === "string" ? activePlanLabel : "Choose a workout structure in Workout")}</p>
+      <div class="today-workout-context">
+        <div><span>Recently trained</span><strong>${escapeImpactText(recentlyTrained)}</strong></div>
+        <div><span>Next workout</span><strong>${escapeImpactText(nextWorkout)}</strong></div>
+        ${plan?.planSwitchAllowed === false && plan?.activePlan
+          ? `<div class="today-plan-lock">${todayIcon("lock", 15)}<span><strong>Plan switching locked</strong><small>Complete all ${unitCount || "remaining"} workouts in this cycle to switch plans.</small></span></div>`
+          : ""}
       </div>
-    </div>
-    <div class="card-grid-2">
-      <div class="card">
-        <div class="card-label">📊 Weekly Volume</div>
-        <div class="card-value">${dashboard.progress.weeklyVolumeKg}kg</div>
-        <div class="card-sub">${dashboard.progress.workoutsThisWeek} workouts this week</div>
-      </div>
-      <div class="card">
-        <div class="card-label">📇 Gym</div>
-        <div class="card-value">${gym && gym.checkedIn ? "✓" : "—"}</div>
-        <div class="card-sub">${gym && gym.checkedIn ? "checked in today" : "not checked in"}</div>
-      </div>
-    </div>
-    ${growImpact ? renderGrowImpact(growImpact) : renderGrowImpactUnavailable(growImpactError)}
+      ${plan?.decision?.warning ? `<p class="today-workout-warning">${todayIcon("alert", 15)}<span>${escapeImpactText(plan.decision.warning)}</span></p>` : ""}
+    </section>
+    <section class="today-stats-grid" aria-label="Today's fitness summary">
+      <article class="today-stat-card">
+        <div class="today-stat-heading">${todayIcon("calories")}<span>Calories</span></div>
+        <strong class="today-stat-value">${calories ?? "—"}</strong>
+        <span class="today-stat-sub">${nutrition ? "planned today" : "not available"}</span>
+      </article>
+      <article class="today-stat-card">
+        <div class="today-stat-heading">${todayIcon("food")}<span>Nearby food</span></div>
+        <strong class="today-stat-value">${nearbyFoodCount ?? "—"}</strong>
+        <span class="today-stat-sub">${nutrition ? "meals available" : "not available"}</span>
+      </article>
+      <article class="today-stat-card">
+        <div class="today-stat-heading">${todayIcon("volume")}<span>Weekly volume</span></div>
+        <strong class="today-stat-value">${escapeImpactText(weeklyVolume)}<small>kg</small></strong>
+        <span class="today-stat-sub">${workoutsThisWeek} workouts this week</span>
+      </article>
+      <article class="today-stat-card">
+        <div class="today-stat-heading">${todayIcon("gym")}<span>Gym check-in</span></div>
+        <strong class="today-stat-value">${gym ? gym.checkedIn ? "Yes" : "No" : "—"}</strong>
+        <span class="today-stat-sub">${gym ? gym.checkedIn ? "checked in today" : "not checked in" : "not available"}</span>
+      </article>
+    </section>
+    ${growImpact ? renderGrowImpact(growImpact, workoutHistory) : renderGrowImpactUnavailable(growImpactError)}
   `;
-  bindGrowImpactActions(el);
+  bindGrowImpactActions(el, workoutHistory);
 }
 
 function renderGrowImpactUnavailable(failed) {
-  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title" role="status">
-    <div class="card-label" id="grow-impact-title">🌱 Grow Your Impact</div>
-    <p class="card-sub">${failed ? "Your saved workout progress could not be loaded." : "Loading your saved workout progress…"}</p>
-    ${failed ? '<button class="btn btn-secondary" type="button" data-retry-grow-impact>Try again</button>' : ""}
+  return `<section class="today-grow-card" aria-labelledby="grow-impact-title" role="status">
+    <div class="today-grow-card-heading"><span class="today-section-label">Monthly consistency</span><h2 id="grow-impact-title">Grow Your Impact</h2></div>
+    <p class="today-grow-message">${failed ? "Your monthly progress could not be loaded." : "Loading your monthly progress…"}</p>
+    ${failed ? '<button class="today-retry-button" type="button" data-retry-grow-impact>Try again</button>' : ""}
   </section>`;
 }
 
@@ -718,18 +778,13 @@ function escapeImpactText(value) {
   })[character]);
 }
 
-function renderGrowImpact(impact) {
+function renderGrowImpact(impact, workoutHistory = []) {
   const percent = Math.max(0, Math.min(100, Number(impact.progressPercent) || 0));
   const count = Number(impact.sessions) || 0;
   const target = Math.max(0, Number(impact.target) || 0);
   const completed = count >= target && target > 0;
-  const encouragement = completed
-    ? "Congratulations! Your monthly growth goal is complete."
-    : count === 0 ? "Every completed workout is a step toward a greener future."
-      : impact.remaining === 1 ? "One more session to unlock your tree choice. Keep going."
-        : "Your consistency is adding up. Sundays are rest days.";
-  const stage = Math.max(1, Number(impact.growthStageIndex) || 1);
-  const stageCount = Math.max(2, Number(impact.growthStageCount) || 25);
+  const remainingDays = daysRemainingInMonth(impact.month, impact.calendarDays, impact.timeZone);
+  const streak = currentWorkoutStreak(impact.completedSessionDates, workoutHistory, impact.month, impact.timeZone);
   const reward = impact.reward;
   const tree = impact.trees?.find((option) => option.id === reward?.selectedSpeciesId) || (reward?.selectedSpeciesId ? {
     id: reward.selectedSpeciesId,
@@ -791,41 +846,47 @@ function renderGrowImpact(impact) {
   const locations = (impact.locations || []).map((location) =>
     `<option value="${escapeImpactText(location.key)}" ${location.key === impact.location?.key ? "selected" : ""}>${escapeImpactText(location.regionName)}, ${escapeImpactText(location.countryName)}</option>`
   ).join("");
-  const growthArt = renderImpactPlant(stage, stageCount, completed);
-  return `<section class="card grow-impact-card" aria-labelledby="grow-impact-title"
+  return `<section class="today-grow-card grow-impact-card" aria-labelledby="grow-impact-title"
     data-open-holiday-dates="${escapeImpactText(JSON.stringify(impact.settings?.gymOpenOnHolidayDates || []))}"
     data-additional-closure-dates="${escapeImpactText(JSON.stringify(impact.settings?.additionalClosureDates || []))}">
-    <div class="grow-impact-heading"><div><div class="card-label">🌱 Grow Your Impact</div><h2 id="grow-impact-title">${count} <span>of ${target} sessions</span></h2></div>
-      <label class="grow-impact-month-label" aria-label="Choose a calendar month"><input class="grow-impact-month" type="month" data-impact-month value="${escapeImpactText(impact.month)}" /></label></div>
-    <div class="grow-impact-calendar-stats" aria-label="Monthly target details">
-      <span><strong>${impact.calendarDays}</strong> total days</span><span><strong>${impact.sundayRestDays}</strong> Sundays</span>
-      <span><strong>${impact.holidayCount}</strong> public holidays</span><span><strong>${impact.additionalClosureCount || 0}</strong> additional closures</span>
-      <span><strong>${impact.eligibleDays}</strong> eligible gym days</span>
-      <span><strong>${count}</strong> completed sessions</span><span><strong>${impact.remaining}</strong> remaining</span>
+    <header class="today-grow-header">
+      <div class="today-grow-card-heading"><span class="today-section-label">Monthly consistency</span><h2 id="grow-impact-title">Grow Your Impact</h2></div>
+      <label class="today-month-select" aria-label="Choose a calendar month">${todayIcon("calendar", 16)}<input class="grow-impact-month" type="month" data-impact-month value="${escapeImpactText(impact.month)}" /></label>
+    </header>
+    <div class="today-grow-progress-copy"><strong>${count}</strong><span>of ${target} sessions completed</span></div>
+    <div class="today-grow-progress" role="progressbar" aria-label="Monthly workout progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
+    <div class="today-grow-metrics" aria-label="Monthly workout summary">
+      <div><span>Days remaining</span><strong>${remainingDays}</strong></div>
+      <div><span>Workouts this month</span><strong>${count}</strong></div>
+      <div><span>Current streak</span><strong>${streak === null ? "—" : streak}</strong></div>
     </div>
-    <p class="grow-impact-location-line">${escapeImpactText(impact.location?.regionName)}, ${escapeImpactText(impact.location?.countryName)} · ${escapeImpactText(impact.timeZone)} · ${impact.holidaySundayCount || 0} holiday/Sunday overlap${impact.holidaySundayCount === 1 ? "" : "s"}</p>
-    ${impact.holidayCalendarConfigured === false ? `<p class="grow-impact-calendar-warning" role="status">No public holiday calendar is configured for ${escapeImpactText(impact.year)}. This target currently excludes Sundays and configured gym closures only.</p>` : ""}
-    <div class="grow-impact-progress" role="progressbar" aria-label="Monthly gym session progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
-    <p class="grow-impact-encouragement">${escapeImpactText(encouragement)}</p>
-    <div class="grow-impact-growth ${completed ? "is-complete" : ""}">
-      ${growthArt}
-      <div class="grow-impact-growth-copy"><strong>Stage ${stage} of ${stageCount} · ${escapeImpactText(impact.growthStageLabel || "Seed")}</strong>
-        <span>${escapeImpactText(impact.nextMilestone || "Next: roots take hold")}</span></div>
-    </div>
-    ${completed ? `<div class="grow-impact-celebration" role="status" aria-live="polite"><strong>🎉 Congratulations — you reached your monthly target!</strong><span>Your virtual growth milestone is complete. Choose a tree below to save your pilot reward.</span></div>` : ""}
-    <p class="grow-impact-rest-note">Only completed workouts with a logged set count. Each calendar day counts once. Progress is based on the workout's local completion date.</p>
-    <details class="grow-impact-calendar-settings"><summary>Calendar and gym closures</summary>
-      <label class="grow-impact-setting-label">Holiday location<select data-impact-location>${locations}</select></label>
-      <p>Public holidays are excluded by default. Check a holiday below if your gym stays open that day. Add other dates when your gym is closed.</p>
-      ${holidayOptions ? `<div class="grow-impact-holiday-list">${holidayOptions}</div>` : `<p>No public holidays are configured for this month.</p>`}
-      <label class="grow-impact-setting-label">Additional gym closure<input type="date" data-impact-new-closure /></label>
-      <button type="button" class="btn btn-secondary grow-impact-add-closure">Add closure date</button>
-      ${closures ? `<ul class="grow-impact-closure-list">${closures}</ul>` : ""}
-      <button type="button" class="btn btn-primary grow-impact-save-settings">Save calendar settings</button>
+    ${completed ? '<p class="today-grow-complete" role="status">Monthly goal reached</p>' : ""}
+    <p class="today-grow-feedback grow-impact-feedback" role="status" aria-live="polite"></p>
+    <details class="today-grow-details">
+      <summary>Calendar settings and rewards</summary>
+      <div class="today-grow-details-content">
+        <div class="today-grow-calendar-summary">
+          <span><strong>${impact.eligibleDays}</strong> eligible gym days</span>
+          <span><strong>${impact.remaining}</strong> sessions remaining</span>
+          <span><strong>${impact.holidayCount}</strong> public holidays</span>
+          <span><strong>${impact.additionalClosureCount || 0}</strong> additional closures</span>
+        </div>
+        <p class="grow-impact-location-line">${escapeImpactText(impact.location?.regionName)}, ${escapeImpactText(impact.location?.countryName)} · ${escapeImpactText(impact.timeZone)}</p>
+        ${impact.holidayCalendarConfigured === false ? `<p class="grow-impact-calendar-warning" role="status">No public holiday calendar is configured for ${escapeImpactText(impact.year)}. This target excludes Sundays and configured gym closures only.</p>` : ""}
+        <details class="today-grow-calendar-settings">
+          <summary>Gym calendar</summary>
+          <label class="grow-impact-setting-label">Holiday location<select data-impact-location>${locations}</select></label>
+          <p>Public holidays are excluded by default. Check a holiday if your gym stays open. Add dates when it is closed.</p>
+          ${holidayOptions ? `<div class="grow-impact-holiday-list">${holidayOptions}</div>` : `<p>No public holidays are configured for this month.</p>`}
+          <label class="grow-impact-setting-label">Additional gym closure<input type="date" data-impact-new-closure /></label>
+          <button type="button" class="btn btn-secondary grow-impact-add-closure">Add closure date</button>
+          ${closures ? `<ul class="grow-impact-closure-list">${closures}</ul>` : ""}
+          <button type="button" class="btn btn-primary grow-impact-save-settings">Save calendar settings</button>
+        </details>
+        ${rewardPanel}
+        <p class="grow-impact-virtual-label">Pilot reward · virtual commitment only. FitOS does not claim that a real tree has been planted.</p>
+      </div>
     </details>
-    <p class="grow-impact-feedback" role="status" aria-live="polite"></p>
-    ${rewardPanel}
-    <p class="grow-impact-virtual-label">Pilot reward · virtual commitment only. FitOS is not currently claiming that a real tree has been planted.</p>
   </section>`;
 }
 
@@ -899,7 +960,7 @@ function renderTreeOption(option, selectedId) {
   </button>`;
 }
 
-function bindGrowImpactActions(root) {
+function bindGrowImpactActions(root, workoutHistory = []) {
   root.querySelector("[data-retry-grow-impact]")?.addEventListener("click", () => {
     todayRequest = null;
     void loadToday();
@@ -939,8 +1000,8 @@ function bindGrowImpactActions(root) {
       if (month) query.set("month", month);
       const impact = await Api.get(`/grow-impact/?${query.toString()}`);
       const card = root.querySelector(".grow-impact-card");
-      if (card) card.outerHTML = renderGrowImpact(impact);
-      bindGrowImpactActions(root);
+      if (card) card.outerHTML = renderGrowImpact(impact, workoutHistory);
+      bindGrowImpactActions(root, workoutHistory);
     } catch (error) {
       if (feedback) feedback.textContent = error?.message || "Could not update the monthly calendar.";
     }
