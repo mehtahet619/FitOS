@@ -26,6 +26,25 @@ describe("monthly target calendar", () => {
     expect(calculateMonthlyTarget("2026-08", gujarat).target).toBe(23);
   });
 
+  it("calculates each month's Sundays and base target across three years", () => {
+    const withoutHolidays = { ...gujarat, holidaysByYear: {} };
+    for (const year of [2026, 2027, 2028]) {
+      for (let month = 1; month <= 12; month += 1) {
+        const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+        const calendarDays = new Date(Date.UTC(year, month, 0)).getUTCDate();
+        const sundayCount = Array.from({ length: calendarDays }, (_, index) => index + 1)
+          .filter((day) => new Date(Date.UTC(year, month - 1, day)).getUTCDay() === 0).length;
+        const result = calculateMonthlyTarget(monthKey, withoutHolidays);
+        expect(result).toMatchObject({
+          calendarDays,
+          sundayRestDays: sundayCount,
+          target: calendarDays - sundayCount,
+          holidayCalendarConfigured: false,
+        });
+      }
+    }
+  });
+
   it("calculates October 2026 Gujarat as 24 eligible gym days", () => {
     const result = calculateMonthlyTarget("2026-10", gujarat, "Asia/Kolkata", noOverrides);
     expect(result).toMatchObject({ calendarDays: 31, sundayRestDays: 4, holidayCount: 3, holidaySundayCount: 0, target: 24, eligibleDays: 24 });
@@ -63,19 +82,52 @@ describe("monthly target calendar", () => {
     }
   });
 
-  it("supports region-specific holiday calendars supplied by an administrator", () => {
+  it("shows one entry when an open public holiday is also a gym closure", () => {
+    const testLocation = {
+      ...gujarat,
+      holidaysByYear: { "2026": [{ date: "2026-06-08", name: "Test regional holiday" }] },
+    };
+    const envKey = "GROW_IMPACT_GYM_CLOSURES_JSON";
+    const oldEnv = process.env[envKey];
+    process.env[envKey] = JSON.stringify({ "IN-GJ": ["2026-06-08"] });
+    try {
+      const result = calculateMonthlyTarget("2026-06", testLocation, "Asia/Kolkata", {
+        gymOpenOnHolidayDates: ["2026-06-08"], additionalClosureDates: ["2026-06-08"],
+      });
+      expect(result.holidayDates.filter((date) => date.date === "2026-06-08")).toEqual([
+        expect.objectContaining({ source: "gym-closure", excluded: true }),
+      ]);
+      expect(result).toMatchObject({ additionalClosureCount: 1, target: 25, eligibleDays: 25 });
+    } finally {
+      if (oldEnv === undefined) delete process.env[envKey];
+      else process.env[envKey] = oldEnv;
+    }
+  });
+
+  it("supports separate administrator-configured calendars by Indian region and year", () => {
     const envKey = "GROW_IMPACT_LOCATION_CALENDARS_JSON";
     const oldEnv = process.env[envKey];
     process.env[envKey] = JSON.stringify({
-      "US-CA": {
-        countryName: "United States", regionName: "California", timeZone: "America/Los_Angeles",
-        holidaysByYear: { "2026": [{ date: "2026-06-19", name: "Configured regional holiday" }] },
+      "IN-MH": {
+        countryName: "India", regionName: "Maharashtra", timeZone: "Asia/Kolkata",
+        holidaysByYear: {
+          "2026": [{ date: "2026-06-19", name: "Test Maharashtra 2026 holiday" }],
+          "2027": [{ date: "2027-06-19", name: "Test Maharashtra 2027 holiday" }],
+        },
+      },
+      "IN-DL": {
+        countryName: "India", regionName: "Delhi", timeZone: "Asia/Kolkata",
+        holidaysByYear: { "2026": [{ date: "2026-06-20", name: "Test Delhi holiday" }] },
       },
     });
     try {
-      const location = getImpactLocation("US-CA");
-      expect(location.regionName).toBe("California");
-      expect(calculateMonthlyTarget("2026-06", location).holidayCount).toBe(1);
+      const maharashtra = getImpactLocation("IN-MH");
+      const delhi = getImpactLocation("IN-DL");
+      expect(maharashtra.regionName).toBe("Maharashtra");
+      expect(calculateMonthlyTarget("2026-06", maharashtra)).toMatchObject({ holidayCount: 1, holidayCalendarConfigured: true });
+      expect(calculateMonthlyTarget("2027-06", maharashtra)).toMatchObject({ holidayCount: 1, holidayCalendarConfigured: true });
+      expect(calculateMonthlyTarget("2026-06", delhi)).toMatchObject({ holidayCount: 1, holidayCalendarConfigured: true });
+      expect(calculateMonthlyTarget("2027-06", delhi)).toMatchObject({ holidayCount: 0, holidayCalendarConfigured: false });
     } finally {
       if (oldEnv === undefined) delete process.env[envKey];
       else process.env[envKey] = oldEnv;

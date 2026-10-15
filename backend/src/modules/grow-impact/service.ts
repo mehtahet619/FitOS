@@ -275,10 +275,17 @@ export function calculateMonthlyTarget(
   const additionalDates = new Set([...adminClosures, ...userClosures]);
   const holidayDates: HolidayDate[] = [];
   for (const [date, name] of publicByDate) {
-    holidayDates.push({ date, name, source: "public", excluded: !openDates.has(date), sunday: window.sundayDates.includes(date) });
+    const closedForGym = openDates.has(date) && additionalDates.has(date);
+    holidayDates.push({
+      date,
+      name: closedForGym ? "Additional gym closure" : name,
+      source: closedForGym ? "gym-closure" : "public",
+      excluded: closedForGym || !openDates.has(date),
+      sunday: window.sundayDates.includes(date),
+    });
   }
   for (const date of additionalDates) {
-    if (!date.startsWith(`${month}-`) || (publicByDate.has(date) && !openDates.has(date))) continue;
+    if (!date.startsWith(`${month}-`) || publicByDate.has(date)) continue;
     holidayDates.push({ date, name: "Additional gym closure", source: "gym-closure", excluded: true, sunday: window.sundayDates.includes(date) });
   }
   const publicHolidaySet = new Set(publicHolidays.filter((holiday) => !openDates.has(holiday.date)).map((holiday) => holiday.date));
