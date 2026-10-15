@@ -36,6 +36,61 @@ function pick(landmarks, leftIdx, rightIdx) {
   return (l.visibility ?? 1) >= (r.visibility ?? 1) ? l : r;
 }
 
+/* ----------------------------------------------------------------------
+ * Form comparison (optional).
+ *
+ * Rep counting above is unchanged. When the backend reports that the
+ * comparison service is configured and reachable, each completed repetition
+ * is submitted there for reference-based feedback. Every failure path falls
+ * back to the existing Vision Coach behaviour: the results panel hides and
+ * a short message is shown instead.
+ * -------------------------------------------------------------------- */
+
+// One MediaPipe landmark vector is (x, y, z, visibility) for each of 33 points.
+const LANDMARK_VECTOR_LENGTH = 33 * 4;
+const MAX_CAPTURED_FRAMES = 180;
+const MAX_SUBMITTED_FRAMES = 60;
+// Pose runs at ~30-60fps; every other frame is enough to describe one rep.
+const FRAME_SAMPLE_STRIDE = 2;
+
+const COMPARISON_UNAVAILABLE_MESSAGE =
+  "Exercise form analysis is temporarily unavailable. We're working to restore it. You can continue using the other FitOS features.";
+const COMPARISON_NO_RESULT_MESSAGE = "We couldn't analyze this movement right now. Please try again in a moment.";
+
+function round4(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number * 10000) / 10000 : 0;
+}
+
+function flattenLandmarks(landmarks) {
+  const vector = [];
+  for (const point of landmarks) {
+    vector.push(round4(point.x), round4(point.y), round4(point.z), round4(point.visibility ?? 1));
+  }
+  return vector;
+}
+
+/**
+ * Evenly resamples a rep to `targetCount` frames. The reference and the user
+ * sequence are always resampled to the same length so the comparison service
+ * receives two sequences of one identical shape.
+ */
+function resampleFrames(frames, targetCount) {
+  if (targetCount < 2 || frames.length <= targetCount) return frames;
+  const out = [];
+  for (let i = 0; i < targetCount; i += 1) {
+    out.push(frames[Math.round((i * (frames.length - 1)) / (targetCount - 1))]);
+  }
+  return out;
+}
+
+function escapeText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+  ));
+}
+
+
 const EXERCISE_CONFIG = {
   squat: {
     label: "Squat",
@@ -110,6 +165,20 @@ const VisionCoach = {
   equipmentIntervalMs: 1500,
   equipmentMinConfidence: 0.35,
 
+  // Form comparison state. `baselineFrames` holds the first completed rep of the
+  // session; later reps are compared against it so both sequences come from the
+  // same person, camera and framing.
+  comparison: {
+    configured: null,
+    available: null,
+    inFlight: false,
+    capturing: false,
+    frameCounter: 0,
+    currentFrames: [],
+    baselineFrames: null,
+    unsupported: false,
+  },
+
   async init() {
     this.video = document.getElementById("vision-video");
     this.canvas = document.getElementById("vision-canvas");
@@ -127,6 +196,7 @@ const VisionCoach = {
 
     document.getElementById("vision-start-btn").addEventListener("click", () => this.start());
     document.getElementById("vision-reset-btn").addEventListener("click", () => this.resetReps());
+    document.getElementById("form-comparison-retry-btn").addEventListener("click", () => this.retryComparison());
   },
 
   resetReps() {
@@ -134,6 +204,17 @@ const VisionCoach = {
     this.phase = "up";
     document.getElementById("vision-reps").textContent = "0";
     document.getElementById("vision-angle").textContent = "0 deg";
+    this.resetComparisonCapture();
+    this.renderComparisonNotice(`${EXERCISE_CONFIG[this.currentExercise].label}: complete one repetition to set your baseline.`);
+  },
+
+  resetComparisonCapture() {
+    this.comparison.capturing = false;
+    this.comparison.frameCounter = 0;
+    this.comparison.currentFrames = [];
+    this.comparison.baselineFrames = null;
+    this.comparison.unsupported = false;
+    this.renderComparisonResults(null);
   },
 
   async start() {
@@ -172,11 +253,16 @@ const VisionCoach = {
       this.running = true;
       this.startEquipmentRecognition();
       this.loop();
+      void this.refreshComparisonStatus(false);
     } catch (e) {
       placeholder.textContent =
         "Couldn't start the camera or load the pose model (needs internet + camera permission). " + e.message;
       startBtn.disabled = false;
       startBtn.textContent = "Start Camera";
+      // Without pose detection there is nothing to compare, so the comparison
+      // panel is cleared rather than left showing a stale result.
+      this.resetComparisonCapture();
+      this.hideComparisonCard();
     }
   },
 
@@ -187,6 +273,9 @@ const VisionCoach = {
     this.equipmentRequestInFlight = false;
     this.equipmentHistory = [];
     this.stableEquipment = [];
+    this.comparison.capturing = false;
+    this.comparison.frameCounter = 0;
+    this.comparison.currentFrames = [];
     const stream = this.video.srcObject;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     this.video.style.display = "none";
@@ -342,6 +431,234 @@ const VisionCoach = {
     });
   },
 
+  /* ---------------------- form comparison ---------------------- */
+
+  /**
+   * Whether the comparison feature should be offered at all. Runs once when the
+   * camera starts and again on an explicit Retry; it never blocks the camera,
+   * rep counting, or equipment recognition.
+   */
+  async refreshComparisonStatus(manual) {
+    if (manual) {
+      this.showComparisonCard();
+      this.setComparisonRetryVisible(false);
+      this.renderComparisonNotice("Checking form analysis…");
+    }
+
+    try {
+      const status = await Api.get("/comparison/status");
+      this.comparison.configured = Boolean(status?.configured);
+      this.comparison.available = Boolean(status?.available);
+    } catch (_error) {
+      // The status probe failed, which means our own backend or the network is
+      // down. Fail closed for this feature only; nothing else is affected.
+      this.comparison.configured = null;
+      this.comparison.available = false;
+    }
+
+    this.showComparisonCard();
+    if (this.comparison.available) {
+      this.renderComparisonNotice(
+        `${EXERCISE_CONFIG[this.currentExercise].label}: complete one repetition to set your baseline.`,
+      );
+      this.setComparisonRetryVisible(false);
+      return;
+    }
+    this.renderComparisonResults(null);
+    this.renderComparisonNotice(COMPARISON_UNAVAILABLE_MESSAGE);
+    this.setComparisonRetryVisible(true);
+  },
+
+  retryComparison() {
+    if (this.comparison.lastReference && this.comparison.lastFrames) {
+      void this.analyzePair(this.comparison.lastReference, this.comparison.lastFrames);
+      return;
+    }
+    void this.refreshComparisonStatus(true);
+  },
+
+  beginRepCapture() {
+    this.comparison.currentFrames = [];
+    this.comparison.frameCounter = 0;
+    this.comparison.capturing = true;
+  },
+
+  /** Samples every other processed frame and hard-caps the rep before sending. */
+  captureRepFrame(lm) {
+    if (this.comparison.currentFrames.length >= MAX_CAPTURED_FRAMES) return;
+    this.comparison.frameCounter += 1;
+    if (this.comparison.frameCounter % FRAME_SAMPLE_STRIDE !== 0) return;
+    this.comparison.currentFrames.push(flattenLandmarks(lm));
+  },
+
+  completeRep() {
+    const frames = this.comparison.currentFrames;
+    this.comparison.capturing = false;
+    this.comparison.currentFrames = [];
+    this.comparison.frameCounter = 0;
+
+    // Too few samples to describe a movement — ignore instead of sending junk.
+    if (frames.length < 4) return;
+
+    if (!this.comparison.baselineFrames) {
+      this.comparison.baselineFrames = frames;
+      this.renderComparisonNotice("Baseline repetition captured. Do one more repetition for form feedback.");
+      return;
+    }
+    void this.submitComparison(frames);
+  },
+
+  async submitComparison(frames) {
+    const reference = this.comparison.baselineFrames;
+    if (!reference) return;
+    // Only the automatic path is gated: an explicit Retry may still succeed
+    // after a status probe reported the service as unavailable.
+    if (this.comparison.available === false || this.comparison.unsupported) return;
+    this.comparison.lastReference = reference;
+    this.comparison.lastFrames = frames;
+    await this.analyzePair(reference, frames);
+  },
+
+  async analyzePair(reference, frames) {
+    // Guards against a duplicate submission while one analysis is still running.
+    if (this.comparison.inFlight) return;
+    if (!reference || reference.length < 2 || frames.length < 2) return;
+
+    const targetCount = Math.min(MAX_SUBMITTED_FRAMES, reference.length, frames.length);
+    this.comparison.inFlight = true;
+    this.showComparisonCard();
+    this.renderComparisonResults(null);
+    this.setComparisonRetryVisible(false);
+    this.renderComparisonNotice("Analyzing your form…");
+
+    try {
+      const result = await Api.post(
+        "/comparison/analyze",
+        {
+          exerciseKey: this.currentExercise,
+          exerciseName: EXERCISE_CONFIG[this.currentExercise].label,
+          referenceSequence: resampleFrames(reference, targetCount),
+          sequence: resampleFrames(frames, targetCount),
+        },
+        { timeoutMs: 15000 },
+      );
+
+      if (result && result.analysis) {
+        this.renderComparisonResults(result.analysis);
+        this.renderComparisonNotice("");
+      } else {
+        this.renderComparisonNotice(COMPARISON_NO_RESULT_MESSAGE);
+        this.setComparisonRetryVisible(true);
+      }
+    } catch (error) {
+      this.handleComparisonError(error);
+    } finally {
+      this.comparison.inFlight = false;
+    }
+  },
+
+  /** A single failure never disables the feature permanently — only the id list. */
+  handleComparisonError(error) {
+    const backendMessage = typeof error?.body?.error === "string" ? error.body.error : null;
+
+    if (error?.status === 422) {
+      // The service does not support this movement, so stop offering analysis
+      // for it until the exercise selection changes.
+      this.comparison.unsupported = true;
+      this.renderComparisonNotice(backendMessage || COMPARISON_NO_RESULT_MESSAGE);
+      this.setComparisonRetryVisible(false);
+      return;
+    }
+    if (error?.status === 400 || error?.status === 429) {
+      this.renderComparisonNotice(backendMessage || COMPARISON_NO_RESULT_MESSAGE);
+      this.setComparisonRetryVisible(true);
+      return;
+    }
+    // 502 / 503 / 504 and transport failures all mean "the feature is
+    // temporarily unavailable" from the user's point of view.
+    this.renderComparisonNotice(backendMessage || COMPARISON_UNAVAILABLE_MESSAGE);
+    this.setComparisonRetryVisible(true);
+  },
+
+  showComparisonCard() {
+    const card = document.getElementById("form-comparison-card");
+    if (card) card.style.display = "block";
+  },
+
+  hideComparisonCard() {
+    const card = document.getElementById("form-comparison-card");
+    if (card) card.style.display = "none";
+  },
+
+  setComparisonRetryVisible(visible) {
+    const button = document.getElementById("form-comparison-retry-btn");
+    if (button) button.style.display = visible ? "inline-flex" : "none";
+  },
+
+  renderComparisonNotice(text) {
+    const status = document.getElementById("form-comparison-status");
+    if (status) status.textContent = text || "";
+  },
+
+  /**
+   * Renders only what the service actually returned. A missing score, an empty
+   * difference list, or an absent confidence value simply omits that block — no
+   * placeholder, no invented figure, no raw payload.
+   */
+  renderComparisonResults(analysis) {
+    const results = document.getElementById("form-comparison-results");
+    if (!results) return;
+    if (!analysis) {
+      results.innerHTML = "";
+      return;
+    }
+
+    const blocks = [];
+
+    if (analysis.formScorePercent !== null && analysis.formScorePercent !== undefined) {
+      blocks.push(
+        `<div class="comparison-score"><span class="comparison-score-value">${escapeText(analysis.formScorePercent)}%</span>` +
+        `<span class="comparison-score-label">form match against your baseline repetition</span></div>`,
+      );
+    } else if (analysis.formScore !== null && analysis.formScore !== undefined) {
+      blocks.push(
+        `<div class="comparison-score"><span class="comparison-score-value">${escapeText(analysis.formScore)}</span>` +
+        `<span class="comparison-score-label">form score reported by the analysis</span></div>`,
+      );
+    }
+
+    // Uncertain results are labelled rather than presented as definitive.
+    if (typeof analysis.confidence === "number" && analysis.confidence < 0.6) {
+      blocks.push(`<p class="comparison-caveat">Low confidence reading (${escapeText(Math.round(analysis.confidence * 100))}%). Treat this as a rough guide.</p>`);
+    }
+
+    if (analysis.summary) {
+      blocks.push(`<p class="comparison-summary">${escapeText(analysis.summary)}</p>`);
+    }
+
+    if (Array.isArray(analysis.differences) && analysis.differences.length) {
+      const items = analysis.differences.map((difference) => {
+        const title = difference.part ? escapeText(difference.part) : "Reported difference";
+        const details = [];
+        if (difference.detail) details.push(escapeText(difference.detail));
+        if (difference.deviation !== null && difference.deviation !== undefined) {
+          details.push(`reported deviation ${escapeText(difference.deviation)}`);
+        }
+        return `<li class="comparison-difference"><strong>${title}</strong>${details.length ? `<span>${details.join(" · ")}</span>` : ""}</li>`;
+      }).join("");
+      blocks.push(`<div class="comparison-block"><div class="card-label">Detected differences</div><ul class="comparison-list">${items}</ul></div>`);
+    }
+
+    if (Array.isArray(analysis.corrections) && analysis.corrections.length) {
+      const items = analysis.corrections.map((correction) => `<li>${escapeText(correction)}</li>`).join("");
+      blocks.push(`<div class="comparison-block"><div class="card-label">What to adjust</div><ul class="comparison-list">${items}</ul></div>`);
+    }
+
+    results.innerHTML = blocks.join("");
+  },
+
+  /* ---------------------- pose + rep pipeline ---------------------- */
+
   processExercise(lm) {
     const config = EXERCISE_CONFIG[this.currentExercise];
     const angle = config.angleOf(lm);
@@ -350,11 +667,15 @@ const VisionCoach = {
     // Rep state machine: crossing into "down" then back past "up" = one rep.
     if (this.phase === "up" && angle < config.downThreshold) {
       this.phase = "down";
+      this.beginRepCapture();
     } else if (this.phase === "down" && angle > config.upThreshold) {
       this.phase = "up";
       this.repCount += 1;
       document.getElementById("vision-reps").textContent = String(this.repCount);
+      this.captureRepFrame(lm);
+      this.completeRep();
     }
+    if (this.comparison.capturing) this.captureRepFrame(lm);
 
     const feedbackEl = document.getElementById("camera-feedback");
     feedbackEl.textContent = config.feedback(angle, this.phase, lm);
