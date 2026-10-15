@@ -54,7 +54,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <title>AI Workout Planner Based on Gym Equipment | FitOS</title>
-<link rel="stylesheet" href="styles.css?v=fitos-20261014-exercise-media-v1" />
+<link rel="stylesheet" href="styles.css?v=fitos-20261015-today-dashboard-v1" />
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -346,9 +346,14 @@
 
     <!-- TODAY -->
     <div id="screen-today" class="screen">
-      <div class="header">
-        <h1 id="today-greeting">Today</h1>
-        <p>Your day at a glance.</p>
+      <div class="today-header">
+        <div>
+          <h1 id="today-greeting">Hi, Owner</h1>
+          <p>Your day at a glance.</p>
+        </div>
+        <button class="today-profile-button" id="today-profile-btn" type="button" aria-label="Open profile">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6.7 19.3a6 6 0 0 1 10.6 0"/></svg>
+        </button>
       </div>
       <div id="today-content"><div class="empty-state">Loading…</div></div>
     </div>
@@ -439,23 +444,23 @@
 
   <!-- ============ BOTTOM NAV ============ -->
   <div id="bottom-nav" class="bottom-nav" hidden style="display:none;">
-    <button class="nav-item active" data-tab="today">
-      <span class="nav-icon">🏠</span><span>Today</span>
+    <button class="nav-item active" data-tab="today" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Today</span>
     </button>
-    <button class="nav-item" data-tab="workout">
-      <span class="nav-icon">🏋️</span><span>Workout</span>
+    <button class="nav-item" data-tab="workout" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5v11m11-11v11M3 9v6m18-6v6M6.5 12h11"/></svg></span><span>Workout</span>
     </button>
-    <button class="nav-item" data-tab="diet">
-      <span class="nav-icon">🍽️</span><span>Diet</span>
+    <button class="nav-item" data-tab="diet" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v7a4 4 0 0 0 4 4h1V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm-3 0v7"/></svg></span><span>Diet</span>
     </button>
-    <button class="nav-item" data-tab="vision">
-      <span class="nav-icon">🎯</span><span>Vision</span>
+    <button class="nav-item" data-tab="vision" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Vision</span>
     </button>
-    <button class="nav-item" data-tab="gym-scan">
-      <span class="nav-icon">📷</span><span>Scan</span>
+    <button class="nav-item" data-tab="gym-scan" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="4"/></svg></span><span>Scan</span>
     </button>
-    <button class="nav-item" data-tab="gym">
-      <span class="nav-icon">📇</span><span>Gym</span>
+    <button class="nav-item" data-tab="gym" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M9 9h.01M15 9h.01"/></svg></span><span>Gym</span>
     </button>
   </div>
 
@@ -465,7 +470,7 @@
 <script src="gym-intro.js?v=fitos-20261010-grow-impact-v1"></script>
 <script src="config.js"></script>
 <script src="api.js"></script>
-<script src="app.js?v=fitos-20261014-exercise-media-v1"></script>
+<script src="app.js?v=fitos-20261015-today-dashboard-v1"></script>
 <script type="module" src="vision.js"></script>
 </body>
 </html>
