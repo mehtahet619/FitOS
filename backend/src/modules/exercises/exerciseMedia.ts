@@ -102,8 +102,16 @@ export function buildExerciseInstructionFallback(
   equipmentRequired: readonly string[],
   context: ExerciseInstructionContext = {},
 ): string {
+  const normalizedName = normalizeExerciseValue(exerciseName);
+  const eccentric = normalizedName.includes("eccentric emphasis");
+  const row = /\brow\b/.test(normalizedName) || normalizedName.includes("pulldown") || normalizedName.includes("pull up");
+  const eccentricRow = eccentric && row;
   const savedInstructions = context.instructions?.trim();
-  if (savedInstructions) return savedInstructions;
+  if (savedInstructions) {
+    return eccentric && !/3 seconds|three seconds|slowly/i.test(savedInstructions)
+      ? `${savedInstructions} Emphasize the return by lowering the resistance over about 3 seconds.`
+      : savedInstructions;
+  }
 
   const patternGuidance: Record<string, string> = {
     horizontal_push: "Brace your torso, press the resistance away from your chest, then return it under control.",
@@ -125,10 +133,15 @@ export function buildExerciseInstructionFallback(
   const setup = equipmentRequired.length > 0
     ? `Set up the ${exerciseName} with ${equipmentRequired.join(" and ")}.`
     : `Set up for ${exerciseName} using bodyweight.`;
-  const movement = patternGuidance[movementPattern]
+  if (eccentricRow) {
+    return `${setup} Sit tall with your feet braced. Pull the handle toward your lower ribs, then extend your arms back over about 3 seconds while keeping tension on the cable. Avoid rocking your torso.`;
+  }
+  const inferredPattern = movementPattern === "csv_recommendation" && row ? "horizontal_pull" : movementPattern;
+  const movement = patternGuidance[inferredPattern]
     || "Move through a comfortable range with controlled tempo, then return to the starting position without swinging.";
   const target = context.primaryMuscle?.trim();
-  return [setup, movement, target ? `Keep the ${target} muscles engaged.` : "Keep the target muscles engaged.", "Stop if you feel pain."]
+  const eccentricCue = eccentric ? "Lower the resistance over about 3 seconds to emphasize the return phase." : "";
+  return [setup, movement, eccentricCue, target ? `Keep the ${target} muscles engaged.` : "Keep the target muscles engaged.", "Stop if you feel pain."]
     .join(" ");
 }
 

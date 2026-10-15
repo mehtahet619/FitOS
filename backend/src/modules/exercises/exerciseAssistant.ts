@@ -5,6 +5,7 @@ export interface ExerciseAssistantContext {
   equipment: string[];
   instructions: string;
   movementPattern?: string;
+  alternatives?: Array<{ name: string; equipment: string[] }>;
 }
 
 export interface ExerciseAssistantProvider {
@@ -14,14 +15,88 @@ export interface ExerciseAssistantProvider {
   url: string;
 }
 
+const OFF_TOPIC_REPLY = "I can help with this exercise's technique, form, breathing, or alternatives.";
+
+function isExerciseQuestion(question: string): boolean {
+  if (/\b(c\+\+|javascript|python|write (?:a )?(?:program|script|code)|poem|recipe|politics)\b/i.test(question)) return false;
+  return /\b(exercise|workout|form|technique|setup|set up|breath(?:e|ing)?|inhale|exhale|muscles?|worked|mistakes?|errors?|avoid|alternatives?|substitute|equipment|gear|grip|tempo|eccentric|concentric|row|press|curl|squat|deadlift|pulldown|pull-up|lunge|reps?|repetitions?|range of motion|posture|elbows?|shoulders?|back|wrists?|cable)\b/i.test(question);
+}
+
+function getDirectExerciseAnswer(context: ExerciseAssistantContext, question: string): string | null {
+  const normalizedQuestion = question.toLowerCase();
+  const exerciseName = context.name;
+  const exerciseKey = exerciseName.toLowerCase();
+  const movementPattern = String(context.movementPattern || "").toLowerCase();
+  const isRow = movementPattern === "horizontal_pull" || /\b(row|rowing)\b/.test(exerciseKey);
+  const eccentric = /eccentric|slow tempo|controlled tempo/.test(exerciseKey);
+
+  if (/breath|breathe|breathing|inhale|exhale/.test(normalizedQuestion)) {
+    if (isRow) {
+      const returnCue = eccentric
+        ? "Inhale as you extend your arms back over about 3 seconds, keeping the cable under tension"
+        : "Inhale as you extend your arms back under control";
+      return `For the ${exerciseName}, exhale as you pull the handle toward your torso. ${returnCue}. Keep your torso steady and avoid holding your breath.`;
+    }
+    if (/horizontal_push|vertical_push/.test(movementPattern)) {
+      return `For the ${exerciseName}, exhale as you press the resistance away and inhale as you lower it under control. Keep breathing steadily instead of holding your breath.`;
+    }
+    if (/squat|hinge|lunge/.test(movementPattern)) {
+      return `For the ${exerciseName}, inhale as you lower into the movement and exhale as you stand or extend. Keep your trunk braced and avoid holding your breath.`;
+    }
+    return `For the ${exerciseName}, exhale through the hardest part of the lift and inhale during the controlled return. Keep your breathing steady and avoid holding your breath.`;
+  }
+
+  if (/which muscles|muscles worked|what muscles|muscle does|target muscles/.test(normalizedQuestion)) {
+    const supporting = context.secondaryMuscles.length ? ` It also involves ${context.secondaryMuscles.join(", ")}.` : "";
+    return `The ${exerciseName} primarily works ${context.primaryMuscle}.${supporting}`;
+  }
+
+  if (/equipment|what do i need|what gear/.test(normalizedQuestion)) {
+    return context.equipment.length
+      ? `For the ${exerciseName}, use ${context.equipment.join(" and ")}.`
+      : `The ${exerciseName} uses bodyweight; no equipment is required.`;
+  }
+
+  if (/alternative|instead|substitute/.test(normalizedQuestion)) {
+    if (!context.alternatives?.length) return `I don't have a specific alternative listed for the ${exerciseName}. Tell me what equipment you have available, and I can help narrow one down.`;
+    return `Options for the ${exerciseName}: ${context.alternatives.map((alternative) => `${alternative.name}${alternative.equipment.length ? ` (requires ${alternative.equipment.join(", ")})` : " (bodyweight)"}`).join("; ")}. Choose one you can set up comfortably.`;
+  }
+
+  if (/common mistake|mistakes|what should i avoid/.test(normalizedQuestion)) {
+    if (isRow) return `For the ${exerciseName}, avoid jerking the handle, shrugging your shoulders, rounding your back, or letting the return pull you forward. Keep the lowering phase controlled.`;
+    return `For the ${exerciseName}, avoid swinging, rushing the lowering phase, or forcing a painful range. Keep the movement controlled.`;
+  }
+
+  if (/setup|set up|form|technique/.test(normalizedQuestion)) {
+    if (context.instructions.trim()) return context.instructions.trim();
+    if (isRow) return `For the ${exerciseName}, sit tall with feet braced and knees softly bent. Start with arms extended, pull the handle toward your lower ribs, then return slowly without rounding or rocking your torso.`;
+    return `For the ${exerciseName}, use a stable setup, move through a comfortable range with controlled tempo, and stop if you feel pain.`;
+  }
+
+  return null;
+}
+
+function safeExerciseFallback(context: ExerciseAssistantContext, question: string): string {
+  const directAnswer = getDirectExerciseAnswer(context, question);
+  if (directAnswer) return directAnswer;
+  const instructions = context.instructions.trim();
+  if (instructions) return `For the ${context.name}, ${instructions}`;
+  return `For the ${context.name}, use a stable setup and controlled movement through a comfortable range. Stop if you feel pain.`;
+}
+
+function containsInternalAssistantText(answer: string): boolean {
+  return /catalog(?:ue)?|database|provider|API key|model configuration|internal limitation|instructions are (?:currently )?empty|I(?:'m| am) limited to guidance/i.test(answer)
+    || /```|#include\s*<|\bint\s+main\s*\(/i.test(answer);
+}
+
 export function buildExerciseAssistantMessages(context: ExerciseAssistantContext, question: string) {
   const system = [
-    "You are FitOS's exercise-specific training assistant.",
-    "Answer only about the canonical exercise and exact catalog context supplied by the user message.",
-    "You may offer general, conservative guidance about setup, form, breathing, common mistakes, and alternatives.",
-    "Do not invent equipment, catalog instructions, video links, or claim a video exists.",
-    "If the context is insufficient for a specific detail, say what is unknown and ask a brief follow-up.",
-    "Keep advice concise, practical, and avoid diagnosing injuries.",
+    "You are FitOS's exercise coach. Answer the user's actual question directly and naturally about the named exercise.",
+    "Help with technique, setup, breathing, muscles worked, common mistakes, and alternatives.",
+    "Never mention catalogs, databases, APIs, providers, models, missing stored text, or implementation limitations.",
+    "Do not write code or answer unrelated requests. For an unrelated request, reply exactly: I can help with this exercise's technique, form, breathing, or alternatives.",
+    "Only name an alternative if it appears in the supplied alternatives. State its equipment requirement.",
+    "Use conservative concise advice, do not diagnose injuries, and tell the user to stop if a movement causes pain.",
   ].join(" ");
   const user = JSON.stringify({
     exercise: {
@@ -31,6 +106,7 @@ export function buildExerciseAssistantMessages(context: ExerciseAssistantContext
       equipment: context.equipment,
       catalogInstructions: context.instructions,
       movementPattern: context.movementPattern || "not specified",
+      alternatives: context.alternatives || [],
     },
     question,
   });
@@ -82,19 +158,21 @@ async function askProvider(provider: ExerciseAssistantProvider, messages: Return
   return answer.trim().slice(0, 4000);
 }
 
-export async function answerExerciseQuestion(context: ExerciseAssistantContext, question: string): Promise<string | null> {
+export async function answerExerciseQuestion(context: ExerciseAssistantContext, question: string): Promise<string> {
+  if (!isExerciseQuestion(question)) return OFF_TOPIC_REPLY;
+  const directAnswer = getDirectExerciseAnswer(context, question);
+  if (directAnswer) return directAnswer;
+
   const providers = configuredProviders();
-  if (!providers.length) {
-    console.warn("[exercises] Exercise assistant unavailable: configure OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY.");
-    return null;
-  }
+  if (!providers.length) return safeExerciseFallback(context, question);
   const messages = buildExerciseAssistantMessages(context, question);
   for (const provider of providers) {
     try {
-      return await askProvider(provider, messages);
+      const answer = await askProvider(provider, messages);
+      return containsInternalAssistantText(answer) ? safeExerciseFallback(context, question) : answer;
     } catch (error) {
       console.warn(`[exercises] ${provider.name} exercise assistant failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return null;
+  return safeExerciseFallback(context, question);
 }
