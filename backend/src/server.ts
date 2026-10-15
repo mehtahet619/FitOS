@@ -15,6 +15,7 @@ import { progressRouter } from "./modules/progress/routes";
 import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
 import { growImpactRouter } from "./modules/grow-impact/routes";
+import { comparisonRouter, COMPARISON_BODY_LIMIT } from "./modules/comparison/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 
@@ -88,8 +89,7 @@ app.use(
     },
   })
 );
-app.use(express.json());
-app.use((req, res, next) => {
+function applySecurityHeaders(req: Request, res: Response, next: NextFunction) {
   res.setHeader("Cache-Control", "no-store");
   const origin = req.header("Origin");
   const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
@@ -97,9 +97,24 @@ app.use((req, res, next) => {
     return res.status(403).json({ code: "CSRF_ORIGIN_REJECTED", error: "Request origin is not allowed" });
   }
   next();
-});
+}
 
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
+
+// Pose sequences submitted for form comparison exceed the default 100kb JSON
+// limit, so this router parses its own bounded body. It is mounted ahead of the
+// global parser — which would otherwise reject the payload first — and
+// re-applies the same security headers, CSRF check, and rate limit that every
+// other route gets.
+app.use(
+  "/comparison",
+  limiter,
+  applySecurityHeaders,
+  express.json({ limit: COMPARISON_BODY_LIMIT }),
+  comparisonRouter
+);
+app.use(express.json());
+app.use(applySecurityHeaders);
 app.use(limiter);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
