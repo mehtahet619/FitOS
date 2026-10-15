@@ -195,10 +195,12 @@ exerciseRouter.get("/:id/substitutions", async (req, res) => {
 });
 
 exerciseRouter.get("/:id/demo-video", async (req, res) => {
-  const exercise = await db.get<{ id: string; name: string }>(`SELECT id,name FROM Exercise WHERE id = ?`, req.params.id);
+  const exercise = await db.get<{ id: string; name: string; instructions: string; primaryMuscle: string; movementPattern: string }>(
+    `SELECT id,name,instructions,primaryMuscle,movementPattern FROM Exercise WHERE id = ?`, req.params.id
+  );
   if (!exercise) return res.status(404).json({ code: "EXERCISE_NOT_FOUND", error: "Exercise not found in the catalog." });
   const equipment = await equipmentNamesFor(exercise.id);
-  const demo = findExerciseDemo(exercise.name, equipment);
+  const demo = findExerciseDemo(exercise.name, equipment, exercise);
   return res.json({ exerciseId: exercise.id, demoVideo: demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null });
 });
 
