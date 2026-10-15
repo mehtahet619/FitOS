@@ -1621,8 +1621,15 @@ function loadYouTubeIframeApi() {
 }
 
 function exerciseDemoInstructions(exercise, demo) {
+  const name = String(exercise?.exerciseName || demo?.title || "Exercise");
+  const exerciseKey = name.toLowerCase();
+  const eccentricRow = /eccentric emphasis/.test(exerciseKey) && /seated cable row|row/.test(exerciseKey);
   const storedInstructions = String(demo?.instructions || exercise?.instructions || "").trim();
-  if (storedInstructions) return storedInstructions;
+  if (storedInstructions) {
+    return eccentricRow && !/3 seconds|three seconds|slowly/i.test(storedInstructions)
+      ? `${storedInstructions} Emphasize the return by extending your arms over about 3 seconds while keeping the cable under tension.`
+      : storedInstructions;
+  }
   const patterns = {
     horizontal_push: "Brace your torso, press the resistance away from your chest, then return it under control.",
     vertical_push: "Brace your torso and press the resistance overhead through a comfortable range, then lower it under control.",
@@ -1639,14 +1646,38 @@ function exerciseDemoInstructions(exercise, demo) {
     flexion: "Brace your trunk and curl through a comfortable range without swinging, then return slowly.",
     rotation: "Brace your hips and rotate through your trunk under control, then return to the starting position.",
   };
-  const name = String(exercise?.exerciseName || demo?.title || "Exercise");
   const equipment = (exercise?.equipmentRequired || []).filter(Boolean);
   const setup = equipment.length ? `Set up ${name} with ${equipment.join(" and ")}.` : `Set up for ${name} using bodyweight.`;
-  const movement = patterns[String(exercise?.movementPattern || "").toLowerCase()]
+  const movementPattern = String(exercise?.movementPattern || "").toLowerCase();
+  const isRow = movementPattern === "horizontal_pull" || /\brow\b|pulldown|pull-up/.test(exerciseKey);
+  if (eccentricRow) {
+    return `${setup} Sit tall with your feet braced. Pull the handle toward your lower ribs, then extend your arms back over about 3 seconds while keeping tension on the cable. Avoid rocking your torso.`;
+  }
+  const inferredPattern = isRow ? "horizontal_pull"
+    : /press|push-up/.test(exerciseKey) ? "horizontal_push"
+      : /curl/.test(exerciseKey) ? "elbow_flexion"
+        : /squat/.test(exerciseKey) ? "squat"
+          : /deadlift|hinge/.test(exerciseKey) ? "hinge"
+            : movementPattern;
+  const movement = patterns[inferredPattern]
     || "Move through a comfortable range with controlled tempo, then return to the starting position without swinging.";
   const target = exercise?.primaryMuscle || exercise?.muscle;
   return [setup, movement, target ? `Focus on ${target}.` : "Keep the target muscles engaged.", "Stop if you feel pain."]
     .join(" ");
+}
+
+function renderExerciseDemoVisual(exercise) {
+  const name = String(exercise?.exerciseName || "Exercise");
+  const exerciseKey = name.toLowerCase();
+  const isRow = /\brow\b|pulldown|pull-up/.test(exerciseKey);
+  const eccentricRow = isRow && /eccentric emphasis/.test(exerciseKey);
+  const steps = isRow
+    ? ["Reach with control", "Pull to your torso", eccentricRow ? "Return over 3 seconds" : "Extend under control"]
+    : ["Set a stable position", "Move with control", "Return slowly"];
+  const illustration = isRow
+    ? '<svg viewBox="0 0 240 88" aria-hidden="true"><path d="M24 18v48m-5-48h15m-10 48h10M34 42h34" fill="none" stroke="#87968b" stroke-width="3" stroke-linecap="round"/><circle cx="126" cy="22" r="7" fill="#78927f"/><path d="M124 30 116 53l18 2 7-19m-24 17-11 15m28-13 14 12" fill="none" stroke="#567b62" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 37 74 41 34 42" fill="none" stroke="#9aa89e" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/><path d="M120 37 97 42 34 42" fill="none" stroke="#4f8060" stroke-width="3" stroke-linecap="round"/><path d="M78 34 94 34m-5-5 5 5-5 5" fill="none" stroke="#4f8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M72 70h86m-75-3v4m64-4v4" fill="none" stroke="#bac5bd" stroke-width="2" stroke-linecap="round"/><rect x="101" y="56" width="25" height="5" rx="2" fill="#93a59a"/></svg>'
+    : '<svg viewBox="0 0 240 88" aria-hidden="true"><circle cx="120" cy="22" r="8" fill="#78927f"/><path d="M120 31v27m0-18-20 13m20-13 20 13m-20 5-15 18m15-18 15 18" fill="none" stroke="#567b62" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M64 45h36m40 0h36" fill="none" stroke="#4f8060" stroke-width="2" stroke-linecap="round"/><path d="m94 40 6 5-6 5m52-10-6 5 6 5" fill="none" stroke="#4f8060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M44 74h152" fill="none" stroke="#bac5bd" stroke-width="2" stroke-linecap="round"/></svg>';
+  return `<div class="exercise-demo-visual" role="img" aria-label="${escapeWorkoutText(name)} movement guide">${illustration}<div class="exercise-demo-visual-steps">${steps.map((step, index) => `<span><b>${index + 1}</b>${escapeWorkoutText(step)}</span>`).join("")}</div></div>`;
 }
 
 function showUnavailableExerciseDemo(player, exercise, demo) {
@@ -1655,9 +1686,11 @@ function showUnavailableExerciseDemo(player, exercise, demo) {
   fallback.className = "exercise-demo-fallback exercise-demo-unavailable";
   const heading = document.createElement("strong");
   heading.textContent = `${exercise.exerciseName} · Written guide`;
+  const visual = document.createElement("div");
+  visual.innerHTML = renderExerciseDemoVisual(exercise);
   const instructions = document.createElement("p");
   instructions.textContent = exerciseDemoInstructions(exercise, demo);
-  fallback.append(heading, instructions);
+  fallback.append(heading, visual.firstElementChild, instructions);
   player.replaceChildren(fallback);
 }
 
@@ -1788,7 +1821,7 @@ function renderWorkout(workout, plan) {
             <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · Inline demonstration</span></div>
             <div class="exercise-demo-player" hidden aria-live="polite"></div>
           </div>`
-        : `<div class="exercise-demo-fallback" role="note"><strong>${escapeWorkoutText(exercise.exerciseName)} · Written guide</strong><p>${escapeWorkoutText(exerciseDemoInstructions(exercise, demo))}</p></div>`}
+        : `<div class="exercise-demo-fallback" role="note"><strong>${escapeWorkoutText(exercise.exerciseName)} · Written guide</strong>${renderExerciseDemoVisual(exercise)}<p>${escapeWorkoutText(exerciseDemoInstructions(exercise, demo))}</p></div>`}
       <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
       <form class="exercise-chat-form" data-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
         <label>Ask about ${escapeWorkoutText(exercise.exerciseName)}<textarea name="question" maxlength="500" rows="2" required placeholder="Form, setup, breathing, common mistakes, or alternatives"></textarea></label>

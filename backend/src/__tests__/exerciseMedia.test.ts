@@ -45,8 +45,9 @@ describe("curated exercise demo matching", () => {
       primaryMuscle: "Lats", movementPattern: "csv_recommendation", instructions: "",
     });
     expect(fallback.kind).toBe("instructions");
-    expect(fallback.instructions.toLowerCase()).toContain("pull the handle toward your lower ribs");
-    expect(fallback.instructions.toLowerCase()).toContain("over about 3 seconds");
+    const instructions = fallback.instructions ?? "";
+    expect(instructions.toLowerCase()).toContain("pull the handle toward your lower ribs");
+    expect(instructions.toLowerCase()).toContain("over about 3 seconds");
   });
 
   it("rejects malformed YouTube IDs before constructing an embed", () => {
