@@ -69,6 +69,26 @@ const CURATED_DEMOS: readonly CuratedExerciseDemo[] = [
     sourceUrl: "https://www.muscleandstrength.com/exercises/one-arm-dumbbell-row.html",
     thumbnailUrl: "https://i.ytimg.com/vi/YZgVEy6cmaY/hqdefault.jpg",
   },
+  {
+    exerciseNames: ["Bench Press"],
+    equipment: ["Barbell"],
+    provider: "youtube",
+    videoId: "CayG6UYqL8g",
+    title: "Barbell Bench Press",
+    sourceName: "NASM",
+    sourceUrl: "https://www.youtube.com/watch?v=CayG6UYqL8g",
+    thumbnailUrl: "https://i.ytimg.com/vi/CayG6UYqL8g/hqdefault.jpg",
+  },
+  {
+    exerciseNames: ["Back Squat"],
+    equipment: ["Barbell"],
+    provider: "youtube",
+    videoId: "3tn-xqyUUkQ",
+    title: "Back Squat",
+    sourceName: "BarBend",
+    sourceUrl: "https://www.youtube.com/watch?v=3tn-xqyUUkQ",
+    thumbnailUrl: "https://i.ytimg.com/vi/3tn-xqyUUkQ/hqdefault.jpg",
+  },
 ];
 
 export function findExerciseDemo(

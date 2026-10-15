@@ -2,7 +2,8 @@ import { Router } from "express";
 import { db } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { primaryMuscleMatchesTarget } from "../workouts/muscleTaxonomy";
-import { findExerciseDemo, exerciseDemoEmbedUrl } from "./exerciseMedia";
+import { exerciseDemoEmbedUrl } from "./exerciseMedia";
+import { resolveExerciseVideo } from "./exerciseVideoProvider";
 import { answerExerciseQuestion } from "./exerciseAssistant";
 import { z } from "zod";
 
@@ -200,8 +201,22 @@ exerciseRouter.get("/:id/demo-video", async (req, res) => {
   );
   if (!exercise) return res.status(404).json({ code: "EXERCISE_NOT_FOUND", error: "Exercise not found in the catalog." });
   const equipment = await equipmentNamesFor(exercise.id);
-  const demo = findExerciseDemo(exercise.name, equipment, exercise);
-  return res.json({ exerciseId: exercise.id, demoVideo: demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null });
+  // `refresh=1` re-resolves a cached result (used when playback fails) and
+  // `exclude=` drops video ids already known to be unplayable for this exercise.
+  const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+  const excludeVideoIds = typeof req.query.exclude === "string"
+    ? req.query.exclude.split(",").map((id) => id.trim()).filter(Boolean)
+    : [];
+  const resolved = await resolveExerciseVideo({
+    exerciseId: exercise.id,
+    name: exercise.name,
+    equipment,
+    primaryMuscle: exercise.primaryMuscle,
+    movementPattern: exercise.movementPattern,
+    instructions: exercise.instructions,
+  }, { refresh, excludeVideoIds });
+  const embedUrl = resolved.demo.kind === "video" ? exerciseDemoEmbedUrl(resolved.demo) : null;
+  return res.json({ exerciseId: exercise.id, source: resolved.source, demoVideo: { ...resolved.demo, embedUrl } });
 });
 
 const exerciseQuestionSchema = z.object({ question: z.string().trim().min(1).max(500) });

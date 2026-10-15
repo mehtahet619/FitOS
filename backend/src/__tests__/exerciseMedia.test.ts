@@ -68,10 +68,13 @@ describe("curated exercise demo matching", () => {
     const instructions = coverage.filter((demo) => demo.kind === "instructions");
 
     expect(coverage).toHaveLength(pairs.size);
-    expect(videos).toHaveLength(5);
+    expect(videos.length).toBeGreaterThan(0);
     expect(instructions).toHaveLength(pairs.size - videos.length);
     expect(instructions.every((demo) => demo.instructions?.length)).toBe(true);
-    expect(new Set(videos.map((demo) => demo.videoId)).size).toBe(4);
+    expect(videos.every((demo) => isValidYouTubeVideoId(demo.videoId ?? "") && exerciseDemoEmbedUrl(demo))).toBe(true);
+    // The acceptance paths must resolve to their own verified demonstration.
+    expect(findExerciseDemo("Bench Press", ["Barbell"])).toMatchObject({ kind: "video", videoId: "CayG6UYqL8g" });
+    expect(findExerciseDemo("Seated Cable Row", ["Cable Machine"])).toMatchObject({ kind: "video", videoId: "xQNrFHEMhI4" });
   });
 
   it("keeps media responsive and renders written instructions when a video is unavailable", () => {
@@ -83,13 +86,17 @@ describe("curated exercise demo matching", () => {
     expect(css).toContain("aspect-ratio: 16 / 9");
     expect(css).toContain(".exercise-demo-player iframe { display: block; width: 100%; height: 100%");
     expect(app).toContain('playerVars: { autoplay: 0');
-    expect(app).toContain('onError: () =>');
-    expect(app).toContain("showUnavailableExerciseDemo(player, exercise, demo)");
+    expect(app).toContain("onError: () =>");
+    expect(app).toContain("showUnavailableExerciseDemo(");
+    expect(app).toContain("startExerciseDemoPlayer(");
+    expect(app).toContain("requestRefreshedExerciseDemo(");
+    expect(app).toContain('refresh: "1"');
     expect(app).toContain("https://www.youtube.com/iframe_api");
     expect(app).toContain('demo.kind === "video"');
     expect(app).toContain("exerciseDemoInstructions(exercise, demo)");
-    expect(app).toContain("renderExerciseDemoVisual(exercise)");
-    expect(app).toContain("Return over 3 seconds");
+    // The static illustration must never stand in for a video or a search link.
+    expect(app).not.toContain("renderExerciseDemoVisual");
+    expect(app).not.toContain("exercise-demo-visual");
     expect(app).not.toContain("Find an exact demonstration");
     expect(app).not.toContain("youtube.com/results?search_query");
     expect(app).not.toContain("Open on YouTube");

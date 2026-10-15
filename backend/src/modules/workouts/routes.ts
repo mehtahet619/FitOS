@@ -35,7 +35,8 @@ import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseReco
 import type { RecommendedExercise } from "./exerciseRecommendation";
 import { primaryMuscleMatchesTarget } from "./muscleTaxonomy";
 import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
-import { findExerciseDemo, exerciseDemoEmbedUrl } from "../exercises/exerciseMedia";
+import { exerciseDemoEmbedUrl } from "../exercises/exerciseMedia";
+import { resolveExerciseVideo } from "../exercises/exerciseVideoProvider";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
@@ -603,12 +604,20 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     loggedSetsByExercise.set(set.workoutExerciseId, sets);
   }
   // Helper function to serialize exercise consistently
-  function serializeExercise(exercise: any, equipmentRequired: string[], requiresEquipment: boolean) {
+  async function serializeExercise(exercise: any, equipmentRequired: string[], requiresEquipment: boolean) {
     const exerciseName = exercise.exerciseName;
     const primaryMuscle = primaryMuscleById.get(exercise.exerciseId) || exercise.primaryMuscle;
     if (typeof exerciseName !== "string" || exerciseName.trim() === "") {
       throw new Error(`Workout exercise ${exercise.id} has no persisted exercise name.`);
     }
+    const resolvedVideo = await resolveExerciseVideo({
+      exerciseId: exercise.exerciseId,
+      name: exerciseName,
+      equipment: equipmentRequired,
+      instructions: exercise.instructions,
+      primaryMuscle,
+      movementPattern: exercise.movementPattern,
+    });
     return {
       workoutExerciseId: exercise.id,
       exerciseId: exercise.exerciseId,
@@ -619,14 +628,11 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       instructions: exercise.instructions,
       secondaryMuscles: (exercise.secondaryMuscles || "").split(",").map((muscle: string) => muscle.trim()).filter(Boolean),
       movementPattern: exercise.movementPattern,
-      demoVideo: (() => {
-        const demo = findExerciseDemo(exerciseName, equipmentRequired, {
-          instructions: exercise.instructions,
-          primaryMuscle,
-          movementPattern: exercise.movementPattern,
-        });
-        return demo ? { ...demo, embedUrl: exerciseDemoEmbedUrl(demo) } : null;
-      })(),
+      demoVideo: {
+        ...resolvedVideo.demo,
+        embedUrl: resolvedVideo.demo.kind === "video" ? exerciseDemoEmbedUrl(resolvedVideo.demo) : null,
+      },
+      videoSource: resolvedVideo.source,
       targetSets: exercise.targetSets,
       repRangeLow: exercise.repRangeLow,
       repRangeHigh: exercise.repRangeHigh,
