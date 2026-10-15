@@ -91,9 +91,79 @@ function escapeText(value) {
 }
 
 
+/* ----------------------------------------------------------------------
+ * Live form coaching.
+ *
+ * Every rule below is computed only from the current frame's MediaPipe
+ * landmarks (normalised image coordinates) and is evaluated on each frame in
+ * the pose loop, so the on-screen cue reacts while the user is still moving
+ * instead of only after a repetition has finished.
+ *
+ * IMPORTANT: the project holds no pose/reference data for the exercise
+ * demonstration videos — a YouTube video id or URL does not contain extracted
+ * landmarks. These cues therefore come strictly from geometry that is genuinely
+ * measurable from the landmarks (joint angles, torso orientation, elbow
+ * position relative to the torso, body-line alignment). No comparison against
+ * the demonstration is performed or implied.
+ * -------------------------------------------------------------------- */
+
+// Below this the pose model is not confident enough about a joint to coach on it.
+const MIN_LANDMARK_VISIBILITY = 0.5;
+
+/** True when at least one of the left/right landmarks of every joint group is usable. */
+function hasVisiblePose(lm, groups) {
+  return groups.every(([left, right]) =>
+    [left, right].some((index) => {
+      const point = lm[index];
+      return Boolean(point) && (point.visibility ?? 1) >= MIN_LANDMARK_VISIBILITY;
+    }));
+}
+
+/** Degrees a segment (top -> bottom) is tilted away from vertical; 0 = straight up/down. */
+function tiltFromVertical(top, bottom) {
+  const dx = bottom.x - top.x;
+  const dy = bottom.y - top.y;
+  return (Math.atan2(Math.abs(dx), Math.abs(dy)) * 180) / Math.PI;
+}
+
+/**
+ * Perpendicular distance between a point and the torso line (shoulder -> hip),
+ * as a fraction of torso length. 0 means the point sits exactly on the torso
+ * line; larger values mean the point has drifted away from the body.
+ */
+function torsoLineOffset(point, shoulder, hip) {
+  const dx = hip.x - shoulder.x;
+  const dy = hip.y - shoulder.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return 0;
+  const px = point.x - shoulder.x;
+  const py = point.y - shoulder.y;
+  return Math.abs(px * dy - py * dx) / (length * length);
+}
+
+/**
+ * Signed vertical position of the hip relative to the shoulder -> ankle line,
+ * as a fraction of shoulder-to-ankle distance. Positive = hips below the line
+ * (sagging); negative = hips above the line (piking).
+ */
+function hipLineDeviation(shoulder, hip, ankle) {
+  const dx = ankle.x - shoulder.x;
+  const dy = ankle.y - shoulder.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return 0;
+  const t = dx === 0 ? 0 : (hip.x - shoulder.x) / dx;
+  const lineY = shoulder.y + dy * t;
+  return (hip.y - lineY) / length;
+}
+
 const EXERCISE_CONFIG = {
   squat: {
     label: "Squat",
+    required: [
+      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+      [LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE],
+      [LANDMARK.LEFT_ANKLE, LANDMARK.RIGHT_ANKLE],
+    ],
     angleOf(lm) {
       const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
       const knee = pick(lm, LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE);
@@ -103,13 +173,19 @@ const EXERCISE_CONFIG = {
     upThreshold: 160,   // standing
     downThreshold: 100, // bottom of squat
     feedback(angle, phase) {
-      if (phase === "down" && angle > 110) return "Go a little lower";
+      if (phase === "down" && angle > 110) return "Go a little lower — full range of motion";
       if (phase === "down") return "Good depth";
       return "Stand tall, then squat down";
     },
   },
   curl: {
     label: "Curl",
+    required: [
+      [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
+      [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+      [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+    ],
     angleOf(lm) {
       const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
       const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
@@ -118,14 +194,33 @@ const EXERCISE_CONFIG = {
     },
     upThreshold: 150, // arm extended
     downThreshold: 50, // fully curled
-    feedback(angle, phase) {
-      if (phase === "down" && angle > 60) return "Curl a bit higher";
+    feedback(angle, phase, lm) {
+      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+      const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
+      const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
+
+      // The torso should stay close to vertical; tipping it means the weight is
+      // being swung up with the body rather than curled with the arm.
+      if (tiltFromVertical(shoulder, hip) > 25) return "Avoid swinging your upper body";
+
+      // The elbow should track close to the torso line; drifting out to the
+      // side is the classic "chicken wing" fault.
+      if (torsoLineOffset(elbow, shoulder, hip) > 0.3) return "Keep your elbows close to your torso";
+
+      if (phase === "down" && angle > 60) return "Curl a bit higher — full range of motion";
       if (phase === "down") return "Nice squeeze";
       return "Extend fully between reps";
     },
   },
   pushup: {
     label: "Push-up",
+    required: [
+      [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
+      [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+      [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+      [LANDMARK.LEFT_ANKLE, LANDMARK.RIGHT_ANKLE],
+    ],
     angleOf(lm) {
       const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
       const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
@@ -138,9 +233,14 @@ const EXERCISE_CONFIG = {
       const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
       const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
       const ankle = pick(lm, LANDMARK.LEFT_ANKLE, LANDMARK.RIGHT_ANKLE);
-      const bodyLine = angleBetween(shoulder, hip, ankle);
-      if (bodyLine < 155) return "Keep your hips up — straighten your back";
-      if (phase === "down" && angle > 100) return "Lower your chest more";
+
+      // Hips should stay in line with shoulders and ankles; the sign of the
+      // deviation separates sagging from piking.
+      const deviation = hipLineDeviation(shoulder, hip, ankle);
+      if (deviation > 0.08) return "Keep your hips up — avoid sagging";
+      if (deviation < -0.08) return "Lower your hips — avoid piking";
+
+      if (phase === "down" && angle > 100) return "Lower your chest more — full range of motion";
       if (phase === "down") return "Good depth";
       return "Lock out at the top";
     },
@@ -660,7 +760,23 @@ const VisionCoach = {
   /* ---------------------- pose + rep pipeline ---------------------- */
 
   processExercise(lm) {
+    const feedbackEl = document.getElementById("camera-feedback");
     const config = EXERCISE_CONFIG[this.currentExercise];
+
+    // A movement without validated rules must never produce invented coaching,
+    // and must not break the pose loop.
+    if (!config) {
+      if (feedbackEl) feedbackEl.textContent = "Live form coaching isn't available for this exercise yet.";
+      return;
+    }
+
+    // Missing or low-confidence joints: ask the user to reposition instead of
+    // showing cues or numbers that cannot actually be measured this frame.
+    if (!hasVisiblePose(lm, config.required)) {
+      if (feedbackEl) feedbackEl.textContent = "Move fully into frame so your body is clearly visible.";
+      return;
+    }
+
     const angle = config.angleOf(lm);
     document.getElementById("vision-angle").textContent = `${Math.round(angle)} deg`;
 
@@ -677,8 +793,9 @@ const VisionCoach = {
     }
     if (this.comparison.capturing) this.captureRepFrame(lm);
 
-    const feedbackEl = document.getElementById("camera-feedback");
-    feedbackEl.textContent = config.feedback(angle, this.phase, lm);
+    // Refreshed every frame, so the cue responds while the repetition is still
+    // in progress rather than only once it completes.
+    if (feedbackEl) feedbackEl.textContent = config.feedback(angle, this.phase, lm);
   },
 };
 

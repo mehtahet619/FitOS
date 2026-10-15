@@ -1591,6 +1591,11 @@ function escapeWorkoutText(value) {
 
 let youtubeIframeApiPromise = null;
 
+// Upper bounds so a blocked script or a stalled player can never leave the UI
+// on "Loading demonstration…" indefinitely.
+const YOUTUBE_IFRAME_API_TIMEOUT_MS = 10000;
+const EXERCISE_DEMO_PLAYER_TIMEOUT_MS = 8000;
+
 function loadYouTubeIframeApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
@@ -1606,16 +1611,23 @@ function loadYouTubeIframeApi() {
       if (typeof previousReady === "function") previousReady();
       finish(window.YT);
     };
-    let script = document.querySelector('script[data-youtube-iframe-api]');
-    if (!script) {
-      script = document.createElement("script");
-      script.src = "https://www.youtube.com/iframe_api";
-      script.async = true;
-      script.dataset.youtubeIframeApi = "true";
-      script.addEventListener("error", () => finish(null), { once: true });
-      document.head.append(script);
+    // This promise must always settle. The timeout is armed before the script is
+    // touched so a blocked script, a throwing injection, or an API that never
+    // calls onYouTubeIframeAPIReady all resolve to null instead of hanging.
+    window.setTimeout(() => finish(window.YT), YOUTUBE_IFRAME_API_TIMEOUT_MS);
+    try {
+      let script = document.querySelector('script[data-youtube-iframe-api]');
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        script.dataset.youtubeIframeApi = "true";
+        script.addEventListener("error", () => finish(null), { once: true });
+        document.head.append(script);
+      }
+    } catch {
+      finish(null);
     }
-    window.setTimeout(() => finish(window.YT), 10000);
   });
   return youtubeIframeApiPromise;
 }
@@ -1709,7 +1721,16 @@ async function startExerciseDemoPlayer(player, button, exercise) {
   if (api) {
     const host = document.createElement("div");
     player.replaceChildren(host);
-    let failed = false;
+    let settled = false;
+    let timer = null;
+    // One settle point so onReady, onError and the init timeout can never run the
+    // fallback or the one-time refresh more than once.
+    const settle = () => {
+      if (settled) return false;
+      settled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      return true;
+    };
     try {
       new api.Player(host, {
         width: "100%",
@@ -1718,21 +1739,30 @@ async function startExerciseDemoPlayer(player, button, exercise) {
         playerVars: { autoplay: 0, controls: 1, enablejsapi: 1, playsinline: 1, rel: 0 },
         events: {
           onReady: () => {
+            if (!settle()) return;
             delete player.dataset.loading;
             button.disabled = false;
             button.hidden = true;
           },
           onError: () => {
-            if (failed) return;
-            failed = true;
+            if (!settle()) return;
             fallbackExerciseDemoPlayback(player, button, exercise, demo);
           },
         },
       });
-      return;
     } catch {
-      // Fall through to the written-guide fallback below.
+      // A player that throws during construction falls back immediately.
+      if (settle()) fallbackExerciseDemoPlayback(player, button, exercise, demo);
+      return;
     }
+    // If the player never reports ready or error (blocked embed, stalled
+    // network), stop the loading state and fall back instead of hanging.
+    if (!settled) {
+      timer = window.setTimeout(() => {
+        if (settle()) fallbackExerciseDemoPlayback(player, button, exercise, demo);
+      }, EXERCISE_DEMO_PLAYER_TIMEOUT_MS);
+    }
+    return;
   }
   fallbackExerciseDemoPlayback(player, button, exercise, demo);
 }
