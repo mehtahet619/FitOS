@@ -683,11 +683,12 @@ async function loadTodayData(generation) {
 
     greetingEl.textContent = `Hi, ${profile.name?.split(" ")[0] || "there"}`;
 
-    const [nutritionResult, gymResult, growImpactResult, historyResult] = await Promise.allSettled([
+    const [nutritionResult, gymResult, growImpactResult, historyResult, attendanceResult] = await Promise.allSettled([
       Api.get("/nutrition/today"),
       Api.get("/gym/today"),
       Api.get("/grow-impact/"),
       Api.get("/workouts/history"),
+      Api.get("/gym/history"),
     ]);
     if (generation !== todayLoadGeneration) return;
 
@@ -696,8 +697,9 @@ async function loadTodayData(generation) {
     const growImpactData = growImpactResult.status === "fulfilled" ? growImpactResult.value : null;
     const growImpactError = growImpactResult.status === "rejected";
     const workoutHistory = historyResult.status === "fulfilled" ? historyResult.value?.history || [] : [];
+    const gymAttendanceHistory = attendanceResult.status === "fulfilled" && Array.isArray(attendanceResult.value) ? attendanceResult.value : null;
 
-    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData, growImpactError, workoutHistory);
+    renderTodaySuccess(el, dashboard, plan, nutritionData, gymData, growImpactData, growImpactError, workoutHistory, gymAttendanceHistory);
     el.dataset.loadState = "success";
   } catch (e) {
     if (generation === todayLoadGeneration) handleTodayError(el, e);
@@ -708,7 +710,7 @@ async function loadTodayData(generation) {
   }
 }
 
-function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false, workoutHistory = []) {
+function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, growImpactError = false, workoutHistory = [], gymAttendanceHistory = []) {
   const activePlanLabel = plan?.activePlan?.structureLabel || plan?.activePlan || null;
   const workoutName = dashboard?.todaysPlan?.focus || plan?.nextWorkout?.label || (plan?.cycleStatus === "COMPLETED" ? "Cycle complete" : "No active plan");
   const statusLabel = dashboard?.todaysPlan?.status === "completed" ? "Completed" : plan?.cycleStatus === "IN_PROGRESS" ? "In progress" : plan?.cycleStatus === "COMPLETED" ? "Cycle complete" : "Not started";
@@ -759,7 +761,7 @@ function renderTodaySuccess(el, dashboard, plan, nutrition, gym, growImpact, gro
         <span class="today-stat-sub">${gym ? gym.checkedIn ? "checked in today" : "not checked in" : "not available"}</span>
       </article>
     </section>
-    ${growImpact ? renderGrowImpact(growImpact, workoutHistory) : renderGrowImpactUnavailable(growImpactError)}
+    ${growImpact ? renderGrowImpact(growImpact, workoutHistory, gymAttendanceHistory) : renderGrowImpactUnavailable(growImpactError)}
   `;
   bindGrowImpactActions(el, workoutHistory);
 }
@@ -778,11 +780,14 @@ function escapeImpactText(value) {
   })[character]);
 }
 
-function renderGrowImpact(impact, workoutHistory = []) {
+function renderGrowImpact(impact, workoutHistory = [], gymAttendanceHistory = []) {
   const percent = Math.max(0, Math.min(100, Number(impact.progressPercent) || 0));
   const count = Number(impact.sessions) || 0;
   const target = Math.max(0, Number(impact.target) || 0);
   const completed = count >= target && target > 0;
+  const attendanceDays = Array.isArray(gymAttendanceHistory)
+    ? new Set(gymAttendanceHistory.map((attendance) => attendance.date).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))).size
+    : null;
   const remainingDays = daysRemainingInMonth(impact.month, impact.calendarDays, impact.timeZone);
   const streak = currentWorkoutStreak(impact.completedSessionDates, workoutHistory, impact.month, impact.timeZone);
   const reward = impact.reward;
@@ -853,8 +858,13 @@ function renderGrowImpact(impact, workoutHistory = []) {
       <div class="today-grow-card-heading"><span class="today-section-label">Monthly consistency</span><h2 id="grow-impact-title">Grow Your Impact</h2></div>
       <label class="today-month-select" aria-label="Choose a calendar month">${todayIcon("calendar", 16)}<input class="grow-impact-month" type="month" data-impact-month value="${escapeImpactText(impact.month)}" /></label>
     </header>
-    <div class="today-grow-progress-copy"><strong>${count}</strong><span>of ${target} sessions completed</span></div>
-    <div class="today-grow-progress" role="progressbar" aria-label="Monthly workout progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
+    <div class="today-grow-stage-progress">
+      ${attendanceDays === null ? '<span class="grow-impact-attendance-unavailable" role="status">Attendance data unavailable</span>' : renderImpactPlant(attendanceDays)}
+      <div class="today-grow-stage-progress-main">
+        <div class="today-grow-progress-copy"><strong>${count}</strong><span>of ${target} sessions completed</span></div>
+        <div class="today-grow-progress" role="progressbar" aria-label="Monthly workout progress" aria-valuemin="0" aria-valuemax="${Math.max(1, target)}" aria-valuenow="${Math.min(count, target)}"><span style="width:${percent}%"></span></div>
+      </div>
+    </div>
     <div class="today-grow-metrics" aria-label="Monthly workout summary">
       <div><span>Days remaining</span><strong>${remainingDays}</strong></div>
       <div><span>Workouts this month</span><strong>${count}</strong></div>
@@ -890,54 +900,43 @@ function renderGrowImpact(impact, workoutHistory = []) {
   </section>`;
 }
 
-function renderImpactPlant(stage, stageCount, isComplete) {
-  const progress = stageCount > 1 ? Math.max(0, Math.min(1, (stage - 1) / (stageCount - 1))) : 0;
-  const soilY = 156;
-  const stemHeight = Math.round(progress * 91);
-  const stemTop = soilY - stemHeight;
-  const rootCount = Math.floor(progress * 8);
-  const roots = Array.from({ length: rootCount }, (_, index) => {
-    const side = index % 2 ? 1 : -1;
-    const branch = Math.floor(index / 2) + 1;
-    const endX = 140 + side * (12 + branch * 13);
-    const endY = soilY + 7 + branch * 5;
-    return `<path d="M140 ${soilY} Q${140 + side * branch * 6} ${soilY + 5} ${endX} ${endY}" />`;
+function renderImpactPlant(attendanceDays) {
+  const dayCount = Math.max(0, Number(attendanceDays) || 0);
+  const stages = [
+    { min: 25, name: "mature plant", height: 62, width: 4.8, leaves: [.16, .34, .52, .7, .86], leafSize: 1 },
+    { min: 15, name: "strong young plant", height: 54, width: 4.2, leaves: [.22, .44, .66, .86], leafSize: .92 },
+    { min: 10, name: "young plant", height: 46, width: 3.5, leaves: [.28, .55, .82], leafSize: .82 },
+    { min: 5, name: "developed seedling", height: 36, width: 2.8, leaves: [.36, .72], leafSize: .72 },
+    { min: 3, name: "seedling with first leaves", height: 26, width: 2.2, leaves: [.56], leafSize: .6 },
+    { min: 2, name: "emerging sprout", height: 13, width: 1.8, leaves: [.72], leafSize: .38 },
+    { min: 0, name: "seed", height: 0, width: 0, leaves: [], leafSize: 0 },
+  ];
+  const stage = stages.find((candidate) => dayCount >= candidate.min);
+  const soilY = 78;
+  const topY = soilY - stage.height;
+  const leafMarkup = stage.leaves.flatMap((position, index) => {
+    const y = topY + stage.height * position;
+    const size = stage.leafSize * (0.82 + index * 0.035);
+    const color = index % 2 ? "#668d55" : "#789c61";
+    return [-1, 1].map((side) => `<path d="M0 0 C${side * 5} -${8 * size} ${side * 17} -${10 * size} ${side * 23} -${5 * size} C${side * 18} ${2 * size} ${side * 7} ${4 * size} 0 0Z" transform="translate(90 ${y})" fill="${color}"/>`);
   }).join("");
-  const stem = progress > 0.04
-    ? `<path class="impact-stem" d="M140 ${soilY} C${137 - stemHeight * .03} ${soilY - stemHeight * .32} ${143 + stemHeight * .03} ${soilY - stemHeight * .72} 140 ${stemTop}" />`
+  const stem = stage.height > 0
+    ? `<path d="M90 ${soilY + 1} C${88 - stage.height * .03} ${soilY - stage.height * .32} ${92 + stage.height * .025} ${soilY - stage.height * .72} 90 ${topY}" fill="none" stroke="#567a4e" stroke-width="${stage.width}" stroke-linecap="round"/>`
     : "";
-  const branchCount = Math.floor(progress * 8);
-  const branches = Array.from({ length: branchCount }, (_, index) => {
-    const side = index % 2 ? 1 : -1;
-    const level = Math.floor(index / 2) + 1;
-    const y = soilY - stemHeight * (0.3 + Math.min(level * .12, .58));
-    const x = 140 + side * (12 + level * 7);
-    const endY = y - 8 - level * 2;
-    return `<path class="impact-branch" d="M140 ${y} Q${140 + side * 10} ${endY - 1} ${x} ${endY}" />`;
-  }).join("");
-  const leafCount = Math.floor(progress * 20);
-  const leaves = Array.from({ length: leafCount }, (_, index) => {
-    const side = index % 2 ? 1 : -1;
-    const row = Math.floor(index / 2);
-    const y = soilY - Math.max(8, stemHeight * (.34 + (row % 5) * .12));
-    const x = 140 + side * (12 + (row % 4) * 7);
-    const size = 4 + progress * 4;
-    return `<path class="impact-leaf" d="M${x} ${y} C${x + side * size} ${y - size * 1.2} ${x + side * size * 2} ${y - size * .9} ${x + side * size * 2.2} ${y} C${x + side * size} ${y + size * .5} ${x + side * size * .4} ${y + size * .3} ${x} ${y}Z" />`;
-  }).join("");
-  const seed = progress < .11 ? `<ellipse class="impact-seed" cx="140" cy="151" rx="${Math.max(4, 7 - progress * 20)}" ry="${Math.max(3, 5 - progress * 15)}" transform="rotate(-28 140 151)" />` : "";
-  return `<svg class="grow-impact-plant-art" viewBox="0 0 280 205" role="img" aria-label="${isComplete ? "Fully grown tree" : `Plant growth stage ${stage} of ${stageCount}`}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="impactSky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3fff6"/><stop offset="1" stop-color="#d7f1df"/></linearGradient>
-      <linearGradient id="impactStem" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#75513b"/><stop offset=".55" stop-color="#a8774d"/><stop offset="1" stop-color="#684731"/></linearGradient>
-      <linearGradient id="impactLeaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a9dc62"/><stop offset="1" stop-color="#18845d"/></linearGradient></defs>
-    <rect x="1" y="1" width="278" height="203" rx="18" fill="url(#impactSky)" />
-    <circle cx="225" cy="42" r="20" fill="#fff4c2" opacity=".72" />
-    <path d="M1 156 Q43 149 80 156 T160 155 T240 156 T279 153V204H1Z" fill="#614833" />
-    <path d="M1 159 Q45 153 88 159 T175 158 T279 157" fill="none" stroke="#9c7754" stroke-width="3" />
-    <g class="impact-roots" fill="none" stroke="#c89250" stroke-linecap="round" stroke-width="2">${roots}</g>
-    <g fill="none" stroke="url(#impactStem)" stroke-linecap="round" stroke-linejoin="round">
-      ${stem}<g stroke-width="3">${branches}</g>
-    </g><g fill="url(#impactLeaf)">${leaves}</g>${seed}
-    ${isComplete ? `<circle cx="140" cy="${Math.max(28, stemTop)}" r="37" fill="#93cf52" opacity=".12" class="impact-canopy-glow" />` : ""}
+  const seed = dayCount < 3
+    ? '<path d="M83 79c1-5 7-8 13-6 2 1 3 3 2 5-2 4-8 6-12 4-2-1-3-2-3-3Z" fill="#876343" stroke="#694a34" stroke-width="1"/><path d="M86 79c3-2 6-3 10-3" fill="none" stroke="#b08a5d" stroke-width="1" stroke-linecap="round"/>'
+    : "";
+  const water = dayCount === 2
+    ? '<path d="M70 67c-2 4-3 5-3 7a3 3 0 0 0 6 0c0-2-1-3-3-7Zm39 2c-2 3-2 4-2 6a2.5 2.5 0 0 0 5 0c0-2-1-3-3-6Z" fill="#8fb8a1" opacity=".9"/>'
+    : "";
+  const accessibleStage = dayCount < 1 ? "seed, no attendance recorded" : `${stage.name}, ${dayCount} gym attendance ${dayCount === 1 ? "day" : "days"}`;
+
+  return `<svg class="grow-impact-plant-art" viewBox="0 0 180 112" role="img" aria-label="${accessibleStage}" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="90" cy="91" rx="49" ry="5" fill="#263328" opacity=".08"/>
+    <path d="M42 81c9-4 18-3 25-1 12-4 20-2 27 0 13-4 25-2 44 1v15H42Z" fill="#795c43"/>
+    <path d="M42 81c9-4 18-3 25-1 12-4 20-2 27 0 13-4 25-2 44 1" fill="none" stroke="#a17b58" stroke-width="2" stroke-linecap="round"/>
+    <path d="M53 87h5m8 5h4m41-6h5m13 6h4m-55-9 2 1m31 11 2-1" stroke="#c09a70" stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+    ${water}${leafMarkup}${stem}${seed}
   </svg>`;
 }
 
