@@ -114,7 +114,10 @@ app.use(
   express.json({ limit: COMPARISON_BODY_LIMIT }),
   comparisonRouter
 );
+// Vision Coach payloads include base64 JPEG frames and can exceed Express's default 100kb parser limit.
+// Mount both supported API prefixes before the global parser so neither path is rejected at 100kb.
 app.use("/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
+app.use("/api/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
 app.use(express.json());
 app.use(applySecurityHeaders);
 app.use(limiter);
