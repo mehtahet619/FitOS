@@ -850,7 +850,11 @@ const VisionCoach = {
       return;
     }
     if (!hasVisiblePose(lm, config.required)) {
-      if (feedbackEl) feedbackEl.textContent = "Move fully into frame so your body is clearly visible.";
+      if (feedbackEl) feedbackEl.textContent = this.currentExercise === "squat"
+        ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
+        : this.currentExercise === "curl"
+          ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
+          : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
       return;
     }
 
