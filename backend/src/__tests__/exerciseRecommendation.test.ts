@@ -10,7 +10,7 @@ import {
   exerciseFamilyKey,
 } from "../modules/workouts/exerciseRecommendation";
 
-const csvPath = path.resolve(__dirname, "../../data/exercises.csv");
+const csvPath = path.resolve(__dirname, "../../data/gym_exercise_database_cleaned.csv.gz");
 
 const repository = new CsvExerciseRepository(csvPath);
 const service = new CsvExerciseRecommendationService(repository);
@@ -432,7 +432,7 @@ describe("bundled CSV exercise recommendations", () => {
   it("contains no AI, recommendation network call, or random selection", () => {
     const source = repository.getAll();
 
-    expect(source).toHaveLength(10000);
+    expect(source).toHaveLength(1524);
 
     expect(exerciseCountForDuration(120)).toBe(5);
 
