@@ -160,6 +160,7 @@ function coachKeyFor(name = "") {
   const n = String(name).toLowerCase();
   if (/squat/.test(n)) return "squat";
   if (/curl/.test(n)) return "curl";
+  if (/bent.?over.?row|barbell.?row|dumbbell.?row|seated.?row|cable.?row|one.?arm.?row|\browing\b/.test(n)) return "row";
   if (/push.?up|press.?up/.test(n)) return "pushup";
   return null;
 }
@@ -218,6 +219,35 @@ const EXERCISE_CONFIG = {
       if (phase === "down" && angle > 60) return "Curl a bit higher — full range of motion";
       if (phase === "down") return "Nice squeeze";
       return "Extend fully between reps";
+    },
+  },
+  row: {
+    label: "Bent Over Row",
+    required: [
+      [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
+      [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+      [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+      [LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE],
+    ],
+    angleOf(lm) {
+      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+      const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
+      const wrist = pick(lm, LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST);
+      return angleBetween(shoulder, elbow, wrist);
+    },
+    upThreshold: 150,
+    downThreshold: 75,
+    feedback(angle, phase, lm) {
+      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+      const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
+      const knee = pick(lm, LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE);
+      const torsoAngle = angleBetween(shoulder, hip, knee);
+      if (torsoAngle < 25) return "Hinge forward from your hips and keep your back neutral";
+      if (torsoAngle > 100) return "Keep your torso hinged forward and steady";
+      if (phase === "down" && angle > 90) return "Pull your elbows back and bring the weight toward your lower ribs";
+      if (phase === "down") return "Squeeze your shoulder blades without jerking your torso";
+      return "Lower your arms with control, keeping your torso still";
     },
   },
   pushup: {
