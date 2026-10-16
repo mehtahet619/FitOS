@@ -1,7 +1,6 @@
 import {
   CsvExercise,
   CsvExerciseRepository,
-  csvExerciseAlternativesRepository,
   csvExerciseRepository,
   normalizeExerciseLookupName,
   normalizeExerciseValue,
@@ -95,7 +94,7 @@ export function getExerciseSwapContext(exerciseName: string, machine: string): P
   const nameKey = normalizeExerciseValue(exerciseName);
   const machineKey = normalizeExerciseValue(machine);
   const familyKey = exerciseFamilyKey(exerciseName);
-  const rows = [...csvExerciseAlternativesRepository.getAll(), ...csvExerciseRepository.getAll()];
+  const rows = csvExerciseRepository.getAll();
   const matches = rows.filter((row) =>
     row.targetedMuscles.length > 0
     && row.timeTakenOneSet
@@ -181,11 +180,10 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     private readonly repository: CsvExerciseRepository = csvExerciseRepository,
     alternativesRepository?: CsvExerciseRepository,
   ) {
-    // Tests and embedded callers that supply an in-memory repository keep a
-    // self-contained fixture. The production service reads swaps exclusively
-    // from the curated 50k alternatives dataset.
-    this.alternativesRepository = alternativesRepository
-      ?? (repository === csvExerciseRepository ? csvExerciseAlternativesRepository : repository);
+    // The active exercise catalogue is the single source of truth for both
+    // recommendations and substitutions. A custom alternatives repository is
+    // accepted only for explicit callers and tests.
+    this.alternativesRepository = alternativesRepository ?? repository;
   }
 
   getSwapAlternatives(
