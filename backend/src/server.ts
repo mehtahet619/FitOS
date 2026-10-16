@@ -16,6 +16,7 @@ import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
 import { growImpactRouter } from "./modules/grow-impact/routes";
 import { comparisonRouter, COMPARISON_BODY_LIMIT } from "./modules/comparison/routes";
+import { coachRouter } from "./modules/coach/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 
@@ -113,6 +114,7 @@ app.use(
   express.json({ limit: COMPARISON_BODY_LIMIT }),
   comparisonRouter
 );
+app.use("/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
 app.use(express.json());
 app.use(applySecurityHeaders);
 app.use(limiter);
