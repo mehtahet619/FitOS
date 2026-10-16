@@ -430,13 +430,9 @@ const VisionCoach = {
       this.running = true;
       this.startEquipmentRecognition();
       this.loop();
-      if (EXERCISE_CONFIG[this.currentExercise]) {
-        void this.refreshComparisonStatus(false);
-      } else {
-        this.showComparisonCard();
-        this.setComparisonRetryVisible(false);
-        this.renderComparisonNotice("Universal coaching is active. Sampled pose landmarks and occasional camera frames are sent to the FitOS backend for AI analysis when configured.");
-      }
+      this.showComparisonCard();
+      this.setComparisonRetryVisible(false);
+      this.renderComparisonNotice("Live coaching is analyzing your movement. AI feedback requires GEMINI_API_KEY on the backend; the old reference-comparison service is separate.");
     } catch (e) {
       placeholder.textContent =
         "Couldn't start the camera or load the pose model (needs internet + camera permission). " + e.message;
@@ -897,11 +893,25 @@ const VisionCoach = {
     this.coachLastRequestAt = performance.now();
     const frames = this.coachFrameBuffer.slice(-16);
     try {
+      const cameraCanvas = document.createElement("canvas");
+      const videoWidth = this.video.videoWidth || 0;
+      const videoHeight = this.video.videoHeight || 0;
+      const images = [];
+      if (videoWidth > 0 && videoHeight > 0 && this.video.readyState >= 2) {
+        cameraCanvas.width = Math.min(640, videoWidth);
+        cameraCanvas.height = Math.round(videoHeight * cameraCanvas.width / videoWidth);
+        cameraCanvas.getContext("2d").drawImage(this.video, 0, 0, cameraCanvas.width, cameraCanvas.height);
+        images.push({
+          mimeType: "image/jpeg",
+          data: cameraCanvas.toDataURL("image/jpeg", 0.55).split(",")[1],
+        });
+      }
       const result = await Api.post("/coach/analyze", {
         exerciseName: this.coachExerciseName,
         equipment: this.stableEquipment.map((item) => item.name).filter(Boolean).slice(0, 10),
         goal: "general_fitness",
         frames,
+        images,
       }, { timeoutMs: 18000 });
       const cues = Array.isArray(result?.feedback)
         ? result.feedback.map((item) => typeof item?.cue === "string" ? item.cue.trim() : "").filter(Boolean).slice(0, 2)
