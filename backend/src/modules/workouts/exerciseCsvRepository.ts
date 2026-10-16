@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 
 export interface CsvExercise {
   /** One-based source record order, retained as the final stable tie-breaker. */
@@ -164,8 +165,10 @@ export class CsvExerciseRepository {
   private cachedExercises?: readonly CsvExercise[];
 
   constructor(
-    private readonly csvPath = path.resolve(__dirname, "../../../data/exercises.csv"),
-    private readonly readFile: (filePath: string) => string = (filePath) => fs.readFileSync(filePath, "utf8"),
+    private readonly csvPath = path.resolve(__dirname, "../../../data/gym_exercise_database_cleaned.csv.gz"),
+    private readonly readFile: (filePath: string) => string = (filePath) => filePath.endsWith(".gz")
+      ? gunzipSync(fs.readFileSync(filePath)).toString("utf8")
+      : fs.readFileSync(filePath, "utf8"),
   ) {}
 
   getAll(): readonly CsvExercise[] {
