@@ -118,7 +118,10 @@ app.use(
 // Mount both supported API prefixes before the global parser so neither path is rejected at 100kb.
 app.use("/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
 app.use("/api/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
-app.use(express.json());
+// Keep the global parser aligned with bounded image-bearing API requests. Route-specific
+// parsers above still apply their own limits; this prevents requests routed through
+// a prefixed API mount from being rejected at Express's 100kb default.
+app.use(express.json({ limit: "4mb" }));
 app.use(applySecurityHeaders);
 app.use(limiter);
 
