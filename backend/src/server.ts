@@ -115,7 +115,8 @@ app.use(
   comparisonRouter
 );
 app.use("/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
-app.use(express.json());
+app.use("/api/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
+app.use(express.json({ limit: "4mb" }));
 app.use(applySecurityHeaders);
 app.use(limiter);
 
