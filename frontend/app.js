@@ -1917,6 +1917,7 @@ function renderWorkout(workout, plan) {
         </button>
         <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
         <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · ${hasDemoVideo ? "Inline demonstration" : "Find exercise demonstration"}</span></div>
+        <p class="exercise-demo-unavailable-note" hidden>Demonstration currently unavailable.</p>
         <div class="exercise-demo-player" hidden aria-live="polite"></div>
       </div>
     </section>`;
