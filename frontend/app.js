@@ -1915,6 +1915,7 @@ function renderWorkout(workout, plan) {
               <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
               <span class="exercise-demo-play" aria-hidden="true">▶</span>
             </button>
+            <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
             <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · Inline demonstration</span></div>
             <div class="exercise-demo-player" hidden aria-live="polite"></div>
           </div>`
@@ -2110,6 +2111,35 @@ function renderWorkout(workout, plan) {
       const player = row?.querySelector(".exercise-demo-player");
       if (!exercise || !player || player.dataset.loading === "true" || player.querySelector("iframe")) return;
       await startExerciseDemoPlayer(player, button, exercise);
+    });
+  });
+
+  el.querySelectorAll('[data-action="watch-exercise"]').forEach((button) => {
+    button.addEventListener("click", async () => {
+      const row = button.closest(".workout-exercise-row");
+      const exerciseId = row?.querySelector(".exercise-demo")?.dataset.videoId;
+      const exercise = exercises.find((item) => item.exerciseId === exerciseId);
+      if (!exercise) return;
+
+      switchTab("vision");
+
+      const demoPlayer = $("vision-demo-player");
+      const demoButton = $("vision-demo-btn");
+      if (demoPlayer && demoButton) {
+        demoPlayer.replaceChildren();
+        demoPlayer.hidden = true;
+        delete demoButton.dataset.refreshed;
+        demoButton.hidden = false;
+        demoButton.disabled = false;
+        void startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
+      }
+
+      if (window.VisionCoach?.openFor) {
+        await window.VisionCoach.openFor(exercise);
+      } else {
+        const status = $("camera-placeholder");
+        if (status) status.textContent = "Live coaching could not be initialized. Please reload FitOS and try again.";
+      }
     });
   });
   el.querySelectorAll('[data-action="ask-exercise"]').forEach((button) => {
