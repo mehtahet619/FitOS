@@ -368,7 +368,7 @@ const VisionCoach = {
     if (startButton) startButton.disabled = false;
     if (placeholder) placeholder.textContent = key
       ? 'Tap "Start Camera" to begin pose analysis in your browser.'
-      : `AI coaching for ${exerciseName}: keep your full body in frame. Feedback depends on model confidence.`;
+      : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
     document.querySelectorAll("#vision-segment button").forEach((button) => {
       button.classList.toggle("active", Boolean(key) && button.dataset.exercise === key);
     });
@@ -430,7 +430,13 @@ const VisionCoach = {
       this.running = true;
       this.startEquipmentRecognition();
       this.loop();
-      void this.refreshComparisonStatus(false);
+      if (EXERCISE_CONFIG[this.currentExercise]) {
+        void this.refreshComparisonStatus(false);
+      } else {
+        this.showComparisonCard();
+        this.setComparisonRetryVisible(false);
+        this.renderComparisonNotice("Universal coaching is active. Sampled pose landmarks and occasional camera frames are sent to the FitOS backend for AI analysis when configured.");
+      }
     } catch (e) {
       placeholder.textContent =
         "Couldn't start the camera or load the pose model (needs internet + camera permission). " + e.message;
@@ -637,7 +643,7 @@ const VisionCoach = {
     this.showComparisonCard();
     if (this.comparison.available) {
       this.renderComparisonNotice(
-        `${EXERCISE_CONFIG[this.currentExercise].label}: complete one repetition to set your baseline.`,
+        `${EXERCISE_CONFIG[this.currentExercise]?.label || this.coachExerciseName || "Exercise"}: complete one repetition to set your baseline.`,
       );
       this.setComparisonRetryVisible(false);
       return;
