@@ -906,7 +906,7 @@ const VisionCoach = {
       const cues = Array.isArray(result?.feedback)
         ? result.feedback.map((item) => typeof item?.cue === "string" ? item.cue.trim() : "").filter(Boolean).slice(0, 2)
         : [];
-      if (cues.length && Number(result?.confidence ?? 0) >= 0.45) {
+      if (cues.length && (Number(result?.confidence ?? 0) >= 0.45 || result?.modelConfigured === false)) {
         this.coachFeedback = cues.join(" ");
       } else if (result?.needsRepositioning) {
         this.coachFeedback = "Move fully into frame and improve lighting so the coach can see your movement.";
