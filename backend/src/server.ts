@@ -114,6 +114,7 @@ app.use(
   express.json({ limit: COMPARISON_BODY_LIMIT }),
   comparisonRouter
 );
+app.use("/coach", limiter, applySecurityHeaders, express.json({ limit: "4mb" }), coachRouter);
 app.use(express.json());
 app.use(applySecurityHeaders);
 app.use(limiter);
@@ -126,7 +127,6 @@ app.use("/user", userRouter);
 app.use("/equipment", equipmentRouter);
 app.use("/", equipmentRouter); // exposes /user/equipment alongside /equipment
 app.use("/exercises", exerciseRouter);
-app.use("/coach", coachRouter);
 app.use("/workouts", workoutRouter);
 app.use("/nutrition", nutritionRouter);
 app.use("/food", foodRouter);
