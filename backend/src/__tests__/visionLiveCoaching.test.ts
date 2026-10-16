@@ -219,7 +219,7 @@ describe("vision live form coaching", () => {
       module.VisionCoach.currentExercise = "burpee";
       expect(() => module.VisionCoach.processExercise(pose({}))).not.toThrow();
       expect(feedbackText()).toBe(
-        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace",
+        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.",
       );
     });
   });
