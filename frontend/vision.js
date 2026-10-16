@@ -156,6 +156,14 @@ function hipLineDeviation(shoulder, hip, ankle) {
   return (hip.y - lineY) / length;
 }
 
+function coachKeyFor(name = "") {
+  const n = String(name).toLowerCase();
+  if (/squat/.test(n)) return "squat";
+  if (/curl/.test(n)) return "curl";
+  if (/push.?up|press.?up/.test(n)) return "pushup";
+  return null;
+}
+
 const EXERCISE_CONFIG = {
   squat: {
     label: "Squat",
@@ -294,9 +302,39 @@ const VisionCoach = {
       });
     });
 
-    document.getElementById("vision-start-btn").addEventListener("click", () => this.start());
+    document.getElementById("vision-start-btn").addEventListener("click", () => {
+      if (this.running) this.stop();
+      else void this.start();
+    });
     document.getElementById("vision-reset-btn").addEventListener("click", () => this.resetReps());
     document.getElementById("form-comparison-retry-btn").addEventListener("click", () => this.retryComparison());
+  },
+
+  async openFor(exercise) {
+    const key = coachKeyFor(exercise?.exerciseName || "");
+    const placeholder = document.getElementById("camera-placeholder");
+    const demoSection = document.getElementById("vision-demo");
+    if (demoSection) demoSection.hidden = false;
+
+    if (!key) {
+      if (this.running) this.stop();
+      const startButton = document.getElementById("vision-start-btn");
+      if (startButton) startButton.disabled = true;
+      if (placeholder) {
+        placeholder.textContent = `Live coaching isn't available for ${exercise?.exerciseName || "this exercise"} yet. You can still watch the demonstration above.`;
+      }
+      this.hideComparisonCard();
+      return;
+    }
+
+    const startButton = document.getElementById("vision-start-btn");
+    if (startButton) startButton.disabled = false;
+    this.currentExercise = key;
+    document.querySelectorAll("#vision-segment button").forEach((button) => {
+      button.classList.toggle("active", button.dataset.exercise === key);
+    });
+    this.resetReps();
+    if (!this.running) await this.start();
   },
 
   resetReps() {
@@ -347,7 +385,6 @@ const VisionCoach = {
       document.getElementById("camera-feedback").style.display = "block";
 
       startBtn.textContent = "Stop Camera";
-      startBtn.onclick = () => this.stop();
       startBtn.disabled = false;
 
       this.running = true;
@@ -384,7 +421,6 @@ const VisionCoach = {
     document.getElementById("camera-feedback").style.display = "none";
     const startBtn = document.getElementById("vision-start-btn");
     startBtn.textContent = "Start Camera";
-    startBtn.onclick = () => this.start();
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.renderEquipmentState("Waiting for a frame…", []);
   },
@@ -799,4 +835,5 @@ const VisionCoach = {
   },
 };
 
+window.VisionCoach = VisionCoach;
 window.addEventListener("DOMContentLoaded", () => VisionCoach.init());
