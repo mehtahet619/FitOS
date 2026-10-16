@@ -108,7 +108,7 @@ function escapeText(value) {
  * -------------------------------------------------------------------- */
 
 // Below this the pose model is not confident enough about a joint to coach on it.
-const MIN_LANDMARK_VISIBILITY = 0.5;
+const MIN_LANDMARK_VISIBILITY = 0.35;
 
 /** True when at least one of the left/right landmarks of every joint group is usable. */
 function hasVisiblePose(lm, groups) {
@@ -850,7 +850,11 @@ const VisionCoach = {
       return;
     }
     if (!hasVisiblePose(lm, config.required)) {
-      if (feedbackEl) feedbackEl.textContent = "Move fully into frame so your body is clearly visible.";
+      if (feedbackEl) feedbackEl.textContent = this.currentExercise === "squat"
+        ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
+        : this.currentExercise === "curl"
+          ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
+          : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
       return;
     }
 
