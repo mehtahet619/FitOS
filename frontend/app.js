@@ -2157,11 +2157,26 @@ function renderWorkout(workout, plan) {
       const demoButton = $("vision-demo-btn");
       if (demoPlayer && demoButton) {
         demoPlayer.replaceChildren();
-        demoPlayer.hidden = true;
+        demoPlayer.hidden = false;
+        demoPlayer.textContent = "Finding a demonstration for this exercise…";
         delete demoButton.dataset.refreshed;
         demoButton.hidden = false;
-        demoButton.disabled = false;
-        void startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
+        demoButton.disabled = true;
+        try {
+          if (!exercise.demoVideo || exercise.demoVideo.kind !== "video" || !exercise.demoVideo.videoId) {
+            const result = await Api.get(`/exercises/${encodeURIComponent(exercise.exerciseId)}/demo-video`, { timeoutMs: 12000 });
+            exercise.demoVideo = result?.demoVideo || null;
+          }
+          demoButton.disabled = false;
+          if (exercise.demoVideo?.kind === "video" && exercise.demoVideo.videoId) {
+            await startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
+          } else {
+            showUnavailableExerciseDemo(demoPlayer, exercise, exercise.demoVideo, "A video demonstration isn't available right now. Follow the exercise instructions instead.");
+          }
+        } catch {
+          demoButton.disabled = false;
+          demoPlayer.textContent = "Demonstration temporarily unavailable. Please try again.";
+        }
       }
 
       if (window.VisionCoach?.openFor) {
