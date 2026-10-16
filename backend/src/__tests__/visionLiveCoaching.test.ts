@@ -215,10 +215,12 @@ describe("vision live form coaching", () => {
       expect(feedbackText()).toBe("Move fully into frame so your body is clearly visible.");
     });
 
-    it("does not invent coaching for an unsupported exercise", () => {
+    it("routes an unsupported exercise to the shared coach without inventing a specific correction", () => {
       module.VisionCoach.currentExercise = "burpee";
       expect(() => module.VisionCoach.processExercise(pose({}))).not.toThrow();
-      expect(feedbackText()).toBe("Live form coaching isn't available for this exercise yet.");
+      expect(feedbackText()).toBe(
+        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.",
+      );
     });
   });
 
