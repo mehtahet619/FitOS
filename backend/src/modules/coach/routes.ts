@@ -21,6 +21,10 @@ const analyzeSchema = z.object({
   equipment: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   goal: z.enum(["hypertrophy", "strength", "mobility", "general_fitness", "rehab"]).default("general_fitness"),
   frames: z.array(frameSchema).min(2).max(MAX_LANDMARK_FRAMES),
+  images: z.array(z.object({
+    mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    data: z.string().min(1).max(MAX_FRAME_BYTES * 2),
+  })).max(4).optional(),
 });
 const identifySchema = z.object({
   frames: z.array(z.object({
@@ -130,6 +134,8 @@ coachRouter.post("/analyze", requireAuth, coachLimiter, async (req, res) => {
   const parsed = analyzeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid coaching input", details: parsed.error.flatten() });
   const input = parsed.data;
+  const imageBytes = (input.images || []).reduce((sum, image) => sum + Math.floor(image.data.length * 3 / 4), 0);
+  if (imageBytes > MAX_FRAME_BYTES * 4) return res.status(413).json({ error: "Coaching images exceed the size limit" });
   const pose = summarizePose(input.frames);
   if (pose.averageLandmarkVisibility < 0.45) {
     return res.json({
@@ -156,7 +162,7 @@ coachRouter.post("/analyze", requireAuth, coachLimiter, async (req, res) => {
     `Pose summary: ${JSON.stringify(pose)}`,
   ].join("\n");
   try {
-    const result = await askGemini(prompt);
+    const result = await askGemini(prompt, input.images);
     if (!result) {
       return res.json({
         exerciseHypothesis: input.exerciseName || null,
