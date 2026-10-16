@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { buildExerciseInstructionFallback, isValidYouTubeVideoId, exerciseDemoEmbedUrl, findExerciseDemo } from "../modules/exercises/exerciseMedia";
 import { parseExerciseCsv } from "../modules/workouts/exerciseCsvRepository";
@@ -60,8 +61,8 @@ describe("curated exercise demo matching", () => {
   });
 
   it("provides media for every catalog name/equipment pair without inventing IDs", () => {
-    const catalogPath = path.resolve(__dirname, "../../data/exercises.csv");
-    const catalog = parseExerciseCsv(fs.readFileSync(catalogPath, "utf8"));
+    const catalogPath = path.resolve(__dirname, "../../data/gym_exercise_database_cleaned.csv.gz");
+    const catalog = parseExerciseCsv(gunzipSync(fs.readFileSync(catalogPath)).toString("utf8"));
     const pairs = new Map(catalog.map((exercise) => [`${exercise.exercise}\u0000${exercise.machine}`, exercise]));
     const coverage = [...pairs.values()].map((exercise) => findExerciseDemo(exercise.exercise, [exercise.machine]));
     const videos = coverage.filter((demo) => demo.kind === "video");
