@@ -1904,22 +1904,21 @@ function renderWorkout(workout, plan) {
       : swapButton;
     const demo = exercise.demoVideo || { kind: "instructions", title: `${exercise.exerciseName} instructions` };
     const hasDemoVideo = demo.kind === "video" && Boolean(demo.videoId);
-    // The demonstration sits directly under the exercise name/muscle/equipment
-    // line so it is visible before the edit/swap controls, and it uses this
-    // exercise's own resolved demo — never a shared placeholder.
+    // Always render a demonstration entry. The exercise-specific video is
+    // resolved on demand from the backend when it is not already in the workout payload.
     const demonstration = `<section class="exercise-demonstration" aria-label="Exercise Demonstration">
       <div class="exercise-demonstration-label">Exercise Demonstration</div>
-      ${hasDemoVideo
-        ? `<div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
-            <button class="exercise-demo-preview" type="button" data-action="play-demo" aria-label="Play ${escapeWorkoutText(exercise.exerciseName)} demonstration">
-              <img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />
-              <span class="exercise-demo-play" aria-hidden="true">▶</span>
-            </button>
-            <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
-            <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · Inline demonstration</span></div>
-            <div class="exercise-demo-player" hidden aria-live="polite"></div>
-          </div>`
-        : `<p class="exercise-demo-unavailable-note" role="note">Demonstration currently unavailable.</p>`}
+      <div class="exercise-demo" data-video-id="${escapeWorkoutText(exercise.exerciseId || "")}">
+        <button class="exercise-demo-preview" type="button" data-action="play-demo" aria-label="Load ${escapeWorkoutText(exercise.exerciseName)} demonstration">
+          ${hasDemoVideo && demo.thumbnailUrl
+            ? `<img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />`
+            : `<span class="exercise-demo-thumbnail-fallback">${hasDemoVideo ? "Play demonstration" : "Load demonstration"}</span>`}
+          <span class="exercise-demo-play" aria-hidden="true">▶</span>
+        </button>
+        <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
+        <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · ${hasDemoVideo ? "Inline demonstration" : "Find exercise demonstration"}</span></div>
+        <div class="exercise-demo-player" hidden aria-live="polite"></div>
+      </div>
     </section>`;
     const exerciseSupport = `<div class="workout-exercise-support">
       <button class="btn btn-outline exercise-chat-toggle" type="button" data-action="ask-exercise" ${exercise.exerciseId ? "" : "disabled"}>Ask about this exercise</button>
@@ -2110,6 +2109,37 @@ function renderWorkout(workout, plan) {
       const exercise = exercises.find((item) => item.exerciseId === exerciseId);
       const player = row?.querySelector(".exercise-demo-player");
       if (!exercise || !player || player.dataset.loading === "true" || player.querySelector("iframe")) return;
+      if (!exercise.demoVideo || exercise.demoVideo.kind !== "video" || !exercise.demoVideo.videoId) {
+        player.hidden = false;
+        player.dataset.loading = "true";
+        player.textContent = "Finding a demonstration for this exercise…";
+        button.disabled = true;
+        try {
+          const result = await Api.get(`/exercises/${encodeURIComponent(exercise.exerciseId)}/demo-video`, { timeoutMs: 12000 });
+          exercise.demoVideo = result?.demoVideo || null;
+          const demo = exercise.demoVideo;
+          if (demo?.kind === "video" && demo.videoId) {
+            const demoRoot = row.querySelector(".exercise-demo");
+            if (demoRoot) demoRoot.dataset.videoId = exercise.exerciseId;
+            const image = button.querySelector("img");
+            if (image && demo.thumbnailUrl) image.src = demo.thumbnailUrl;
+            const meta = row.querySelector(".exercise-demo-meta span");
+            if (meta) meta.textContent = `${demo.sourceName || "Exercise guide"} · Inline demonstration`;
+            delete player.dataset.loading;
+            button.disabled = false;
+            await startExerciseDemoPlayer(player, button, exercise);
+          } else {
+            delete player.dataset.loading;
+            button.disabled = false;
+            showUnavailableExerciseDemo(player, exercise, demo, "A video demonstration isn't available right now. Follow the exercise instructions instead.");
+          }
+        } catch {
+          delete player.dataset.loading;
+          button.disabled = false;
+          player.textContent = "Demonstration temporarily unavailable. Please try again.";
+        }
+        return;
+      }
       await startExerciseDemoPlayer(player, button, exercise);
     });
   });
@@ -2127,11 +2157,26 @@ function renderWorkout(workout, plan) {
       const demoButton = $("vision-demo-btn");
       if (demoPlayer && demoButton) {
         demoPlayer.replaceChildren();
-        demoPlayer.hidden = true;
+        demoPlayer.hidden = false;
+        demoPlayer.textContent = "Finding a demonstration for this exercise…";
         delete demoButton.dataset.refreshed;
         demoButton.hidden = false;
-        demoButton.disabled = false;
-        void startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
+        demoButton.disabled = true;
+        try {
+          if (!exercise.demoVideo || exercise.demoVideo.kind !== "video" || !exercise.demoVideo.videoId) {
+            const result = await Api.get(`/exercises/${encodeURIComponent(exercise.exerciseId)}/demo-video`, { timeoutMs: 12000 });
+            exercise.demoVideo = result?.demoVideo || null;
+          }
+          demoButton.disabled = false;
+          if (exercise.demoVideo?.kind === "video" && exercise.demoVideo.videoId) {
+            await startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
+          } else {
+            showUnavailableExerciseDemo(demoPlayer, exercise, exercise.demoVideo, "A video demonstration isn't available right now. Follow the exercise instructions instead.");
+          }
+        } catch {
+          demoButton.disabled = false;
+          demoPlayer.textContent = "Demonstration temporarily unavailable. Please try again.";
+        }
       }
 
       if (window.VisionCoach?.openFor) {
