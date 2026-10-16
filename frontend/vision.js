@@ -108,7 +108,7 @@ function escapeText(value) {
  * -------------------------------------------------------------------- */
 
 // Below this the pose model is not confident enough about a joint to coach on it.
-const MIN_LANDMARK_VISIBILITY = 0.5;
+const MIN_LANDMARK_VISIBILITY = 0.35;
 
 /** True when at least one of the left/right landmarks of every joint group is usable. */
 function hasVisiblePose(lm, groups) {
