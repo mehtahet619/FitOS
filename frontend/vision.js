@@ -302,6 +302,14 @@ const VisionCoach = {
   lastEquipmentRequestAt: 0,
   equipmentIntervalMs: 1500,
   equipmentMinConfidence: 0.35,
+  coachExerciseName: "Squat",
+  coachFrameBuffer: [],
+  coachLastSampleAt: 0,
+  coachLastRequestAt: 0,
+  coachLastIdentifyAt: 0,
+  coachRequestInFlight: false,
+  coachIdentifyInFlight: false,
+  coachFeedback: "",
 
   // Form comparison state. `baselineFrames` holds the first completed rep of the
   // session; later reps are compared against it so both sequences come from the
@@ -328,6 +336,9 @@ const VisionCoach = {
         document.querySelectorAll("#vision-segment button").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         this.currentExercise = btn.dataset.exercise;
+        this.coachExerciseName = EXERCISE_CONFIG[this.currentExercise]?.label || this.currentExercise;
+        this.coachFeedback = "";
+        this.coachFrameBuffer = [];
         this.resetReps();
       });
     });
@@ -341,27 +352,25 @@ const VisionCoach = {
   },
 
   async openFor(exercise) {
-    const key = coachKeyFor(exercise?.exerciseName || "");
+    const exerciseName = String(exercise?.exerciseName || exercise?.name || "Unknown exercise");
+    const key = coachKeyFor(exerciseName);
     const placeholder = document.getElementById("camera-placeholder");
     const demoSection = document.getElementById("vision-demo");
     if (demoSection) demoSection.hidden = false;
 
-    if (!key) {
-      if (this.running) this.stop();
-      const startButton = document.getElementById("vision-start-btn");
-      if (startButton) startButton.disabled = true;
-      if (placeholder) {
-        placeholder.textContent = `Live coaching isn't available for ${exercise?.exerciseName || "this exercise"} yet. You can still watch the demonstration above.`;
-      }
-      this.hideComparisonCard();
-      return;
-    }
-
+    // Every catalogue exercise can use the shared AI path. Only locally
+    // validated movements use deterministic rep counting.
+    this.currentExercise = key || "universal";
+    this.coachExerciseName = exerciseName;
+    this.coachFeedback = "";
+    this.coachFrameBuffer = [];
     const startButton = document.getElementById("vision-start-btn");
     if (startButton) startButton.disabled = false;
-    this.currentExercise = key;
+    if (placeholder) placeholder.textContent = key
+      ? 'Tap "Start Camera" to begin pose analysis in your browser.'
+      : `AI coaching for ${exerciseName}: keep your full body in frame. Feedback depends on model confidence.`;
     document.querySelectorAll("#vision-segment button").forEach((button) => {
-      button.classList.toggle("active", button.dataset.exercise === key);
+      button.classList.toggle("active", Boolean(key) && button.dataset.exercise === key);
     });
     this.resetReps();
     if (!this.running) await this.start();
@@ -373,7 +382,8 @@ const VisionCoach = {
     document.getElementById("vision-reps").textContent = "0";
     document.getElementById("vision-angle").textContent = "0 deg";
     this.resetComparisonCapture();
-    this.renderComparisonNotice(`${EXERCISE_CONFIG[this.currentExercise].label}: complete one repetition to set your baseline.`);
+    const label = EXERCISE_CONFIG[this.currentExercise]?.label || this.coachExerciseName || "Exercise";
+    this.renderComparisonNotice(`${label}: live pose analysis is active. AI feedback depends on backend configuration and model confidence.`);
   },
 
   resetComparisonCapture() {
@@ -435,6 +445,8 @@ const VisionCoach = {
 
   stop() {
     this.running = false;
+    this.coachFrameBuffer = [];
+    this.coachFeedback = "";
     if (this.equipmentTimer) window.clearTimeout(this.equipmentTimer);
     this.equipmentTimer = null;
     this.equipmentRequestInFlight = false;
@@ -828,16 +840,13 @@ const VisionCoach = {
   processExercise(lm) {
     const feedbackEl = document.getElementById("camera-feedback");
     const config = EXERCISE_CONFIG[this.currentExercise];
+    this.collectCoachFrame(lm);
 
-    // A movement without validated rules must never produce invented coaching,
-    // and must not break the pose loop.
     if (!config) {
-      if (feedbackEl) feedbackEl.textContent = "Live form coaching isn't available for this exercise yet.";
+      if (feedbackEl) feedbackEl.textContent = this.coachFeedback ||
+        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.";
       return;
     }
-
-    // Missing or low-confidence joints: ask the user to reposition instead of
-    // showing cues or numbers that cannot actually be measured this frame.
     if (!hasVisiblePose(lm, config.required)) {
       if (feedbackEl) feedbackEl.textContent = "Move fully into frame so your body is clearly visible.";
       return;
@@ -845,8 +854,6 @@ const VisionCoach = {
 
     const angle = config.angleOf(lm);
     document.getElementById("vision-angle").textContent = `${Math.round(angle)} deg`;
-
-    // Rep state machine: crossing into "down" then back past "up" = one rep.
     if (this.phase === "up" && angle < config.downThreshold) {
       this.phase = "down";
       this.beginRepCapture();
@@ -858,10 +865,81 @@ const VisionCoach = {
       this.completeRep();
     }
     if (this.comparison.capturing) this.captureRepFrame(lm);
+    if (feedbackEl) feedbackEl.textContent = this.coachFeedback || config.feedback(angle, this.phase, lm);
+  },
 
-    // Refreshed every frame, so the cue responds while the repetition is still
-    // in progress rather than only once it completes.
-    if (feedbackEl) feedbackEl.textContent = config.feedback(angle, this.phase, lm);
+  collectCoachFrame(landmarks) {
+    const now = performance.now();
+    if (now - this.coachLastSampleAt >= 350) {
+      this.coachLastSampleAt = now;
+      this.coachFrameBuffer.push(landmarks.map((point) => ({
+        x: point.x, y: point.y, z: point.z, visibility: point.visibility ?? 1,
+      })));
+      if (this.coachFrameBuffer.length > 24) this.coachFrameBuffer.shift();
+    }
+    if (!this.coachRequestInFlight && this.coachFrameBuffer.length >= 8 && now - this.coachLastRequestAt >= 4500) {
+      void this.requestUniversalCoachAnalysis();
+    }
+    if (!EXERCISE_CONFIG[this.currentExercise] && !this.coachIdentifyInFlight && now - this.coachLastIdentifyAt >= 10000) {
+      void this.identifyUniversalExercise();
+    }
+  },
+
+  async requestUniversalCoachAnalysis() {
+    if (!this.running || this.coachRequestInFlight || this.coachFrameBuffer.length < 8) return;
+    this.coachRequestInFlight = true;
+    this.coachLastRequestAt = performance.now();
+    const frames = this.coachFrameBuffer.slice(-16);
+    try {
+      const result = await Api.post("/coach/analyze", {
+        exerciseName: this.coachExerciseName,
+        equipment: this.stableEquipment.map((item) => item.name).filter(Boolean).slice(0, 10),
+        goal: "general_fitness",
+        frames,
+      }, { timeoutMs: 18000 });
+      const cues = Array.isArray(result?.feedback)
+        ? result.feedback.map((item) => typeof item?.cue === "string" ? item.cue.trim() : "").filter(Boolean).slice(0, 2)
+        : [];
+      if (cues.length && Number(result?.confidence ?? 0) >= 0.45) {
+        this.coachFeedback = cues.join(" ");
+      } else if (result?.needsRepositioning) {
+        this.coachFeedback = "Move fully into frame and improve lighting so the coach can see your movement.";
+      } else if (result?.exerciseHypothesis === "unknown") {
+        this.coachFeedback = "I couldn't identify this movement confidently. Keep your full body visible or select the exercise by name.";
+      }
+    } catch (error) {
+      if (error?.status === 401) this.coachFeedback = "Please sign in again to use live AI coaching.";
+      else if (error?.status === 503) this.coachFeedback = "AI coaching is not configured on the backend yet; basic pose tracking remains available.";
+      console.warn("[VisionCoach] universal coaching request failed", error?.message || error);
+    } finally {
+      this.coachRequestInFlight = false;
+    }
+  },
+
+  async identifyUniversalExercise() {
+    if (!this.running || this.coachIdentifyInFlight || this.video.readyState < 2 || !this.video.videoWidth) return;
+    this.coachIdentifyInFlight = true;
+    this.coachLastIdentifyAt = performance.now();
+    try {
+      const canvas = this.equipmentCanvas;
+      canvas.width = Math.min(640, this.video.videoWidth);
+      canvas.height = Math.round(this.video.videoHeight * canvas.width / this.video.videoWidth);
+      canvas.getContext("2d").drawImage(this.video, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL("image/jpeg", 0.65).split(",")[1];
+      const result = await Api.post("/coach/identify-exercise", {
+        frames: [{ mimeType: "image/jpeg", data }],
+        equipment: this.stableEquipment.map((item) => item.name).filter(Boolean).slice(0, 10),
+      }, { timeoutMs: 20000 });
+      if (typeof result?.exerciseHypothesis === "string" && result.exerciseHypothesis !== "unknown" && Number(result.confidence ?? 0) >= 0.55) {
+        this.coachExerciseName = result.exerciseHypothesis;
+        const status = document.getElementById("form-comparison-status");
+        if (status) status.textContent = `AI identified: ${result.exerciseHypothesis}. This is context, not proof of correct form.`;
+      }
+    } catch (error) {
+      console.warn("[VisionCoach] exercise identification unavailable", error?.message || error);
+    } finally {
+      this.coachIdentifyInFlight = false;
+    }
   },
 };
 
