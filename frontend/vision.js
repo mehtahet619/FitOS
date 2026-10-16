@@ -119,6 +119,15 @@ function hasVisiblePose(lm, groups) {
     }));
 }
 
+/** True when any landmark group needed for this exercise has a usable side. */
+function hasAnyVisiblePoseLandmark(lm, groups) {
+  return groups.some(([left, right]) =>
+    [left, right].some((index) => {
+      const point = lm[index];
+      return Boolean(point) && (point.visibility ?? 1) >= MIN_LANDMARK_VISIBILITY;
+    }));
+}
+
 /** Degrees a segment (top -> bottom) is tilted away from vertical; 0 = straight up/down. */
 function tiltFromVertical(top, bottom) {
   const dx = bottom.x - top.x;
@@ -850,11 +859,16 @@ const VisionCoach = {
       return;
     }
     if (!hasVisiblePose(lm, config.required)) {
-      if (feedbackEl) feedbackEl.textContent = this.currentExercise === "squat"
-        ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
-        : this.currentExercise === "curl"
-          ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
-          : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
+      const hasAnyRequiredLandmark = hasAnyVisiblePoseLandmark(lm, config.required);
+      if (feedbackEl) {
+        feedbackEl.textContent = !hasAnyRequiredLandmark
+          ? "Move fully into frame so your body is clearly visible."
+          : this.currentExercise === "squat"
+            ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
+            : this.currentExercise === "curl"
+              ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
+              : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
+      }
       return;
     }
 
