@@ -16,6 +16,7 @@ import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
 import { growImpactRouter } from "./modules/grow-impact/routes";
 import { comparisonRouter, COMPARISON_BODY_LIMIT } from "./modules/comparison/routes";
+import { coachRouter } from "./modules/coach/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 
@@ -125,6 +126,7 @@ app.use("/user", userRouter);
 app.use("/equipment", equipmentRouter);
 app.use("/", equipmentRouter); // exposes /user/equipment alongside /equipment
 app.use("/exercises", exerciseRouter);
+app.use("/coach", coachRouter);
 app.use("/workouts", workoutRouter);
 app.use("/nutrition", nutritionRouter);
 app.use("/food", foodRouter);
