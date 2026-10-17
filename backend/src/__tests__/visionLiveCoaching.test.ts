@@ -27,7 +27,12 @@ interface VisionModule {
     angleOf: (lm: unknown[]) => number;
     feedback: (angle: number, phase: string, lm: unknown[]) => string;
   }>;
+  setFrameAspect: (w: number, h: number) => void;
+  coachKeyFor: (name: string) => string | null;
+  bestSide: (lm: unknown[], groups: number[][]) => number;
+  angleBetween: (a: unknown, b: unknown, c: unknown) => number;
   VisionCoach: {
+    [key: string]: any;
     currentExercise: string;
     phase: string;
     repCount: number;
@@ -51,9 +56,14 @@ function makeDocument() {
       return node;
     },
     querySelectorAll: () => [],
+    createElement: () => ({ getContext: () => ({ drawImage: () => {} }), toDataURL: () => "data:image/jpeg;base64,AA" }),
+    hidden: false,
   };
   return { documentStub, nodes };
 }
+
+const clock = { t: 0 };
+const rafCalls = { count: 0 };
 
 function loadModule(documentStub: unknown, apiStub: unknown) {
   const start = VISION_SOURCE.indexOf("const LANDMARK = {");
@@ -66,6 +76,9 @@ return {
   EXERCISE_CONFIG: EXERCISE_CONFIG,
   VisionCoach: VisionCoach,
   angleBetween: angleBetween,
+  setFrameAspect: setFrameAspect,
+  coachKeyFor: coachKeyFor,
+  bestSide: bestSide,
   hasVisiblePose: hasVisiblePose,
   tiltFromVertical: tiltFromVertical,
   torsoLineOffset: torsoLineOffset,
@@ -74,7 +87,7 @@ return {
     window: unknown, document: unknown, api: unknown, performance: unknown, raf: unknown,
   ) => VisionModule;
   const windowStub = { addEventListener: () => {}, setTimeout: () => 0, clearTimeout: () => {} };
-  return factory(windowStub, documentStub, apiStub, { now: () => 0 }, () => 0);
+  return factory(windowStub, documentStub, apiStub, { now: () => clock.t }, () => { rafCalls.count += 1; return 0; });
 }
 
 const SHOULDER_L = 11;
@@ -117,6 +130,8 @@ describe("vision live form coaching", () => {
   let module: VisionModule;
 
   beforeEach(() => {
+    clock.t = 0;
+    rafCalls.count = 0;
     const built = makeDocument();
     nodes = built.nodes;
     module = loadModule(built.documentStub, { get: async () => ({ configured: true, available: true }) });
@@ -174,25 +189,29 @@ describe("vision live form coaching", () => {
   });
 
   describe("per-frame updates during the movement", () => {
-    it("changes the visible cue mid-repetition, before the rep completes", () => {
-      module.VisionCoach.processExercise(pose({
+    it("changes the visible cue mid-repetition once the new cue is sustained, before the rep completes", () => {
+      const drift = pose({
         ...both(SHOULDERS, 0.5, 0.3),
         ...both(ELBOWS, 0.72, 0.5),
         ...both(WRISTS, 0.9, 0.5),
         ...both(HIPS, 0.5, 0.7),
-      }));
-      expect(feedbackText()).toBe("Keep your elbows close to your torso");
-      expect(module.VisionCoach.phase).toBe("down");
-      expect(module.VisionCoach.repCount).toBe(0);
-
-      module.VisionCoach.processExercise(pose({
+      });
+      const shallow = pose({
         ...both(SHOULDERS, 0.5, 0.3),
         ...both(ELBOWS, 0.5, 0.5),
         ...both(WRISTS, 0.65, 0.62),
         ...both(HIPS, 0.5, 0.7),
-      }));
+      });
+      module.VisionCoach.processExercise(drift);
+      expect(feedbackText()).toBe("Keep your elbows close to your torso");
+
+      // A single different frame must not flip the text (flicker protection).
+      clock.t += 2000;
+      module.VisionCoach.processExercise(shallow);
+      expect(feedbackText()).toBe("Keep your elbows close to your torso");
+
+      for (let i = 0; i < 4; i += 1) { clock.t += 100; module.VisionCoach.processExercise(shallow); }
       expect(feedbackText()).toBe("Curl a bit higher — full range of motion");
-      // Still mid-rep: no completion, no score, cue already updated.
       expect(module.VisionCoach.phase).toBe("down");
       expect(module.VisionCoach.repCount).toBe(0);
     });
@@ -206,13 +225,17 @@ describe("vision live form coaching", () => {
         ...both(WRISTS, 0.65, 0.62, 0.1),
         ...both(HIPS, 0.5, 0.7, 0.1),
       }));
-      expect(feedbackText()).toBe("Move fully into frame so your body is clearly visible.");
+      expect(feedbackText()).toBe(
+        "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed.",
+      );
       expect(module.VisionCoach.repCount).toBe(0);
     });
 
     it("does not throw when the pose disappears (camera / detection loss)", () => {
       expect(() => module.VisionCoach.processExercise([])).not.toThrow();
-      expect(feedbackText()).toBe("Move fully into frame so your body is clearly visible.");
+      expect(feedbackText()).toBe(
+        "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed.",
+      );
     });
 
     it("routes an unsupported exercise to the shared coach without inventing a specific correction", () => {
@@ -260,5 +283,163 @@ describe("vision live form coaching", () => {
       );
       expect(nodes.get("form-comparison-retry-btn")?.style.display).toBe("none");
     });
+  });
+});
+
+/** Elbow at (0.5,0.5), shoulder straight above; wrist placed so the elbow angle equals `deg`. */
+function armPose(deg: number, extra: Record<number, { x: number; y: number; visibility?: number }> = {}) {
+  const r = (deg * Math.PI) / 180;
+  return pose({
+    ...both(SHOULDERS, 0.5, 0.3),
+    ...both(ELBOWS, 0.5, 0.5),
+    ...both(WRISTS, 0.5 + 0.2 * Math.sin(r), 0.5 - 0.2 * Math.cos(r)),
+    ...both(HIPS, 0.5, 0.7),
+    ...extra,
+  });
+}
+
+describe("vision pipeline: rep counting and robustness (synthetic landmark sequences)", () => {
+  let module: VisionModule;
+  let nodes: Map<string, StubNode>;
+  const feed = (angles: number[]) => angles.forEach((a) => module.VisionCoach.processExercise(armPose(a)));
+  /** Linear ramp of `n` frames, roughly what ~0.3s of real 30fps movement looks like. */
+  const ramp = (from: number, to: number, n: number) =>
+    Array.from({ length: n }, (_, i) => from + ((to - from) * (i + 1)) / n);
+  const hold = (angle: number, n: number) => Array.from({ length: n }, () => angle);
+  const fullRep = () => [...ramp(170, 40, 10), ...hold(40, 5), ...ramp(40, 170, 10), ...hold(170, 5)];
+
+  beforeEach(() => {
+    clock.t = 0;
+    rafCalls.count = 0;
+    const built = makeDocument();
+    nodes = built.nodes;
+    module = loadModule(built.documentStub, { get: async () => ({}) });
+    module.VisionCoach.currentExercise = "curl";
+    module.VisionCoach.comparison.unsupported = true; // no network in unit tests
+    module.VisionCoach.resetReps();
+  });
+
+  it("counts one rep per complete extend -> curl -> extend cycle, and updates the angle readout", () => {
+    feed(hold(170, 5));
+    feed(fullRep());
+    expect(module.VisionCoach.repCount).toBe(1);
+    feed(fullRep());
+    expect(module.VisionCoach.repCount).toBe(2);
+    expect(nodes.get("vision-reps")?.textContent).toBe("2");
+    expect(nodes.get("vision-angle")?.textContent).toMatch(/^\d+ deg$/);
+  });
+
+  it("does not count a half repetition that never reaches the bottom threshold", () => {
+    feed([...hold(170, 5), ...ramp(170, 90, 10), ...hold(90, 5), ...ramp(90, 170, 10), ...hold(170, 5)]);
+    expect(module.VisionCoach.repCount).toBe(0);
+  });
+
+  it("ignores a single noisy frame", () => {
+    feed([...hold(170, 6), 20, ...hold(170, 6)]);
+    expect(module.VisionCoach.repCount).toBe(0);
+    expect(module.VisionCoach.phase).toBe("up");
+  });
+
+  it("keeps a rep in progress across a brief occlusion instead of resetting the state", () => {
+    feed([...hold(170, 5), ...ramp(170, 40, 10), ...hold(40, 6)]);
+    expect(module.VisionCoach.phase).toBe("down");
+    const hidden = pose({ ...both(SHOULDERS, 0.5, 0.3, 0.05), ...both(ELBOWS, 0.5, 0.5, 0.05), ...both(WRISTS, 0.5, 0.7, 0.05), ...both(HIPS, 0.5, 0.7, 0.05) });
+    module.VisionCoach.processExercise(hidden);
+    expect(module.VisionCoach.phase).toBe("down");
+    feed([...ramp(40, 170, 10), ...hold(170, 5)]);
+    expect(module.VisionCoach.repCount).toBe(1);
+  });
+
+  it("measures the same true angle on a 16:9 frame once the aspect ratio is applied", () => {
+    // Pixel-space 45 degree angle in a 1280x720 frame, converted to normalised coordinates.
+    const shoulder = { x: 500 / 1280, y: 300 / 720 };
+    const elbow = { x: 500 / 1280, y: 500 / 720 };
+    const wrist = { x: 700 / 1280, y: 300 / 720 };
+    module.setFrameAspect(1, 1);
+    const distorted = module.angleBetween(shoulder, elbow, wrist);
+    module.setFrameAspect(1280, 720);
+    const corrected = module.angleBetween(shoulder, elbow, wrist);
+    expect(Math.abs(distorted - 45)).toBeGreaterThan(10);
+    expect(corrected).toBeCloseTo(45, 1);
+  });
+
+  it("takes every joint of one angle from the same body side", () => {
+    const lm = pose({
+      [SHOULDER_L]: { x: 0.5, y: 0.3, visibility: 0.9 }, [ELBOW_L]: { x: 0.5, y: 0.5, visibility: 0.9 }, [WRIST_L]: { x: 0.7, y: 0.5, visibility: 0.9 },
+      [SHOULDER_R]: { x: 0.1, y: 0.1, visibility: 0.5 }, [ELBOW_R]: { x: 0.9, y: 0.9, visibility: 0.5 }, [WRIST_R]: { x: 0.1, y: 0.9, visibility: 0.5 },
+      ...both(HIPS, 0.5, 0.7),
+    });
+    expect(module.bestSide(lm, module.EXERCISE_CONFIG.curl.required)).toBe(0);
+    module.VisionCoach.processExercise(lm);
+    expect(nodes.get("vision-angle")?.textContent).toBe("90 deg");
+  });
+
+  it("maps catalogue names to the right analysis rules", () => {
+    const key = module.coachKeyFor;
+    expect(key("Barbell Back Squat")).toBe("squat");
+    expect(key("Dumbbell Biceps Curl")).toBe("curl");
+    expect(key("Push-Up")).toBe("pushup");
+    expect(key("Bent Over Row")).toBe("row");
+    expect(key("Seated Cable Row")).toBe("seatedrow");
+    expect(key("Lying Leg Curl")).toBeNull();
+    expect(key("Burpee")).toBeNull();
+  });
+
+  it("gives seated-row torso feedback without bent-over hinge rules", () => {
+    const row = module.EXERCISE_CONFIG.seatedrow;
+    const leaning = pose({ ...both(SHOULDERS, 0.7, 0.3), ...both(HIPS, 0.5, 0.7) });
+    const upright = pose({ ...both(SHOULDERS, 0.5, 0.3), ...both(HIPS, 0.5, 0.7) });
+    expect(row.feedback(80, "down", leaning)).toBe("Keep your torso more stable");
+    expect(row.feedback(130, "down", upright)).toBe("Complete a comfortable range of motion");
+  });
+
+  it("keeps the loop alive when a frame throws", () => {
+    const coach = module.VisionCoach;
+    coach.running = true;
+    coach.tick = () => { throw new Error("boom"); };
+    coach.loop();
+    expect(coach.running).toBe(true);
+    expect(rafCalls.count).toBe(1); // next frame still scheduled
+  });
+
+  it("reports a lost pose instead of leaving stale feedback, after a short grace period", () => {
+    const coach = module.VisionCoach;
+    coach.handleNoPose(1000);
+    expect(nodes.get("camera-feedback")?.textContent ?? "").toBe("");
+    coach.handleNoPose(1700);
+    expect(nodes.get("camera-feedback")?.textContent).toContain("can't see you");
+  });
+
+  it("never shows the server's generic 'model not configured' text as coaching", async () => {
+    const built = makeDocument();
+    const api = { post: async () => ({
+      modelConfigured: false,
+      confidence: 0.35,
+      feedback: [{ cue: "Keep the movement controlled and capture a full repetition from a clear angle." }],
+    }) };
+    const m = loadModule(built.documentStub, api);
+    m.VisionCoach.running = true;
+    m.VisionCoach.video = { videoWidth: 0, videoHeight: 0, readyState: 0 };
+    m.VisionCoach.coachFrameBuffer = Array.from({ length: 8 }, () => []);
+    m.VisionCoach.currentExercise = "burpee";
+    await m.VisionCoach.requestUniversalCoachAnalysis();
+    expect(m.VisionCoach.coachFeedback).toBe("");
+    expect(m.VisionCoach.aiCoachAvailable).toBe(false);
+    m.VisionCoach.processExercise(pose({}));
+    expect(built.nodes.get("camera-feedback")?.textContent).toContain("No form rules exist for this exercise yet");
+  });
+
+  it("drops stale AI feedback after its time-to-live", () => {
+    const coach = module.VisionCoach;
+    coach.currentExercise = "burpee";
+    coach.aiCoachAvailable = true;
+    coach.coachFeedback = "Brace your core.";
+    coach.coachFeedbackAt = 0;
+    clock.t = 1000;
+    coach.processExercise(pose({}));
+    expect(nodes.get("camera-feedback")?.textContent).toBe("Brace your core.");
+    clock.t = 20000;
+    coach.processExercise(pose({}));
+    expect(nodes.get("camera-feedback")?.textContent).not.toBe("Brace your core.");
   });
 });
