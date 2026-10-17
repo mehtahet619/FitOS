@@ -1377,7 +1377,6 @@ button:disabled, [aria-disabled="true"] {
   display: none;
   min-height: 75vh;
   padding: clamp(36px, 8vw, 96px) 24px;
-  display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
