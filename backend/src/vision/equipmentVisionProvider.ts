@@ -183,7 +183,11 @@ class LocalYoloProvider implements EquipmentVisionProvider {
 }
 
 const localProvider = new LocalYoloProvider();
-const roboflowWorkflowEnabled = () => process.env.ROBOFLOW_WORKFLOW_MODE?.toLowerCase() === "true";
+// Prefer hosted vision when its credential exists, avoiding a local YOLO provider
+// that cannot work on Render without separately packaged model weights.
+const roboflowWorkflowEnabled = () =>
+  process.env.ROBOFLOW_WORKFLOW_MODE?.toLowerCase() === "true" ||
+  Boolean(process.env.ROBOFLOW_API_KEY?.trim());
 
 export function initializeEquipmentVisionProvider(): Promise<void> {
   return roboflowWorkflowEnabled() || getEquipmentModeConfig().mode === "FULL_GYM"
