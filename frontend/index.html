@@ -210,6 +210,29 @@
         </div>
       </section>
 
+      <section id="pricing-guess-section" class="section price-guess-section" aria-labelledby="price-guess-title">
+        <div class="price-guess-copy">
+          <p class="eyebrow">Free for now · Your call</p>
+          <h2 id="price-guess-title">What should FitOS<br /><span>cost in the future?</span></h2>
+          <p>FitOS is free to use right now. We may introduce pricing in the future, and we want to hear what you think would be fair. Drop your guess—no payment, account, or commitment required.</p>
+          <div class="price-guess-note"><span aria-hidden="true">✳</span><span>This is a community price guess, not an announced price or promise.</span></div>
+        </div>
+        <div class="price-guess-card">
+          <form id="price-guess-form" novalidate>
+            <label for="price-guess-input">Your guess for the monthly price</label>
+            <div class="price-guess-input-wrap"><span aria-hidden="true">₹</span><input id="price-guess-input" name="price" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="e.g. 199" required aria-describedby="price-guess-help" /></div>
+            <p id="price-guess-help" class="price-guess-help">Enter a whole amount in Indian rupees (₹1–₹1,00,000).</p>
+            <button class="button button-dark price-guess-submit" id="price-guess-submit" type="submit">Send my guess <span aria-hidden="true">↗</span></button>
+            <p id="price-guess-feedback" class="price-guess-feedback" role="status" aria-live="polite"></p>
+          </form>
+          <div class="price-guess-average" aria-live="polite">
+            <span class="price-guess-average-label">Community average guess</span>
+            <strong id="price-guess-average">—</strong>
+            <span id="price-guess-count" class="price-guess-count">Loading community guesses…</span>
+          </div>
+        </div>
+      </section>
+
       <section class="closing-cta" aria-labelledby="closing-title">
         <div class="closing-glow" aria-hidden="true"></div>
         <img src="assets/site-logo.png" alt="" width="64" height="64" loading="lazy" />
@@ -223,7 +246,7 @@
     <footer class="site-footer">
       <a class="site-brand footer-brand" href="/" aria-label="FitOS home"><img src="assets/site-logo.png" alt="" width="38" height="38" loading="lazy" /><span>FitOS</span></a>
       <p>Train for your life. Start with what you have.</p>
-      <nav aria-label="Footer navigation"><a href="#features">Features</a><a href="#faq">FAQ</a><a href="/login">Log in</a><a href="/register" data-cta-placement="footer">Get started</a></nav>
+      <nav aria-label="Footer navigation"><a href="#features">Features</a><a href="#faq">FAQ</a><a href="#pricing-guess-section">Price guess</a><a href="/login">Log in</a><a href="/register" data-cta-placement="footer">Get started</a></nav>
       <small>© <span id="landing-year">2026</span> FitOS</small>
     </footer>
   </section>
@@ -485,7 +508,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="gym-intro.js?v=fitos-20261010-grow-impact-v1"></script>
 <script src="config.js"></script>
-<script src="api.js"></script>
+<script src="api.js"></script>\n<script src="pricing-guesses.js?v=fitos-price-guess-v1"></script>
 <script src="app.js?v=fitos-20261015-today-dashboard-v1"></script>
 <script type="module" src="vision.js"></script>
 </body>

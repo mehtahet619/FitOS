@@ -120,6 +120,31 @@ app.use(express.json({ limit: "4mb" }));
 app.use(applySecurityHeaders);
 app.use(limiter);
 
+// Community price guesses are intentionally kept in process memory only (no DB writes).
+// They reset on backend restart and are local to this server instance.
+let communityPriceGuessSum = 0;
+let communityPriceGuessCount = 0;
+
+app.get("/pricing-guesses", (_req, res) => {
+  res.json({
+    average: communityPriceGuessCount ? communityPriceGuessSum / communityPriceGuessCount : null,
+    count: communityPriceGuessCount,
+  });
+});
+
+app.post("/pricing-guesses", (req, res) => {
+  const price = req.body?.price;
+  if (!Number.isSafeInteger(price) || price < 1 || price > 100000) {
+    return res.status(400).json({ error: "Enter a whole price between ₹1 and ₹1,00,000." });
+  }
+  communityPriceGuessSum += price;
+  communityPriceGuessCount += 1;
+  return res.status(201).json({
+    average: communityPriceGuessSum / communityPriceGuessCount,
+    count: communityPriceGuessCount,
+  });
+});
+
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/auth", authRouter);
