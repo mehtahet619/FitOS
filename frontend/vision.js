@@ -15,10 +15,19 @@ const LANDMARK = {
   LEFT_ANKLE: 27, RIGHT_ANKLE: 28,
 };
 
+// MediaPipe returns x/y normalised by image width/height separately, so on a
+// non-square frame equal normalised distances are NOT equal pixel distances.
+// Every 2D angle/length below scales x by width/height so geometry is
+// measured in the same units on both axes (updated from the video each frame).
+let frameAspect = 1;
+function setFrameAspect(width, height) {
+  frameAspect = width > 0 && height > 0 ? width / height : 1;
+}
+
 function angleBetween(a, b, c) {
   // angle at point b, formed by rays b->a and b->c, in degrees
-  const ab = { x: a.x - b.x, y: a.y - b.y };
-  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const ab = { x: (a.x - b.x) * frameAspect, y: a.y - b.y };
+  const cb = { x: (c.x - b.x) * frameAspect, y: c.y - b.y };
   const dot = ab.x * cb.x + ab.y * cb.y;
   const magAB = Math.hypot(ab.x, ab.y);
   const magCB = Math.hypot(cb.x, cb.y);
@@ -27,10 +36,30 @@ function angleBetween(a, b, c) {
   return (Math.acos(cos) * 180) / Math.PI;
 }
 
+// The body side (0 = left, 1 = right) used for the current frame. Joints of ONE
+// angle must all come from the same side; choosing the more visible side per
+// joint independently mixed e.g. left hip + right knee + left ankle and made
+// the angle jump between frames.
+let activeSide = null;
+
+function bestSide(lm, groups) {
+  const score = (offset) => groups.reduce((sum, [left, right]) => {
+    const point = lm[offset === 0 ? left : right];
+    return sum + (point ? (point.visibility ?? 1) : 0);
+  }, 0);
+  const left = score(0);
+  const right = score(1);
+  // Hysteresis: keep the current side unless the other is clearly better.
+  if (activeSide === 0 && left + 0.3 >= right) return 0;
+  if (activeSide === 1 && right + 0.3 >= left) return 1;
+  return left >= right ? 0 : 1;
+}
+
 function pick(landmarks, leftIdx, rightIdx) {
   const l = landmarks[leftIdx];
   const r = landmarks[rightIdx];
-  // Prefer whichever side the model is more confident about (higher visibility).
+  if (activeSide === 0 && l) return l;
+  if (activeSide === 1 && r) return r;
   if (!l) return r;
   if (!r) return l;
   return (l.visibility ?? 1) >= (r.visibility ?? 1) ? l : r;
@@ -130,7 +159,7 @@ function hasAnyVisiblePoseLandmark(lm, groups) {
 
 /** Degrees a segment (top -> bottom) is tilted away from vertical; 0 = straight up/down. */
 function tiltFromVertical(top, bottom) {
-  const dx = bottom.x - top.x;
+  const dx = (bottom.x - top.x) * frameAspect;
   const dy = bottom.y - top.y;
   return (Math.atan2(Math.abs(dx), Math.abs(dy)) * 180) / Math.PI;
 }
@@ -141,11 +170,11 @@ function tiltFromVertical(top, bottom) {
  * line; larger values mean the point has drifted away from the body.
  */
 function torsoLineOffset(point, shoulder, hip) {
-  const dx = hip.x - shoulder.x;
+  const dx = (hip.x - shoulder.x) * frameAspect;
   const dy = hip.y - shoulder.y;
   const length = Math.hypot(dx, dy);
   if (length === 0) return 0;
-  const px = point.x - shoulder.x;
+  const px = (point.x - shoulder.x) * frameAspect;
   const py = point.y - shoulder.y;
   return Math.abs(px * dy - py * dx) / (length * length);
 }
@@ -156,20 +185,23 @@ function torsoLineOffset(point, shoulder, hip) {
  * (sagging); negative = hips above the line (piking).
  */
 function hipLineDeviation(shoulder, hip, ankle) {
-  const dx = ankle.x - shoulder.x;
+  const dx = (ankle.x - shoulder.x) * frameAspect;
   const dy = ankle.y - shoulder.y;
   const length = Math.hypot(dx, dy);
   if (length === 0) return 0;
-  const t = dx === 0 ? 0 : (hip.x - shoulder.x) / dx;
+  const t = ankle.x === shoulder.x ? 0 : (hip.x - shoulder.x) / (ankle.x - shoulder.x);
   const lineY = shoulder.y + dy * t;
   return (hip.y - lineY) / length;
 }
 
 function coachKeyFor(name = "") {
   const n = String(name).toLowerCase();
+  // Lower-body / wrist curls are not biceps curls and must not use the elbow rules.
+  if (/leg.?curl|hamstring.?curl|wrist.?curl|nordic/.test(n)) return null;
   if (/squat/.test(n)) return "squat";
   if (/curl/.test(n)) return "curl";
-  if (/bent.?over.?row|barbell.?row|dumbbell.?row|seated.?row|cable.?row|one.?arm.?row|\browing\b/.test(n)) return "row";
+  if (/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/.test(n)) return "seatedrow";
+  if (/bent.?over.?row|barbell.?row|dumbbell.?row|one.?arm.?row|\browing\b/.test(n)) return "row";
   if (/push.?up|press.?up/.test(n)) return "pushup";
   return null;
 }
@@ -252,11 +284,39 @@ const EXERCISE_CONFIG = {
       const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
       const knee = pick(lm, LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE);
       const torsoAngle = angleBetween(shoulder, hip, knee);
-      if (torsoAngle < 25) return "Hinge forward from your hips and keep your back neutral";
-      if (torsoAngle > 100) return "Keep your torso hinged forward and steady";
+      // Hip angle (shoulder-hip-knee): ~180 upright, ~100-140 when hinged correctly.
+      if (torsoAngle > 160) return "Hinge forward from your hips and keep your back neutral";
+      if (torsoAngle < 60) return "Keep your chest up — avoid folding too far forward";
       if (phase === "down" && angle > 90) return "Pull your elbows back and bring the weight toward your lower ribs";
       if (phase === "down") return "Squeeze your shoulder blades without jerking your torso";
       return "Lower your arms with control, keeping your torso still";
+    },
+  },
+  seatedrow: {
+    label: "Seated Cable Row",
+    required: [
+      [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
+      [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+      [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+    ],
+    angleOf(lm) {
+      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+      const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
+      const wrist = pick(lm, LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST);
+      return angleBetween(shoulder, elbow, wrist);
+    },
+    upThreshold: 150,  // arms extended at the start / end of the return
+    downThreshold: 95, // handle pulled to the torso
+    feedback(angle, phase, lm) {
+      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+      const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
+      // Seated, the torso should stay near vertical; leaning back to finish the
+      // pull is the common fault. Needs a side-on camera view.
+      if (tiltFromVertical(shoulder, hip) > 25) return "Keep your torso more stable";
+      if (phase === "down" && angle > 110) return "Complete a comfortable range of motion";
+      if (phase === "down") return "Good pull — squeeze, then control the return";
+      return "Reach forward to full extension before the next rep";
     },
   },
   pushup: {
@@ -294,7 +354,43 @@ const EXERCISE_CONFIG = {
   },
 };
 
+// A phase change must hold for this many consecutive frames, and the angle is
+// lightly smoothed, so single noisy frames cannot flip phases or add reps.
+const PHASE_CONFIRM_FRAMES = 2;
+const ANGLE_SMOOTHING = 0.5; // weight of the newest sample
+// A new coaching cue must persist this many frames and the previous cue must
+// have been on screen this long (ms) before the text changes.
+const CUE_CONFIRM_FRAMES = 3;
+const CUE_MIN_HOLD_MS = 1200;
+// Pose lost for this long (ms) => say so instead of showing stale feedback.
+const NO_POSE_GRACE_MS = 600;
+// AI feedback older than this (ms) is stale and is no longer displayed.
+const AI_FEEDBACK_TTL_MS = 8000;
+const MAX_CONSECUTIVE_LOOP_ERRORS = 30;
+const FRAMING_MESSAGE_UNSUPPORTED =
+  "No form rules exist for this exercise yet and AI coaching is not enabled, so only pose tracking is active.";
+
+function cameraErrorMessage(error) {
+  const name = error?.name || "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Camera permission was denied. Allow camera access in your browser settings and try again.";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "No usable camera was found on this device.";
+  if (name === "NotReadableError" || name === "AbortError") return "The camera is in use by another app or could not be started.";
+  return `Couldn't start the camera or load the pose model (needs internet + camera permission). ${error?.message || ""}`.trim();
+}
+
 const VisionCoach = {
+  starting: false,
+  startToken: 0,
+  smoothedAngle: null,
+  phaseFrames: 0,
+  noPoseSince: 0,
+  loopErrors: 0,
+  poseDelegate: null,
+  aiCoachAvailable: null, // null = not probed yet, false = backend has no model
+  coachFeedbackAt: 0,
+  cue: { candidate: "", count: 0, shown: "", shownAt: 0 },
   landmarker: null,
   running: false,
   currentExercise: "squat",
@@ -358,6 +454,18 @@ const VisionCoach = {
     });
     document.getElementById("vision-reset-btn").addEventListener("click", () => this.resetReps());
     document.getElementById("form-comparison-retry-btn").addEventListener("click", () => this.retryComparison());
+
+    // Release the camera when the user leaves the Vision screen, and drop
+    // smoothing state after the tab was backgrounded (frames were not processed).
+    const screen = document.getElementById("screen-vision");
+    if (screen && typeof MutationObserver !== "undefined") {
+      new MutationObserver(() => {
+        if (!screen.classList.contains("active") && (this.running || this.starting)) this.stop();
+      }).observe(screen, { attributes: true, attributeFilter: ["class"] });
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) { this.smoothedAngle = null; this.phaseFrames = 0; }
+    });
   },
 
   async openFor(exercise) {
@@ -366,6 +474,8 @@ const VisionCoach = {
     const placeholder = document.getElementById("camera-placeholder");
     const demoSection = document.getElementById("vision-demo");
     if (demoSection) demoSection.hidden = false;
+    const demoLabel = document.getElementById("vision-demo-label");
+    if (demoLabel) demoLabel.textContent = `Exercise Demonstration: ${exerciseName}`;
 
     // Every catalogue exercise can use the shared AI path. Only locally
     // validated movements use deterministic rep counting.
@@ -388,6 +498,9 @@ const VisionCoach = {
   resetReps() {
     this.repCount = 0;
     this.phase = "up";
+    this.smoothedAngle = null;
+    this.phaseFrames = 0;
+    this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
     document.getElementById("vision-reps").textContent = "0";
     document.getElementById("vision-angle").textContent = "0 deg";
     this.resetComparisonCapture();
@@ -404,29 +517,66 @@ const VisionCoach = {
     this.renderComparisonResults(null);
   },
 
+  async createLandmarker() {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    const modelAssetPath =
+      "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+    // GPU is not available on every browser/device; fall back to CPU instead of
+    // failing the whole feature.
+    for (const delegate of ["GPU", "CPU"]) {
+      try {
+        const landmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath, delegate },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+        this.poseDelegate = delegate;
+        return landmarker;
+      } catch (error) {
+        console.warn(`[VisionCoach] ${delegate} pose model init failed`, error?.message || error);
+        if (delegate === "CPU") throw error;
+      }
+    }
+    return null;
+  },
+
+  async probeAiCoach() {
+    try {
+      const status = await Api.get("/coach/status");
+      this.aiCoachAvailable = status?.multimodalCoach === "configured";
+    } catch (_error) {
+      this.aiCoachAvailable = false;
+    }
+  },
+
   async start() {
+    if (this.starting || this.running) return;
+    this.starting = true;
+    const token = ++this.startToken;
     const placeholder = document.getElementById("camera-placeholder");
     const startBtn = document.getElementById("vision-start-btn");
     startBtn.disabled = true;
     startBtn.innerHTML = `<span class="spinner"></span> Loading model…`;
 
     try {
-      if (!this.landmarker) {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-        this.landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numPoses: 1,
-        });
+      if (!this.landmarker) this.landmarker = await this.createLandmarker();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      if (token !== this.startToken) {
+        // stop() ran while the model/camera was loading: release the new stream.
+        stream.getTracks().forEach((t) => t.stop());
+        return;
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      stream.getVideoTracks().forEach((track) => track.addEventListener("ended", () => {
+        if (this.running && token === this.startToken) {
+          this.stop();
+          placeholder.textContent = "The camera was disconnected or taken by another app. Tap Start Camera to resume.";
+        }
+      }));
       this.video.srcObject = stream;
       this.video.style.display = "block";
       await this.video.play();
@@ -437,27 +587,46 @@ const VisionCoach = {
       startBtn.disabled = false;
 
       this.running = true;
+      this.loopErrors = 0;
+      this.noPoseSince = 0;
+      this.smoothedAngle = null;
+      this.phaseFrames = 0;
       this.startEquipmentRecognition();
+      void this.probeAiCoach();
       this.loop();
       this.showComparisonCard();
       this.setComparisonRetryVisible(false);
-      this.renderComparisonNotice("Live coaching is analyzing your movement. AI feedback requires GEMINI_API_KEY on the backend; the old reference-comparison service is separate.");
+      this.renderComparisonNotice(EXERCISE_CONFIG[this.currentExercise]
+        ? "Live pose analysis is active. Form cues are computed on your device from your body landmarks."
+        : "Pose tracking is active. This exercise has no built-in form rules yet.");
     } catch (e) {
-      placeholder.textContent =
-        "Couldn't start the camera or load the pose model (needs internet + camera permission). " + e.message;
+      placeholder.textContent = cameraErrorMessage(e);
+      placeholder.style.display = "flex";
       startBtn.disabled = false;
       startBtn.textContent = "Start Camera";
+      const stream = this.video.srcObject;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      this.video.srcObject = null;
       // Without pose detection there is nothing to compare, so the comparison
       // panel is cleared rather than left showing a stale result.
       this.resetComparisonCapture();
       this.hideComparisonCard();
+    } finally {
+      if (token === this.startToken) this.starting = false;
     }
   },
 
   stop() {
+    this.startToken += 1; // cancels an in-flight start()
+    this.starting = false;
     this.running = false;
     this.coachFrameBuffer = [];
     this.coachFeedback = "";
+    this.coachFeedbackAt = 0;
+    this.smoothedAngle = null;
+    this.phaseFrames = 0;
+    this.noPoseSince = 0;
+    this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
     if (this.equipmentTimer) window.clearTimeout(this.equipmentTimer);
     this.equipmentTimer = null;
     this.equipmentRequestInFlight = false;
@@ -468,11 +637,13 @@ const VisionCoach = {
     this.comparison.currentFrames = [];
     const stream = this.video.srcObject;
     if (stream) stream.getTracks().forEach((t) => t.stop());
+    this.video.srcObject = null;
     this.video.style.display = "none";
     document.getElementById("camera-placeholder").style.display = "flex";
     document.getElementById("camera-placeholder").textContent = 'Tap "Start Camera" to begin pose analysis.';
     document.getElementById("camera-feedback").style.display = "none";
     const startBtn = document.getElementById("vision-start-btn");
+    startBtn.disabled = false;
     startBtn.textContent = "Start Camera";
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.renderEquipmentState("Waiting for a frame…", []);
@@ -480,21 +651,57 @@ const VisionCoach = {
 
   loop() {
     if (!this.running) return;
-    const now = performance.now();
-    if (this.video.readyState >= 2) {
-      const result = this.landmarker.detectForVideo(this.video, now);
-      this.canvas.width = this.video.videoWidth;
-      this.canvas.height = this.video.videoHeight;
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-      if (result.landmarks && result.landmarks.length > 0) {
-        const lm = result.landmarks[0];
-        this.drawSkeleton(lm);
-        this.processExercise(lm);
+    // One bad frame must never end the loop: previously any exception here
+    // skipped requestAnimationFrame and froze reps/angle at 0 while the camera
+    // kept showing live video.
+    try {
+      this.tick();
+      this.loopErrors = 0;
+    } catch (error) {
+      this.loopErrors += 1;
+      console.warn("[VisionCoach] frame processing failed", error?.message || error);
+      if (this.loopErrors >= MAX_CONSECUTIVE_LOOP_ERRORS) {
+        this.stop();
+        document.getElementById("camera-placeholder").textContent =
+          "Pose tracking stopped after repeated errors. Tap Start Camera to try again.";
+        return;
       }
-      this.drawEquipmentBoxes(this.stableEquipment);
     }
     requestAnimationFrame(() => this.loop());
+  },
+
+  tick() {
+    if (document.hidden) return;
+    const video = this.video;
+    if (video.readyState < 2 || !video.videoWidth) return;
+    const now = performance.now();
+    const result = this.landmarker.detectForVideo(video, now);
+    if (this.canvas.width !== video.videoWidth) this.canvas.width = video.videoWidth;
+    if (this.canvas.height !== video.videoHeight) this.canvas.height = video.videoHeight;
+    setFrameAspect(video.videoWidth, video.videoHeight);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    if (result.landmarks && result.landmarks.length > 0) {
+      this.noPoseSince = 0;
+      const lm = result.landmarks[0];
+      this.drawSkeleton(lm);
+      this.processExercise(lm);
+    } else {
+      this.handleNoPose(now);
+    }
+    this.drawEquipmentBoxes(this.stableEquipment);
+  },
+
+  /** No person detected: say so after a short grace period instead of leaving stale cues. */
+  handleNoPose(now = performance.now()) {
+    if (!this.noPoseSince) this.noPoseSince = now;
+    if (now - this.noPoseSince < NO_POSE_GRACE_MS) return;
+    this.smoothedAngle = null;
+    this.phaseFrames = 0;
+    const feedbackEl = document.getElementById("camera-feedback");
+    if (feedbackEl) feedbackEl.textContent = "I can't see you. Step back so your whole body is in the camera view.";
+    const angleEl = document.getElementById("vision-angle");
+    if (angleEl) angleEl.textContent = "-- deg";
   },
 
   startEquipmentRecognition() {
@@ -848,48 +1055,97 @@ const VisionCoach = {
 
   /* ---------------------- pose + rep pipeline ---------------------- */
 
+  /**
+   * Debounces the on-screen cue: a different cue must persist for several
+   * frames and the current one must have been visible for a minimum time, so
+   * the text does not flicker on every frame.
+   */
+  stabilizeCue(text) {
+    const cue = this.cue;
+    const now = performance.now();
+    if (text === cue.shown) { cue.candidate = text; cue.count = 0; return cue.shown; }
+    if (text !== cue.candidate) { cue.candidate = text; cue.count = 1; } else cue.count += 1;
+    if (!cue.shown || (cue.count >= CUE_CONFIRM_FRAMES && now - cue.shownAt >= CUE_MIN_HOLD_MS)) {
+      cue.shown = text; cue.shownAt = now; cue.count = 0;
+    }
+    return cue.shown;
+  },
+
+  /** Framing / visibility problems are shown immediately and are never mixed with form cues. */
+  showFramingMessage(text) {
+    const feedbackEl = document.getElementById("camera-feedback");
+    this.cue = { candidate: text, count: 0, shown: text, shownAt: performance.now() };
+    if (feedbackEl) feedbackEl.textContent = text;
+  },
+
+  freshAiFeedback() {
+    return this.coachFeedback && performance.now() - this.coachFeedbackAt < AI_FEEDBACK_TTL_MS ? this.coachFeedback : "";
+  },
+
   processExercise(lm) {
     const feedbackEl = document.getElementById("camera-feedback");
     const config = EXERCISE_CONFIG[this.currentExercise];
     this.collectCoachFrame(lm);
 
     if (!config) {
-      if (feedbackEl) feedbackEl.textContent = this.coachFeedback ||
-        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.";
+      if (feedbackEl) feedbackEl.textContent = this.freshAiFeedback() || (this.aiCoachAvailable === false
+        ? FRAMING_MESSAGE_UNSUPPORTED
+        : "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.");
       return;
     }
     if (!hasVisiblePose(lm, config.required)) {
-      const hasAnyRequiredLandmark = hasAnyVisiblePoseLandmark(lm, config.required);
-      if (feedbackEl) {
-        feedbackEl.textContent = !hasAnyRequiredLandmark
-          ? "Move fully into frame so your body is clearly visible."
-          : this.currentExercise === "squat"
-            ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
-            : this.currentExercise === "curl"
-              ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
-              : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
-      }
+      // Do not reset phase/rep state here: a brief occlusion must not erase a
+      // rep in progress. Only the smoothing window restarts.
+      this.smoothedAngle = null;
+      this.phaseFrames = 0;
+      this.showFramingMessage(this.currentExercise === "squat"
+        ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
+        : this.currentExercise === "curl"
+          ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
+          : this.currentExercise === "seatedrow"
+            ? "Turn side-on to the camera and keep your shoulder, elbow, wrist and hip visible."
+            : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.");
       return;
     }
 
-    const angle = config.angleOf(lm);
+    activeSide = bestSide(lm, config.required);
+    const raw = config.angleOf(lm);
+    const angle = this.smoothedAngle === null
+      ? raw
+      : this.smoothedAngle * (1 - ANGLE_SMOOTHING) + raw * ANGLE_SMOOTHING;
+    this.smoothedAngle = angle;
     document.getElementById("vision-angle").textContent = `${Math.round(angle)} deg`;
-    if (this.phase === "up" && angle < config.downThreshold) {
-      this.phase = "down";
-      this.beginRepCapture();
-    } else if (this.phase === "down" && angle > config.upThreshold) {
-      this.phase = "up";
-      this.repCount += 1;
-      document.getElementById("vision-reps").textContent = String(this.repCount);
-      this.captureRepFrame(lm);
-      this.completeRep();
+
+    let target = null;
+    if (this.phase === "up" && angle < config.downThreshold) target = "down";
+    else if (this.phase === "down" && angle > config.upThreshold) target = "up";
+    this.phaseFrames = target ? this.phaseFrames + 1 : 0;
+    if (target && this.phaseFrames >= PHASE_CONFIRM_FRAMES) {
+      this.phaseFrames = 0;
+      if (target === "down") {
+        this.phase = "down";
+        this.beginRepCapture();
+      } else {
+        this.phase = "up";
+        this.repCount += 1;
+        document.getElementById("vision-reps").textContent = String(this.repCount);
+        this.captureRepFrame(lm);
+        this.completeRep();
+      }
     }
     if (this.comparison.capturing) this.captureRepFrame(lm);
-    if (feedbackEl) feedbackEl.textContent = this.coachFeedback || config.feedback(angle, this.phase, lm);
+    if (feedbackEl) feedbackEl.textContent = this.stabilizeCue(config.feedback(angle, this.phase, lm));
   },
 
   collectCoachFrame(landmarks) {
+    // Server AI is only used for exercises without built-in rules, and only when
+    // the backend reports a configured model. Supported exercises are coached by
+    // the on-device rules, so no camera frames are uploaded for them.
+    const useAi = !EXERCISE_CONFIG[this.currentExercise] && this.aiCoachAvailable === true;
+    if (!useAi) return;
     const now = performance.now();
+    if (now - this.coachLastSampleAt >= 350) {
+      this.coachLastSampleAt = now;
     if (now - this.coachLastSampleAt >= 350) {
       this.coachLastSampleAt = now;
       this.coachFrameBuffer.push(landmarks.map((point) => ({
@@ -900,7 +1156,7 @@ const VisionCoach = {
     if (!this.coachRequestInFlight && this.coachFrameBuffer.length >= 8 && now - this.coachLastRequestAt >= 4500) {
       void this.requestUniversalCoachAnalysis();
     }
-    if (!EXERCISE_CONFIG[this.currentExercise] && !this.coachIdentifyInFlight && now - this.coachLastIdentifyAt >= 10000) {
+    if (!this.coachIdentifyInFlight && now - this.coachLastIdentifyAt >= 10000) {
       void this.identifyUniversalExercise();
     }
   },
@@ -934,16 +1190,23 @@ const VisionCoach = {
       const cues = Array.isArray(result?.feedback)
         ? result.feedback.map((item) => typeof item?.cue === "string" ? item.cue.trim() : "").filter(Boolean).slice(0, 2)
         : [];
-      if (cues.length && (Number(result?.confidence ?? 0) >= 0.45 || result?.modelConfigured === false)) {
+      if (result?.modelConfigured === false) {
+        // Fallback text from the server is generic, not coaching from the user's movement.
+        this.aiCoachAvailable = false;
+        this.coachFeedback = "";
+      } else if (cues.length && Number(result?.confidence ?? 0) >= 0.45) {
         this.coachFeedback = cues.join(" ");
+        this.coachFeedbackAt = performance.now();
       } else if (result?.needsRepositioning) {
         this.coachFeedback = "Move fully into frame and improve lighting so the coach can see your movement.";
+        this.coachFeedbackAt = performance.now();
       } else if (result?.exerciseHypothesis === "unknown") {
         this.coachFeedback = "I couldn't identify this movement confidently. Keep your full body visible or select the exercise by name.";
+        this.coachFeedbackAt = performance.now();
       }
     } catch (error) {
-      if (error?.status === 401) this.coachFeedback = "Please sign in again to use live AI coaching.";
-      else if (error?.status === 503) this.coachFeedback = "AI coaching is not configured on the backend yet; basic pose tracking remains available.";
+      if (error?.status === 401) { this.coachFeedback = "Please sign in again to use live AI coaching."; this.coachFeedbackAt = performance.now(); }
+      else if (error?.status === 503) { this.aiCoachAvailable = false; this.coachFeedback = ""; }
       console.warn("[VisionCoach] universal coaching request failed", error?.message || error);
     } finally {
       this.coachRequestInFlight = false;

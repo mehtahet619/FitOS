@@ -298,7 +298,9 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain, not cover: the pose model sees the whole frame, so the user must
+     see the whole frame too (cover cropped the sides of landscape webcams). */
+  object-fit: contain;
 }
 .camera-panel canvas { pointer-events: none; }
 .camera-placeholder-text {
@@ -1243,4 +1245,12 @@ html, body {
   #today-content > .today-workout-card { grid-column: 1; grid-row: 1; }
   #today-content > .today-stats-grid { grid-column: 2; grid-row: 1; }
   #today-content > .today-grow-card { grid-column: 1; grid-row: 2; }
+}
+
+/* Vision Coach: demonstration + live camera. Stacked on phones, side by side when wide. */
+.vision-stage { display: grid; gap: 12px; margin-bottom: 14px; }
+.vision-stage .exercise-demonstration { grid-column: auto; width: 100%; }
+.vision-stage .camera-panel { margin-bottom: 0; }
+@media (min-width: 820px) {
+  .vision-stage { grid-template-columns: 1fr 1fr; align-items: start; }
 }
