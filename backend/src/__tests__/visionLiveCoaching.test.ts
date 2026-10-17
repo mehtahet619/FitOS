@@ -155,7 +155,7 @@ describe("catalogue-wide exercise classification", () => {
   });
 
   it("does not claim reliable rep counting for cardio or complex movements", () => {
-    const burpee = module.classifyExercise("Burpee");
+    const burpee = module.classifyExercise("Turkish Get-Up");
     const treadmill = module.classifyExercise("Treadmill Run");
     expect(burpee.kind).toBe("tracking");
     expect(burpee.key).toBeNull();
