@@ -1146,8 +1146,6 @@ const VisionCoach = {
     const now = performance.now();
     if (now - this.coachLastSampleAt >= 350) {
       this.coachLastSampleAt = now;
-    if (now - this.coachLastSampleAt >= 350) {
-      this.coachLastSampleAt = now;
       this.coachFrameBuffer.push(landmarks.map((point) => ({
         x: point.x, y: point.y, z: point.z, visibility: point.visibility ?? 1,
       })));
