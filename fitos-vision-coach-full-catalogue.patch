@@ -1,0 +1,1530 @@
+--- a/frontend/vision.js	2026-10-17 04:58:42.223406977 +0000
++++ b/frontend/vision.js	2026-10-17 13:31:31.433815462 +0000
+@@ -15,10 +15,19 @@
+   LEFT_ANKLE: 27, RIGHT_ANKLE: 28,
+ };
+ 
++// MediaPipe returns x/y normalised by image width/height separately, so on a
++// non-square frame equal normalised distances are NOT equal pixel distances.
++// Every 2D angle/length below scales x by width/height so geometry is
++// measured in the same units on both axes (updated from the video each frame).
++let frameAspect = 1;
++function setFrameAspect(width, height) {
++  frameAspect = width > 0 && height > 0 ? width / height : 1;
++}
++
+ function angleBetween(a, b, c) {
+   // angle at point b, formed by rays b->a and b->c, in degrees
+-  const ab = { x: a.x - b.x, y: a.y - b.y };
+-  const cb = { x: c.x - b.x, y: c.y - b.y };
++  const ab = { x: (a.x - b.x) * frameAspect, y: a.y - b.y };
++  const cb = { x: (c.x - b.x) * frameAspect, y: c.y - b.y };
+   const dot = ab.x * cb.x + ab.y * cb.y;
+   const magAB = Math.hypot(ab.x, ab.y);
+   const magCB = Math.hypot(cb.x, cb.y);
+@@ -27,10 +36,30 @@
+   return (Math.acos(cos) * 180) / Math.PI;
+ }
+ 
++// The body side (0 = left, 1 = right) used for the current frame. Joints of ONE
++// angle must all come from the same side; choosing the more visible side per
++// joint independently mixed e.g. left hip + right knee + left ankle and made
++// the angle jump between frames.
++let activeSide = null;
++
++function bestSide(lm, groups) {
++  const score = (offset) => groups.reduce((sum, [left, right]) => {
++    const point = lm[offset === 0 ? left : right];
++    return sum + (point ? (point.visibility ?? 1) : 0);
++  }, 0);
++  const left = score(0);
++  const right = score(1);
++  // Hysteresis: keep the current side unless the other is clearly better.
++  if (activeSide === 0 && left + 0.3 >= right) return 0;
++  if (activeSide === 1 && right + 0.3 >= left) return 1;
++  return left >= right ? 0 : 1;
++}
++
+ function pick(landmarks, leftIdx, rightIdx) {
+   const l = landmarks[leftIdx];
+   const r = landmarks[rightIdx];
+-  // Prefer whichever side the model is more confident about (higher visibility).
++  if (activeSide === 0 && l) return l;
++  if (activeSide === 1 && r) return r;
+   if (!l) return r;
+   if (!r) return l;
+   return (l.visibility ?? 1) >= (r.visibility ?? 1) ? l : r;
+@@ -121,7 +150,7 @@
+ 
+ /** Degrees a segment (top -> bottom) is tilted away from vertical; 0 = straight up/down. */
+ function tiltFromVertical(top, bottom) {
+-  const dx = bottom.x - top.x;
++  const dx = (bottom.x - top.x) * frameAspect;
+   const dy = bottom.y - top.y;
+   return (Math.atan2(Math.abs(dx), Math.abs(dy)) * 180) / Math.PI;
+ }
+@@ -132,11 +161,11 @@
+  * line; larger values mean the point has drifted away from the body.
+  */
+ function torsoLineOffset(point, shoulder, hip) {
+-  const dx = hip.x - shoulder.x;
++  const dx = (hip.x - shoulder.x) * frameAspect;
+   const dy = hip.y - shoulder.y;
+   const length = Math.hypot(dx, dy);
+   if (length === 0) return 0;
+-  const px = point.x - shoulder.x;
++  const px = (point.x - shoulder.x) * frameAspect;
+   const py = point.y - shoulder.y;
+   return Math.abs(px * dy - py * dx) / (length * length);
+ }
+@@ -147,22 +176,30 @@
+  * (sagging); negative = hips above the line (piking).
+  */
+ function hipLineDeviation(shoulder, hip, ankle) {
+-  const dx = ankle.x - shoulder.x;
++  const dx = (ankle.x - shoulder.x) * frameAspect;
+   const dy = ankle.y - shoulder.y;
+   const length = Math.hypot(dx, dy);
+   if (length === 0) return 0;
+-  const t = dx === 0 ? 0 : (hip.x - shoulder.x) / dx;
++  const t = ankle.x === shoulder.x ? 0 : (hip.x - shoulder.x) / (ankle.x - shoulder.x);
+   const lineY = shoulder.y + dy * t;
+   return (hip.y - lineY) / length;
+ }
+ 
+-function coachKeyFor(name = "") {
+-  const n = String(name).toLowerCase();
+-  if (/squat/.test(n)) return "squat";
+-  if (/curl/.test(n)) return "curl";
+-  if (/bent.?over.?row|barbell.?row|dumbbell.?row|seated.?row|cable.?row|one.?arm.?row|\browing\b/.test(n)) return "row";
+-  if (/push.?up|press.?up/.test(n)) return "pushup";
+-  return null;
++/** Key of the movement rules for a catalogue exercise name, or null when none apply. */
++const JOINT_NAMES = { 11: "shoulders", 12: "shoulders", 13: "elbows", 14: "elbows", 15: "wrists", 16: "wrists", 23: "hips", 24: "hips", 25: "knees", 26: "knees", 27: "ankles", 28: "ankles" };
++
++/** Names of the joint groups that are not currently visible, e.g. ["hips", "knees"]. */
++function missingJoints(lm, groups) {
++  const missing = [];
++  for (const [left, right] of groups) {
++    const visible = [left, right].some((index) => lm[index] && (lm[index].visibility ?? 1) >= MIN_LANDMARK_VISIBILITY);
++    if (!visible && !missing.includes(JOINT_NAMES[left])) missing.push(JOINT_NAMES[left]);
++  }
++  return missing;
++}
++
++function coachKeyFor(name = "", movementPattern = "") {
++  return classifyExercise(name, movementPattern).key;
+ }
+ 
+ const EXERCISE_CONFIG = {
+@@ -228,7 +265,6 @@
+       [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+       [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+       [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+-      [LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE],
+     ],
+     angleOf(lm) {
+       const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+@@ -242,14 +278,44 @@
+       const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
+       const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
+       const knee = pick(lm, LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE);
+-      const torsoAngle = angleBetween(shoulder, hip, knee);
+-      if (torsoAngle < 25) return "Hinge forward from your hips and keep your back neutral";
+-      if (torsoAngle > 100) return "Keep your torso hinged forward and steady";
++      // The hinge check needs the knee; without it, rep counting and elbow cues still work.
++      const kneeVisible = Boolean(knee) && (knee.visibility ?? 1) >= MIN_LANDMARK_VISIBILITY;
++      const torsoAngle = kneeVisible ? angleBetween(shoulder, hip, knee) : 120;
++      // Hip angle (shoulder-hip-knee): ~180 upright, ~100-140 when hinged correctly.
++      if (torsoAngle > 160) return "Hinge forward from your hips and keep your back neutral";
++      if (torsoAngle < 60) return "Keep your chest up — avoid folding too far forward";
+       if (phase === "down" && angle > 90) return "Pull your elbows back and bring the weight toward your lower ribs";
+       if (phase === "down") return "Squeeze your shoulder blades without jerking your torso";
+       return "Lower your arms with control, keeping your torso still";
+     },
+   },
++  seatedrow: {
++    label: "Seated Cable Row",
++    required: [
++      [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
++      [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
++      [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
++      [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
++    ],
++    angleOf(lm) {
++      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
++      const elbow = pick(lm, LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW);
++      const wrist = pick(lm, LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST);
++      return angleBetween(shoulder, elbow, wrist);
++    },
++    upThreshold: 150,  // arms extended at the start / end of the return
++    downThreshold: 95, // handle pulled to the torso
++    feedback(angle, phase, lm) {
++      const shoulder = pick(lm, LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER);
++      const hip = pick(lm, LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP);
++      // Seated, the torso should stay near vertical; leaning back to finish the
++      // pull is the common fault. Needs a side-on camera view.
++      if (tiltFromVertical(shoulder, hip) > 25) return "Keep your torso more stable";
++      if (phase === "down" && angle > 110) return "Complete a comfortable range of motion";
++      if (phase === "down") return "Good pull — squeeze, then control the return";
++      return "Reach forward to full extension before the next rep";
++    },
++  },
+   pushup: {
+     label: "Push-up",
+     required: [
+@@ -285,7 +351,289 @@
+   },
+ };
+ 
++/* ----------------------------------------------------------------------
++ * Movement-pattern engine: covers the whole catalogue without per-exercise code.
++ *
++ * The catalogue is ~10,000 rows, almost all of them modifier variants (grip,
++ * stance, tempo, handle, cable height...) of a few dozen base movements. Each
++ * name is classified to one movement pattern; a pattern is DATA (which joints
++ * form the measured angle, rest/work thresholds, form checks, messages).
++ *
++ *   counted  -> rep counting + cues      (EXERCISE_CONFIG entry)
++ *   hold     -> static-hold cues, no reps (plank)
++ *   tracking -> pose tracking only, with an honest reason (cardio, rotation,
++ *               complex lifts, isolation moves 2D angles can't measure reliably)
++ *   unknown  -> no rules; optional server AI if configured
++ *
++ * Patterns marked `experimental` use thresholds derived from joint geometry and
++ * have NOT been tuned on recorded footage; the UI says so.
++ * -------------------------------------------------------------------- */
++
++const ROLE = {
++  shoulder: [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
++  elbow: [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
++  wrist: [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
++  hip: [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
++  knee: [LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE],
++  ankle: [LANDMARK.LEFT_ANKLE, LANDMARK.RIGHT_ANKLE],
++};
++
++const CHECKS = {
++  torsoLean(lm, p) {
++    const shoulder = pick(lm, ...ROLE.shoulder);
++    const hip = pick(lm, ...ROLE.hip);
++    return tiltFromVertical(shoulder, hip) > p.max ? p.msg : null;
++  },
++  elbowTuck(lm, p) {
++    const shoulder = pick(lm, ...ROLE.shoulder);
++    const hip = pick(lm, ...ROLE.hip);
++    const elbow = pick(lm, ...ROLE.elbow);
++    return torsoLineOffset(elbow, shoulder, hip) > p.max ? p.msg : null;
++  },
++  hipLine(lm) {
++    const deviation = hipLineDeviation(pick(lm, ...ROLE.shoulder), pick(lm, ...ROLE.hip), pick(lm, ...ROLE.ankle));
++    if (deviation > 0.08) return "Keep your hips up — avoid sagging";
++    if (deviation < -0.08) return "Lower your hips — avoid piking";
++    return null;
++  },
++};
++
++// angle: three roles, angle measured at the middle one. up/down: high/low angle
++// thresholds. startsLow: the resting position is the LOW angle (e.g. overhead
++// press starts with bent elbows and the working phase is the extended one).
++const PATTERNS = {
++  pressHorizontal: {
++    label: "Horizontal press / dip", angle: ["shoulder", "elbow", "wrist"], up: 150, down: 90, view: "side",
++    restMsg: "Press to full lockout, then lower with control", workMsg: "Good depth — drive back up",
++  },
++  pressVertical: {
++    label: "Overhead press", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 155, down: 100, startsLow: true, view: "front",
++    checks: [{ type: "torsoLean", max: 20, msg: "Keep your ribs down — avoid leaning back" }],
++    restMsg: "Press up until your arms are straight", workMsg: "Lockout overhead, then lower with control",
++  },
++  pullVertical: {
++    label: "Pull-up / pulldown", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 150, down: 85, view: "front",
++    checks: [{ type: "torsoLean", max: 25, msg: "Avoid swinging — keep your torso steady" }],
++    restMsg: "Start from a full hang, then pull", workMsg: "Good pull — lower with control",
++  },
++  tricepsExtension: {
++    label: "Triceps extension", angle: ["shoulder", "elbow", "wrist"], up: 155, down: 100, startsLow: true, view: "side",
++    restMsg: "Extend your arms fully", workMsg: "Squeeze at the top, then return slowly",
++  },
++  tricepsPushdown: {
++    label: "Triceps pushdown", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 155, down: 100, startsLow: true, view: "side",
++    checks: [
++      { type: "elbowTuck", max: 0.3, msg: "Keep your elbows pinned to your sides" },
++      { type: "torsoLean", max: 25, msg: "Stay tall — avoid leaning over the weight" },
++    ],
++    restMsg: "Push down until your arms are straight", workMsg: "Squeeze at the bottom, then return slowly",
++  },
++  lunge: {
++    label: "Lunge / step-up", angle: ["hip", "knee", "ankle"], up: 160, down: 110, view: "side",
++    restMsg: "Stand tall, then lower with control", workMsg: "Good depth — drive up through the front foot",
++  },
++  legPress: {
++    label: "Leg press", angle: ["hip", "knee", "ankle"], up: 155, down: 100, view: "side",
++    restMsg: "Press to near-full extension", workMsg: "Good depth — press back up",
++  },
++  hinge: {
++    label: "Hip hinge", angle: ["shoulder", "hip", "knee"], up: 160, down: 125, view: "side",
++    restMsg: "Stand tall, then hinge at the hips", workMsg: "Good hinge — drive your hips forward to stand",
++  },
++  hipThrust: {
++    label: "Hip thrust / bridge", angle: ["shoulder", "hip", "knee"], up: 155, down: 125, startsLow: true, view: "side",
++    restMsg: "Drive your hips up", workMsg: "Squeeze at the top, then lower with control",
++  },
++  lateralRaise: {
++    label: "Lateral raise", angle: ["hip", "shoulder", "elbow"], up: 70, down: 35, startsLow: true, view: "front",
++    checks: [{ type: "torsoLean", max: 15, msg: "Avoid swinging your torso" }],
++    restMsg: "Raise your arms out to the sides", workMsg: "Good height — lower with control",
++  },
++  frontRaise: {
++    label: "Front raise", angle: ["hip", "shoulder", "elbow"], up: 70, down: 35, startsLow: true, view: "side",
++    checks: [{ type: "torsoLean", max: 15, msg: "Avoid leaning back to lift the weight" }],
++    restMsg: "Raise your arms in front of you", workMsg: "Good height — lower with control",
++  },
++  legCurl: {
++    label: "Leg curl", angle: ["hip", "knee", "ankle"], up: 150, down: 100, view: "side",
++    restMsg: "Extend your legs, then curl", workMsg: "Squeeze, then lower with control",
++  },
++  legExtension: {
++    label: "Leg extension", angle: ["hip", "knee", "ankle"], up: 150, down: 110, startsLow: true, view: "side",
++    restMsg: "Extend your legs fully", workMsg: "Squeeze at the top, then lower slowly",
++  },
++  legRaise: {
++    label: "Leg raise", angle: ["shoulder", "hip", "knee"], up: 150, down: 115, view: "side",
++    restMsg: "Lower your legs with control", workMsg: "Good lift — lower slowly",
++  },
++};
++
++function buildPatternConfig(def) {
++  const roles = [...new Set([...def.angle, ...(def.needs || [])])];
++  const triplet = def.angle.map((role) => ROLE[role]);
++  return {
++    label: def.label,
++    pattern: true,
++    experimental: true,
++    view: def.view,
++    required: roles.map((role) => ROLE[role]),
++    startsLow: Boolean(def.startsLow),
++    upThreshold: def.up,
++    downThreshold: def.down,
++    angleOf(lm) {
++      const [a, b, c] = triplet.map(([left, right]) => pick(lm, left, right));
++      return angleBetween(a, b, c);
++    },
++    feedback(angle, phase, lm) {
++      for (const check of def.checks || []) {
++        const message = CHECKS[check.type](lm, check);
++        if (message) return message;
++      }
++      return phase === "down" ? def.workMsg : def.restMsg;
++    },
++  };
++}
++
++for (const [key, def] of Object.entries(PATTERNS)) EXERCISE_CONFIG[key] = buildPatternConfig(def);
++
++// Static hold: form cues only, no repetitions.
++EXERCISE_CONFIG.plank = {
++  label: "Plank",
++  hold: true,
++  experimental: true,
++  view: "side",
++  required: [ROLE.shoulder, ROLE.hip, ROLE.ankle],
++  angleOf: () => 0,
++  upThreshold: 0,
++  downThreshold: 0,
++  feedback: (angle, phase, lm) => CHECKS.hipLine(lm) || "Hold — keep a straight line from shoulders to ankles",
++};
++
++const TRACKING_REASONS = {
++  cardio: "Cardio and conditioning movements are not rep-counted.",
++  complex: "Complex, rotational or carrying movements can't be rep-counted reliably from one 2D camera.",
++  isolation: "This isolation movement can't be measured reliably from a single 2D camera, so reps and form aren't scored.",
++  hold: "Static holds other than plank aren't scored yet.",
++};
++
++/**
++ * Classifies a catalogue exercise name. Order matters: specific movements are
++ * tested before generic words ("leg curl" before "curl", "leg press" before
++ * "press"). Returns { key, kind, reason }.
++ */
++function classifyExercise(name = "", movementPattern = "") {
++  const n = String(name).toLowerCase().replace(/[^a-z0-9.\s-]/g, " ").replace(/\s+/g, " ").trim();
++  const has = (re) => re.test(n);
++  const counted = (key) => ({ key, kind: EXERCISE_CONFIG[key].hold ? "hold" : "counted", reason: "" });
++  const tracking = (reason) => ({ key: null, kind: "tracking", reason: TRACKING_REASONS[reason] });
++  if (!n) return { key: null, kind: "unknown", reason: "" };
++
++  if (has(/\bplank\b/)) return counted("plank");
++  if (has(/hollow|wall.?sit|dead.?hang|isometric|\bhold\b/)) return tracking("hold");
++  if (has(/treadmill|cycling|\bbike\b|battle.?rope|jump|burpee|mountain.?climber|\brun(ning)?\b|elliptical|stair|\bsled\b/)) return tracking("cardio");
++  if (has(/\bclean\b|snatch|\bjerk\b|swing|thruster|wood.?chop|\bchop\b|twist|rotation|rotary|windmill|turkish|get.?up|carry|\bwalk\b|pallof|\bpull\b.*\bsled\b/)) return tracking("complex");
++
++  if (has(/nordic/)) return tracking("isolation"); // knees fixed, torso lowers: not a knee-angle movement
++  if (has(/leg.?curl|hamstring.?curl/)) return counted("legCurl");
++  if (has(/leg.?extension|knee.?extension/)) return counted("legExtension");
++  if (has(/back.?extension|hyper.?extension|wrist.?curl|forearm/)) return tracking("isolation");
++  if (has(/leg.?raise|knee.?raise|hanging.?raise/)) return counted("legRaise");
++  if (has(/calf|shrug|crunch|sit.?up|\babs?\b|v.?up|russian|bicycle|glute.?kickback|donkey|hip.?abduct|hip.?adduct/)) return tracking("isolation");
++  if (has(/superman/)) return tracking("isolation"); // prone back extension, not a row
++  if (has(/upright.?row|face.?pull|pull.?apart|\bflyes?\b|\bfly\b|pec.?deck|cross.?over|rear.?delt|reverse.?fly/)) return tracking("isolation");
++  if (has(/kickback/)) return has(/tricep/) ? counted("tricepsExtension") : tracking("isolation");
++
++  if (has(/lateral.?raise|side.?raise/)) return counted("lateralRaise");
++  if (has(/front.?raise|plate.?raise/)) return counted("frontRaise");
++  if (has(/\braise\b/)) return tracking("isolation");
++
++  if (has(/leg.?press|hack.?press/)) return counted("legPress");
++  if (has(/\bsquat\b|goblet|sissy|pistol|hack/)) return counted("squat");
++  if (has(/lunge|step.?up|split.?squat/)) return counted("lunge");
++  if (has(/hip.?thrust|glute.?bridge|\bbridge\b|hip.?raise/)) return counted("hipThrust");
++  if (has(/deadlift|\brdl\b|romanian|good.?morning|pull.?through|stiff.?leg|hip.?hinge/)) return counted("hinge");
++
++  // Pike push-ups keep the hips high on purpose, so they must not use the push-up hip-line check.
++  if (has(/pike/)) return counted("pressHorizontal");
++  if (has(/push.?up|press.?up/)) return counted("pushup");
++  if (has(/\bdips?\b/)) return counted("pressHorizontal");
++  // Triceps work is tested before "overhead" so "Overhead Triceps Extension" is not an overhead press.
++  if (has(/push.?down|pushdown|press.?down|skull|tricep|overhead.?extension/)) {
++    return counted(has(/push.?down|pushdown|press.?down/) ? "tricepsPushdown" : "tricepsExtension");
++  }
++  if (has(/overhead|shoulder.?press|military|arnold|push.?press|landmine|kettlebell.?press/)) return counted("pressVertical");
++  if (has(/bench|chest.?press|(floor|incline|decline|flat).{0,20}press/)) return counted("pressHorizontal");
++  if (has(/pull.?down|pulldown|pull.?up|chin.?up|lat.?pull/)) return counted("pullVertical");
++  if (has(/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/)) return counted("seatedrow");
++  if (has(/\brow(ing)?\b/)) return counted("row");
++  if (has(/curl/)) return counted("curl");
++
++  // Name not recognised: fall back to the catalogue's own movementPattern field
++  // (sent with every workout exercise), so exercises added to the catalogue later
++  // still get coaching without any code change.
++  const hinted = MOVEMENT_PATTERN_HINTS[String(movementPattern || "").toLowerCase()];
++  if (hinted) return typeof hinted === "string" && EXERCISE_CONFIG[hinted] ? counted(hinted) : tracking(hinted.tracking);
++  return { key: null, kind: "unknown", reason: "" };
++}
++
++const MOVEMENT_PATTERN_HINTS = {
++  horizontal_push: "pressHorizontal",
++  vertical_push: "pressVertical",
++  horizontal_pull: "row",
++  vertical_pull: "pullVertical",
++  squat: "squat",
++  lunge: "lunge",
++  hinge: "hinge",
++  elbow_flexion: "curl",
++  elbow_extension: "tricepsExtension",
++  flexion: { tracking: "isolation" },
++  plantarflexion: { tracking: "isolation" },
++  abduction: { tracking: "isolation" },
++  anti_extension: { tracking: "isolation" },
++  rotation: { tracking: "complex" },
++  flexion_rotation: { tracking: "complex" },
++  dynamic: { tracking: "cardio" },
++};
++
++// A phase change must hold for this many consecutive frames, and the angle is
++// lightly smoothed, so single noisy frames cannot flip phases or add reps.
++const PHASE_CONFIRM_FRAMES = 2;
++const ANGLE_SMOOTHING = 0.5; // weight of the newest sample
++// A new coaching cue must persist this many frames and the previous cue must
++// have been on screen this long (ms) before the text changes.
++const CUE_CONFIRM_FRAMES = 3;
++const CUE_MIN_HOLD_MS = 1200;
++// Pose lost for this long (ms) => say so instead of showing stale feedback.
++const NO_POSE_GRACE_MS = 600;
++// AI feedback older than this (ms) is stale and is no longer displayed.
++const AI_FEEDBACK_TTL_MS = 8000;
++const MAX_CONSECUTIVE_LOOP_ERRORS = 30;
++const FRAMING_MESSAGE_UNSUPPORTED =
++  "No form rules exist for this exercise yet and AI coaching is not enabled, so only pose tracking is active.";
++
++function cameraErrorMessage(error) {
++  const name = error?.name || "";
++  if (name === "NotAllowedError" || name === "SecurityError") {
++    return "Camera permission was denied. Allow camera access in your browser settings and try again.";
++  }
++  if (name === "NotFoundError" || name === "OverconstrainedError") return "No usable camera was found on this device.";
++  if (name === "NotReadableError" || name === "AbortError") return "The camera is in use by another app or could not be started.";
++  return `Couldn't start the camera or load the pose model (needs internet + camera permission). ${error?.message || ""}`.trim();
++}
++
+ const VisionCoach = {
++  starting: false,
++  equipmentDisabled: false,
++  trackingReason: "",
++  startToken: 0,
++  smoothedAngle: null,
++  phaseFrames: 0,
++  noPoseSince: 0,
++  loopErrors: 0,
++  poseDelegate: null,
++  aiCoachAvailable: null, // null = not probed yet, false = backend has no model
++  coachFeedbackAt: 0,
++  cue: { candidate: "", count: 0, shown: "", shownAt: 0 },
+   landmarker: null,
+   running: false,
+   currentExercise: "squat",
+@@ -349,14 +697,30 @@
+     });
+     document.getElementById("vision-reset-btn").addEventListener("click", () => this.resetReps());
+     document.getElementById("form-comparison-retry-btn").addEventListener("click", () => this.retryComparison());
++
++    // Release the camera when the user leaves the Vision screen, and drop
++    // smoothing state after the tab was backgrounded (frames were not processed).
++    const screen = document.getElementById("screen-vision");
++    if (screen && typeof MutationObserver !== "undefined") {
++      new MutationObserver(() => {
++        if (!screen.classList.contains("active") && (this.running || this.starting)) this.stop();
++      }).observe(screen, { attributes: true, attributeFilter: ["class"] });
++    }
++    document.addEventListener("visibilitychange", () => {
++      if (!document.hidden) { this.smoothedAngle = null; this.phaseFrames = 0; }
++    });
+   },
+ 
+   async openFor(exercise) {
+     const exerciseName = String(exercise?.exerciseName || exercise?.name || "Unknown exercise");
+-    const key = coachKeyFor(exerciseName);
++    const classification = classifyExercise(exerciseName, exercise?.movementPattern);
++    const key = classification.key;
++    this.trackingReason = classification.reason;
+     const placeholder = document.getElementById("camera-placeholder");
+     const demoSection = document.getElementById("vision-demo");
+     if (demoSection) demoSection.hidden = false;
++    const demoLabel = document.getElementById("vision-demo-label");
++    if (demoLabel) demoLabel.textContent = `Exercise Demonstration: ${exerciseName}`;
+ 
+     // Every catalogue exercise can use the shared AI path. Only locally
+     // validated movements use deterministic rep counting.
+@@ -379,11 +743,26 @@
+   resetReps() {
+     this.repCount = 0;
+     this.phase = "up";
++    this.smoothedAngle = null;
++    this.phaseFrames = 0;
++    this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
+     document.getElementById("vision-reps").textContent = "0";
+     document.getElementById("vision-angle").textContent = "0 deg";
+     this.resetComparisonCapture();
+-    const label = EXERCISE_CONFIG[this.currentExercise]?.label || this.coachExerciseName || "Exercise";
+-    this.renderComparisonNotice(`${label}: live pose analysis is active. AI feedback depends on backend configuration and model confidence.`);
++    this.renderComparisonNotice(this.coachingNotice());
++  },
++
++  /** Honest description of what this exercise gets: full rules, experimental rules, or tracking only. */
++  coachingNotice() {
++    const config = EXERCISE_CONFIG[this.currentExercise];
++    const label = config?.label || this.coachExerciseName || "Exercise";
++    if (config?.experimental) {
++      const view = config.view === "side" ? " Stand side-on to the camera." : config.view === "front" ? " Face the camera." : "";
++      return `${label}: live analysis is active. Rep counting and cues for this movement type are experimental estimates.${view}`;
++    }
++    if (config) return `${label}: live pose analysis is active. Form cues are computed on your device from your body landmarks.`;
++    if (this.trackingReason) return `${label}: ${this.trackingReason} Pose tracking is active.`;
++    return `${label}: pose tracking is active. This exercise has no built-in form rules yet.`;
+   },
+ 
+   resetComparisonCapture() {
+@@ -395,29 +774,66 @@
+     this.renderComparisonResults(null);
+   },
+ 
++  async createLandmarker() {
++    const vision = await FilesetResolver.forVisionTasks(
++      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
++    );
++    const modelAssetPath =
++      "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
++    // GPU is not available on every browser/device; fall back to CPU instead of
++    // failing the whole feature.
++    for (const delegate of ["GPU", "CPU"]) {
++      try {
++        const landmarker = await PoseLandmarker.createFromOptions(vision, {
++          baseOptions: { modelAssetPath, delegate },
++          runningMode: "VIDEO",
++          numPoses: 1,
++        });
++        this.poseDelegate = delegate;
++        return landmarker;
++      } catch (error) {
++        console.warn(`[VisionCoach] ${delegate} pose model init failed`, error?.message || error);
++        if (delegate === "CPU") throw error;
++      }
++    }
++    return null;
++  },
++
++  async probeAiCoach() {
++    try {
++      const status = await Api.get("/coach/status");
++      this.aiCoachAvailable = status?.multimodalCoach === "configured";
++    } catch (_error) {
++      this.aiCoachAvailable = false;
++    }
++  },
++
+   async start() {
++    if (this.starting || this.running) return;
++    this.starting = true;
++    const token = ++this.startToken;
+     const placeholder = document.getElementById("camera-placeholder");
+     const startBtn = document.getElementById("vision-start-btn");
+     startBtn.disabled = true;
+     startBtn.innerHTML = `<span class="spinner"></span> Loading model…`;
+ 
+     try {
+-      if (!this.landmarker) {
+-        const vision = await FilesetResolver.forVisionTasks(
+-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+-        );
+-        this.landmarker = await PoseLandmarker.createFromOptions(vision, {
+-          baseOptions: {
+-            modelAssetPath:
+-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+-            delegate: "GPU",
+-          },
+-          runningMode: "VIDEO",
+-          numPoses: 1,
+-        });
++      if (!this.landmarker) this.landmarker = await this.createLandmarker();
++      const stream = await navigator.mediaDevices.getUserMedia({
++        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
++        audio: false,
++      });
++      if (token !== this.startToken) {
++        // stop() ran while the model/camera was loading: release the new stream.
++        stream.getTracks().forEach((t) => t.stop());
++        return;
+       }
+-
+-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
++      stream.getVideoTracks().forEach((track) => track.addEventListener("ended", () => {
++        if (this.running && token === this.startToken) {
++          this.stop();
++          placeholder.textContent = "The camera was disconnected or taken by another app. Tap Start Camera to resume.";
++        }
++      }));
+       this.video.srcObject = stream;
+       this.video.style.display = "block";
+       await this.video.play();
+@@ -428,27 +844,44 @@
+       startBtn.disabled = false;
+ 
+       this.running = true;
++      this.loopErrors = 0;
++      this.noPoseSince = 0;
++      this.smoothedAngle = null;
++      this.phaseFrames = 0;
+       this.startEquipmentRecognition();
++      void this.probeAiCoach();
+       this.loop();
+       this.showComparisonCard();
+       this.setComparisonRetryVisible(false);
+-      this.renderComparisonNotice("Live coaching is analyzing your movement. AI feedback requires GEMINI_API_KEY on the backend; the old reference-comparison service is separate.");
++      this.renderComparisonNotice(this.coachingNotice());
+     } catch (e) {
+-      placeholder.textContent =
+-        "Couldn't start the camera or load the pose model (needs internet + camera permission). " + e.message;
++      placeholder.textContent = cameraErrorMessage(e);
++      placeholder.style.display = "flex";
+       startBtn.disabled = false;
+       startBtn.textContent = "Start Camera";
++      const stream = this.video.srcObject;
++      if (stream) stream.getTracks().forEach((t) => t.stop());
++      this.video.srcObject = null;
+       // Without pose detection there is nothing to compare, so the comparison
+       // panel is cleared rather than left showing a stale result.
+       this.resetComparisonCapture();
+       this.hideComparisonCard();
++    } finally {
++      if (token === this.startToken) this.starting = false;
+     }
+   },
+ 
+   stop() {
++    this.startToken += 1; // cancels an in-flight start()
++    this.starting = false;
+     this.running = false;
+     this.coachFrameBuffer = [];
+     this.coachFeedback = "";
++    this.coachFeedbackAt = 0;
++    this.smoothedAngle = null;
++    this.phaseFrames = 0;
++    this.noPoseSince = 0;
++    this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
+     if (this.equipmentTimer) window.clearTimeout(this.equipmentTimer);
+     this.equipmentTimer = null;
+     this.equipmentRequestInFlight = false;
+@@ -459,11 +892,13 @@
+     this.comparison.currentFrames = [];
+     const stream = this.video.srcObject;
+     if (stream) stream.getTracks().forEach((t) => t.stop());
++    this.video.srcObject = null;
+     this.video.style.display = "none";
+     document.getElementById("camera-placeholder").style.display = "flex";
+     document.getElementById("camera-placeholder").textContent = 'Tap "Start Camera" to begin pose analysis.';
+     document.getElementById("camera-feedback").style.display = "none";
+     const startBtn = document.getElementById("vision-start-btn");
++    startBtn.disabled = false;
+     startBtn.textContent = "Start Camera";
+     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+     this.renderEquipmentState("Waiting for a frame…", []);
+@@ -471,25 +906,65 @@
+ 
+   loop() {
+     if (!this.running) return;
+-    const now = performance.now();
+-    if (this.video.readyState >= 2) {
+-      const result = this.landmarker.detectForVideo(this.video, now);
+-      this.canvas.width = this.video.videoWidth;
+-      this.canvas.height = this.video.videoHeight;
+-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+-
+-      if (result.landmarks && result.landmarks.length > 0) {
+-        const lm = result.landmarks[0];
+-        this.drawSkeleton(lm);
+-        this.processExercise(lm);
++    // One bad frame must never end the loop: previously any exception here
++    // skipped requestAnimationFrame and froze reps/angle at 0 while the camera
++    // kept showing live video.
++    try {
++      this.tick();
++      this.loopErrors = 0;
++    } catch (error) {
++      this.loopErrors += 1;
++      console.warn("[VisionCoach] frame processing failed", error?.message || error);
++      if (this.loopErrors >= MAX_CONSECUTIVE_LOOP_ERRORS) {
++        this.stop();
++        document.getElementById("camera-placeholder").textContent =
++          "Pose tracking stopped after repeated errors. Tap Start Camera to try again.";
++        return;
+       }
+-      this.drawEquipmentBoxes(this.stableEquipment);
+     }
+     requestAnimationFrame(() => this.loop());
+   },
+ 
++  tick() {
++    if (document.hidden) return;
++    const video = this.video;
++    if (video.readyState < 2 || !video.videoWidth) return;
++    const now = performance.now();
++    const result = this.landmarker.detectForVideo(video, now);
++    if (this.canvas.width !== video.videoWidth) this.canvas.width = video.videoWidth;
++    if (this.canvas.height !== video.videoHeight) this.canvas.height = video.videoHeight;
++    setFrameAspect(video.videoWidth, video.videoHeight);
++    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
++
++    if (result.landmarks && result.landmarks.length > 0) {
++      this.noPoseSince = 0;
++      const lm = result.landmarks[0];
++      this.drawSkeleton(lm);
++      this.processExercise(lm);
++    } else {
++      this.handleNoPose(now);
++    }
++    this.drawEquipmentBoxes(this.stableEquipment);
++  },
++
++  /** No person detected: say so after a short grace period instead of leaving stale cues. */
++  handleNoPose(now = performance.now()) {
++    if (!this.noPoseSince) this.noPoseSince = now;
++    if (now - this.noPoseSince < NO_POSE_GRACE_MS) return;
++    this.smoothedAngle = null;
++    this.phaseFrames = 0;
++    const feedbackEl = document.getElementById("camera-feedback");
++    if (feedbackEl) feedbackEl.textContent = "I can't see you. Step back so your whole body is in the camera view.";
++    const angleEl = document.getElementById("vision-angle");
++    if (angleEl) angleEl.textContent = "-- deg";
++  },
++
+   startEquipmentRecognition() {
+     const card = document.getElementById("equipment-recognition-card");
++    if (this.equipmentDisabled) {
++      card.style.display = "none";
++      return;
++    }
+     card.style.display = "block";
+     this.renderEquipmentState("Analyzing camera frames…", []);
+     this.scheduleEquipmentRecognition(0);
+@@ -517,7 +992,14 @@
+     try {
+       const result = await Api.post("/equipment/detect", { imageBase64 });
+       if (!result.configured) {
+-        this.renderEquipmentState("Model not configured. Add a trained local YOLO model to the backend.", []);
++        // The equipment scanner is a separate feature. With no model on the server
++        // there is nothing to show or poll, so hide its card for this session
++        // instead of repeating an error under the live coach every 1.5 seconds.
++        this.equipmentDisabled = true;
++        this.stableEquipment = [];
++        const card = document.getElementById("equipment-recognition-card");
++        if (card) card.style.display = "none";
++        return;
+       } else {
+         const detections = (result.detections || []).filter(
+           (d) => Number(d.confidence) >= this.equipmentMinConfidence,
+@@ -533,7 +1015,7 @@
+       this.renderEquipmentState("Unable to analyze frame. Retrying…", this.stableEquipment);
+     } finally {
+       this.equipmentRequestInFlight = false;
+-      this.scheduleEquipmentRecognition();
++      if (!this.equipmentDisabled) this.scheduleEquipmentRecognition();
+     }
+   },
+ 
+@@ -839,42 +1321,112 @@
+ 
+   /* ---------------------- pose + rep pipeline ---------------------- */
+ 
++  /**
++   * Debounces the on-screen cue: a different cue must persist for several
++   * frames and the current one must have been visible for a minimum time, so
++   * the text does not flicker on every frame.
++   */
++  stabilizeCue(text) {
++    const cue = this.cue;
++    const now = performance.now();
++    if (text === cue.shown) { cue.candidate = text; cue.count = 0; return cue.shown; }
++    if (text !== cue.candidate) { cue.candidate = text; cue.count = 1; } else cue.count += 1;
++    if (!cue.shown || (cue.count >= CUE_CONFIRM_FRAMES && now - cue.shownAt >= CUE_MIN_HOLD_MS)) {
++      cue.shown = text; cue.shownAt = now; cue.count = 0;
++    }
++    return cue.shown;
++  },
++
++  /** Framing / visibility problems are shown immediately and are never mixed with form cues. */
++  showFramingMessage(text) {
++    const feedbackEl = document.getElementById("camera-feedback");
++    this.cue = { candidate: text, count: 0, shown: text, shownAt: performance.now() };
++    if (feedbackEl) feedbackEl.textContent = text;
++  },
++
++  freshAiFeedback() {
++    return this.coachFeedback && performance.now() - this.coachFeedbackAt < AI_FEEDBACK_TTL_MS ? this.coachFeedback : "";
++  },
++
+   processExercise(lm) {
+     const feedbackEl = document.getElementById("camera-feedback");
+     const config = EXERCISE_CONFIG[this.currentExercise];
+     this.collectCoachFrame(lm);
+ 
+     if (!config) {
+-      if (feedbackEl) feedbackEl.textContent = this.coachFeedback ||
+-        "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.";
++      if (feedbackEl && this.trackingReason && !this.freshAiFeedback()) {
++        feedbackEl.textContent = `${this.trackingReason} Pose tracking is active.`;
++        return;
++      }
++      if (feedbackEl) feedbackEl.textContent = this.freshAiFeedback() || (this.aiCoachAvailable === false
++        ? FRAMING_MESSAGE_UNSUPPORTED
++        : "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.");
+       return;
+     }
+     if (!hasVisiblePose(lm, config.required)) {
+-      if (feedbackEl) feedbackEl.textContent = this.currentExercise === "squat"
++      // Do not reset phase/rep state here: a brief occlusion must not erase a
++      // rep in progress. Only the smoothing window restarts.
++      this.smoothedAngle = null;
++      this.phaseFrames = 0;
++      const missing = missingJoints(lm, config.required);
++      const missingNote = missing.length ? ` Can't see your ${missing.join(" and ")} yet.` : "";
++      this.showFramingMessage((this.currentExercise === "squat"
+         ? "Keep your hips, knees and at least one ankle visible. Step back slightly and improve lighting if needed."
+         : this.currentExercise === "curl"
+           ? "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed."
+-          : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.";
++          : this.currentExercise === "seatedrow"
++            ? "Turn side-on to the camera and keep your shoulder, elbow, wrist and hip visible."
++            : config.pattern || config.hold
++              ? `Keep every joint this movement needs visible${config.view === "side" ? " and stand side-on to the camera" : config.view === "front" ? " and face the camera" : ""}. Step back and improve lighting if needed.`
++              : "Keep your shoulders, elbows, wrists, hips and ankles visible. Step back and improve lighting if needed.") + missingNote);
+       return;
+     }
+ 
+-    const angle = config.angleOf(lm);
++    activeSide = bestSide(lm, config.required);
++    if (config.hold) {
++      document.getElementById("vision-angle").textContent = "hold";
++      if (feedbackEl) feedbackEl.textContent = this.stabilizeCue(config.feedback(0, "up", lm));
++      return;
++    }
++    const raw = config.angleOf(lm);
++    const angle = this.smoothedAngle === null
++      ? raw
++      : this.smoothedAngle * (1 - ANGLE_SMOOTHING) + raw * ANGLE_SMOOTHING;
++    this.smoothedAngle = angle;
+     document.getElementById("vision-angle").textContent = `${Math.round(angle)} deg`;
+-    if (this.phase === "up" && angle < config.downThreshold) {
+-      this.phase = "down";
+-      this.beginRepCapture();
+-    } else if (this.phase === "down" && angle > config.upThreshold) {
+-      this.phase = "up";
+-      this.repCount += 1;
+-      document.getElementById("vision-reps").textContent = String(this.repCount);
+-      this.captureRepFrame(lm);
+-      this.completeRep();
++
++    // "down" = working phase, "up" = resting phase (legacy names). Most
++    // movements work toward the LOW angle; startsLow ones (overhead press,
++    // triceps extension, hip thrust, raises) work toward the HIGH angle.
++    const reachedWork = config.startsLow ? angle > config.upThreshold : angle < config.downThreshold;
++    const reachedRest = config.startsLow ? angle < config.downThreshold : angle > config.upThreshold;
++    let target = null;
++    if (this.phase === "up" && reachedWork) target = "down";
++    else if (this.phase === "down" && reachedRest) target = "up";
++    this.phaseFrames = target ? this.phaseFrames + 1 : 0;
++    if (target && this.phaseFrames >= PHASE_CONFIRM_FRAMES) {
++      this.phaseFrames = 0;
++      if (target === "down") {
++        this.phase = "down";
++        this.beginRepCapture();
++      } else {
++        this.phase = "up";
++        this.repCount += 1;
++        document.getElementById("vision-reps").textContent = String(this.repCount);
++        this.captureRepFrame(lm);
++        this.completeRep();
++      }
+     }
+     if (this.comparison.capturing) this.captureRepFrame(lm);
+-    if (feedbackEl) feedbackEl.textContent = this.coachFeedback || config.feedback(angle, this.phase, lm);
++    if (feedbackEl) feedbackEl.textContent = this.stabilizeCue(config.feedback(angle, this.phase, lm));
+   },
+ 
+   collectCoachFrame(landmarks) {
++    // Server AI is only used for exercises without built-in rules, and only when
++    // the backend reports a configured model. Supported exercises are coached by
++    // the on-device rules, so no camera frames are uploaded for them.
++    const useAi = !EXERCISE_CONFIG[this.currentExercise] && this.aiCoachAvailable === true;
++    if (!useAi) return;
+     const now = performance.now();
+     if (now - this.coachLastSampleAt >= 350) {
+       this.coachLastSampleAt = now;
+@@ -886,7 +1438,7 @@
+     if (!this.coachRequestInFlight && this.coachFrameBuffer.length >= 8 && now - this.coachLastRequestAt >= 4500) {
+       void this.requestUniversalCoachAnalysis();
+     }
+-    if (!EXERCISE_CONFIG[this.currentExercise] && !this.coachIdentifyInFlight && now - this.coachLastIdentifyAt >= 10000) {
++    if (!this.coachIdentifyInFlight && now - this.coachLastIdentifyAt >= 10000) {
+       void this.identifyUniversalExercise();
+     }
+   },
+@@ -920,16 +1472,23 @@
+       const cues = Array.isArray(result?.feedback)
+         ? result.feedback.map((item) => typeof item?.cue === "string" ? item.cue.trim() : "").filter(Boolean).slice(0, 2)
+         : [];
+-      if (cues.length && (Number(result?.confidence ?? 0) >= 0.45 || result?.modelConfigured === false)) {
++      if (result?.modelConfigured === false) {
++        // Fallback text from the server is generic, not coaching from the user's movement.
++        this.aiCoachAvailable = false;
++        this.coachFeedback = "";
++      } else if (cues.length && Number(result?.confidence ?? 0) >= 0.45) {
+         this.coachFeedback = cues.join(" ");
++        this.coachFeedbackAt = performance.now();
+       } else if (result?.needsRepositioning) {
+         this.coachFeedback = "Move fully into frame and improve lighting so the coach can see your movement.";
++        this.coachFeedbackAt = performance.now();
+       } else if (result?.exerciseHypothesis === "unknown") {
+         this.coachFeedback = "I couldn't identify this movement confidently. Keep your full body visible or select the exercise by name.";
++        this.coachFeedbackAt = performance.now();
+       }
+     } catch (error) {
+-      if (error?.status === 401) this.coachFeedback = "Please sign in again to use live AI coaching.";
+-      else if (error?.status === 503) this.coachFeedback = "AI coaching is not configured on the backend yet; basic pose tracking remains available.";
++      if (error?.status === 401) { this.coachFeedback = "Please sign in again to use live AI coaching."; this.coachFeedbackAt = performance.now(); }
++      else if (error?.status === 503) { this.aiCoachAvailable = false; this.coachFeedback = ""; }
+       console.warn("[VisionCoach] universal coaching request failed", error?.message || error);
+     } finally {
+       this.coachRequestInFlight = false;
+--- a/frontend/styles.css	2026-10-17 04:58:42.224722107 +0000
++++ b/frontend/styles.css	2026-10-17 13:31:31.484378674 +0000
+@@ -298,7 +298,9 @@
+   inset: 0;
+   width: 100%;
+   height: 100%;
+-  object-fit: cover;
++  /* contain, not cover: the pose model sees the whole frame, so the user must
++     see the whole frame too (cover cropped the sides of landscape webcams). */
++  object-fit: contain;
+ }
+ .camera-panel canvas { pointer-events: none; }
+ .camera-placeholder-text {
+@@ -1244,3 +1246,11 @@
+   #today-content > .today-stats-grid { grid-column: 2; grid-row: 1; }
+   #today-content > .today-grow-card { grid-column: 1; grid-row: 2; }
+ }
++
++/* Vision Coach: demonstration + live camera. Stacked on phones, side by side when wide. */
++.vision-stage { display: grid; gap: 12px; margin-bottom: 14px; }
++.vision-stage .exercise-demonstration { grid-column: auto; width: 100%; }
++.vision-stage .camera-panel { margin-bottom: 0; }
++@media (min-width: 820px) {
++  .vision-stage { grid-template-columns: 1fr 1fr; align-items: start; }
++}
+--- a/frontend/index.html	2026-10-17 04:58:42.225928652 +0000
++++ b/frontend/index.html	2026-10-17 13:31:31.483789263 +0000
+@@ -383,18 +383,19 @@
+         <p>CV rep counter, form scoring, and model gates</p>
+       </div>
+ 
+-      <section id="vision-demo" class="exercise-demonstration" hidden aria-label="Selected exercise demonstration">
+-        <div class="exercise-demonstration-label">Exercise Demonstration</div>
+-        <button id="vision-demo-btn" hidden type="button" aria-label="Load exercise demonstration"></button>
+-        <div id="vision-demo-player" class="exercise-demo-player" hidden aria-live="polite"></div>
+-      </section>
+-
+       <div class="segment" id="vision-segment">
+         <button class="active" data-exercise="squat">✓ Squat</button>
+         <button data-exercise="curl">↗ Curl</button>
+         <button data-exercise="pushup">↘ Push-up</button>
+       </div>
+ 
++      <div class="vision-stage">
++      <section id="vision-demo" class="exercise-demonstration" hidden aria-label="Selected exercise demonstration">
++        <div class="exercise-demonstration-label" id="vision-demo-label">Exercise Demonstration</div>
++        <button id="vision-demo-btn" hidden type="button" aria-label="Load exercise demonstration"></button>
++        <div id="vision-demo-player" class="exercise-demo-player" hidden aria-live="polite"></div>
++      </section>
++
+       <div class="camera-panel" id="camera-panel">
+         <video id="vision-video" autoplay playsinline muted style="display:none;"></video>
+         <canvas id="vision-canvas"></canvas>
+@@ -404,6 +405,8 @@
+         <div class="camera-feedback" id="camera-feedback" style="display:none;"></div>
+       </div>
+ 
++      </div>
++
+       <div class="card" id="equipment-recognition-card" style="display:none;">
+         <div class="card-label">Equipment recognition</div>
+         <div id="equipment-recognition-status">Waiting for a frame…</div>
+--- a/backend/.env.example	2026-10-17 04:58:42.226910887 +0000+++ b/backend/.env.example	2026-10-17 13:31:31.486242589 +0000
+@@ -96,3 +96,10 @@
+ GROW_IMPACT_GYM_CLOSURES_JSON=""
+ # Optional JSON array of exactly three tree options (id, name, species, image, description).
+ GROW_IMPACT_TREE_OPTIONS=""
++
++# --- Vision Coach AI fallback (optional) ---
++# Used ONLY for exercises that have no built-in on-device form rules. Squat,
++# Curl, Push-up, Bent Over Row and Seated Cable Row never need it. When unset,
++# /coach/status reports "not_configured" and the app uploads no camera frames.
++GEMINI_API_KEY=""
++GEMINI_COACH_MODEL="gemini-2.5-flash"
+--- a/backend/src/__tests__/visionLiveCoaching.test.ts	2026-10-17 04:58:42.579482805 +0000
++++ b/backend/src/__tests__/visionLiveCoaching.test.ts	2026-10-17 13:31:31.488109675 +0000
+@@ -27,7 +27,15 @@
+     angleOf: (lm: unknown[]) => number;
+     feedback: (angle: number, phase: string, lm: unknown[]) => string;
+   }>;
++  setFrameAspect: (w: number, h: number) => void;
++  coachKeyFor: (name: string) => string | null;
++  classifyExercise: (name: string, movementPattern?: string) => { key: string | null; kind: string; reason: string };
++  PATTERNS: Record<string, { angle: string[]; needs?: string[]; up: number; down: number; startsLow?: boolean }>;
++  ROLE: Record<string, number[]>;
++  bestSide: (lm: unknown[], groups: number[][]) => number;
++  angleBetween: (a: unknown, b: unknown, c: unknown) => number;
+   VisionCoach: {
++    [key: string]: any;
+     currentExercise: string;
+     phase: string;
+     repCount: number;
+@@ -51,10 +59,15 @@
+       return node;
+     },
+     querySelectorAll: () => [],
++    createElement: () => ({ getContext: () => ({ drawImage: () => {} }), toDataURL: () => "data:image/jpeg;base64,AA" }),
++    hidden: false,
+   };
+   return { documentStub, nodes };
+ }
+ 
++const clock = { t: 0 };
++const rafCalls = { count: 0 };
++
+ function loadModule(documentStub: unknown, apiStub: unknown) {
+   const start = VISION_SOURCE.indexOf("const LANDMARK = {");
+   const end = VISION_SOURCE.indexOf('window.addEventListener("DOMContentLoaded"');
+@@ -66,6 +79,12 @@
+   EXERCISE_CONFIG: EXERCISE_CONFIG,
+   VisionCoach: VisionCoach,
+   angleBetween: angleBetween,
++  setFrameAspect: setFrameAspect,
++  coachKeyFor: coachKeyFor,
++  classifyExercise: classifyExercise,
++  PATTERNS: PATTERNS,
++  ROLE: ROLE,
++  bestSide: bestSide,
+   hasVisiblePose: hasVisiblePose,
+   tiltFromVertical: tiltFromVertical,
+   torsoLineOffset: torsoLineOffset,
+@@ -74,7 +93,7 @@
+     window: unknown, document: unknown, api: unknown, performance: unknown, raf: unknown,
+   ) => VisionModule;
+   const windowStub = { addEventListener: () => {}, setTimeout: () => 0, clearTimeout: () => {} };
+-  return factory(windowStub, documentStub, apiStub, { now: () => 0 }, () => 0);
++  return factory(windowStub, documentStub, apiStub, { now: () => clock.t }, () => { rafCalls.count += 1; return 0; });
+ }
+ 
+ const SHOULDER_L = 11;
+@@ -117,6 +136,8 @@
+   let module: VisionModule;
+ 
+   beforeEach(() => {
++    clock.t = 0;
++    rafCalls.count = 0;
+     const built = makeDocument();
+     nodes = built.nodes;
+     module = loadModule(built.documentStub, { get: async () => ({ configured: true, available: true }) });
+@@ -174,25 +195,29 @@
+   });
+ 
+   describe("per-frame updates during the movement", () => {
+-    it("changes the visible cue mid-repetition, before the rep completes", () => {
+-      module.VisionCoach.processExercise(pose({
++    it("changes the visible cue mid-repetition once the new cue is sustained, before the rep completes", () => {
++      const drift = pose({
+         ...both(SHOULDERS, 0.5, 0.3),
+         ...both(ELBOWS, 0.72, 0.5),
+         ...both(WRISTS, 0.9, 0.5),
+         ...both(HIPS, 0.5, 0.7),
+-      }));
+-      expect(feedbackText()).toBe("Keep your elbows close to your torso");
+-      expect(module.VisionCoach.phase).toBe("down");
+-      expect(module.VisionCoach.repCount).toBe(0);
+-
+-      module.VisionCoach.processExercise(pose({
++      });
++      const shallow = pose({
+         ...both(SHOULDERS, 0.5, 0.3),
+         ...both(ELBOWS, 0.5, 0.5),
+         ...both(WRISTS, 0.65, 0.62),
+         ...both(HIPS, 0.5, 0.7),
+-      }));
++      });
++      module.VisionCoach.processExercise(drift);
++      expect(feedbackText()).toBe("Keep your elbows close to your torso");
++
++      // A single different frame must not flip the text (flicker protection).
++      clock.t += 2000;
++      module.VisionCoach.processExercise(shallow);
++      expect(feedbackText()).toBe("Keep your elbows close to your torso");
++
++      for (let i = 0; i < 4; i += 1) { clock.t += 100; module.VisionCoach.processExercise(shallow); }
+       expect(feedbackText()).toBe("Curl a bit higher — full range of motion");
+-      // Still mid-rep: no completion, no score, cue already updated.
+       expect(module.VisionCoach.phase).toBe("down");
+       expect(module.VisionCoach.repCount).toBe(0);
+     });
+@@ -206,13 +231,17 @@
+         ...both(WRISTS, 0.65, 0.62, 0.1),
+         ...both(HIPS, 0.5, 0.7, 0.1),
+       }));
+-      expect(feedbackText()).toBe("Move fully into frame so your body is clearly visible.");
++      expect(feedbackText()).toContain(
++        "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed.",
++      );
+       expect(module.VisionCoach.repCount).toBe(0);
+     });
+ 
+     it("does not throw when the pose disappears (camera / detection loss)", () => {
+       expect(() => module.VisionCoach.processExercise([])).not.toThrow();
+-      expect(feedbackText()).toBe("Move fully into frame so your body is clearly visible.");
++      expect(feedbackText()).toContain(
++        "Keep one shoulder, elbow, wrist and hip visible. Turn slightly sideways and improve lighting if needed.",
++      );
+     });
+ 
+     it("routes an unsupported exercise to the shared coach without inventing a specific correction", () => {
+@@ -262,3 +291,393 @@
+     });
+   });
+ });
++
++/** Elbow at (0.5,0.5), shoulder straight above; wrist placed so the elbow angle equals `deg`. */
++function armPose(deg: number, extra: Record<number, { x: number; y: number; visibility?: number }> = {}) {
++  const r = (deg * Math.PI) / 180;
++  return pose({
++    ...both(SHOULDERS, 0.5, 0.3),
++    ...both(ELBOWS, 0.5, 0.5),
++    ...both(WRISTS, 0.5 + 0.2 * Math.sin(r), 0.5 - 0.2 * Math.cos(r)),
++    ...both(HIPS, 0.5, 0.7),
++    ...extra,
++  });
++}
++
++describe("vision pipeline: rep counting and robustness (synthetic landmark sequences)", () => {
++  let module: VisionModule;
++  let nodes: Map<string, StubNode>;
++  const feed = (angles: number[]) => angles.forEach((a) => module.VisionCoach.processExercise(armPose(a)));
++  /** Linear ramp of `n` frames, roughly what ~0.3s of real 30fps movement looks like. */
++  const ramp = (from: number, to: number, n: number) =>
++    Array.from({ length: n }, (_, i) => from + ((to - from) * (i + 1)) / n);
++  const hold = (angle: number, n: number) => Array.from({ length: n }, () => angle);
++  const fullRep = () => [...ramp(170, 40, 10), ...hold(40, 5), ...ramp(40, 170, 10), ...hold(170, 5)];
++
++  beforeEach(() => {
++    clock.t = 0;
++    rafCalls.count = 0;
++    const built = makeDocument();
++    nodes = built.nodes;
++    module = loadModule(built.documentStub, { get: async () => ({}) });
++    module.VisionCoach.currentExercise = "curl";
++    module.VisionCoach.comparison.unsupported = true; // no network in unit tests
++    module.VisionCoach.resetReps();
++  });
++
++  it("counts one rep per complete extend -> curl -> extend cycle, and updates the angle readout", () => {
++    feed(hold(170, 5));
++    feed(fullRep());
++    expect(module.VisionCoach.repCount).toBe(1);
++    feed(fullRep());
++    expect(module.VisionCoach.repCount).toBe(2);
++    expect(nodes.get("vision-reps")?.textContent).toBe("2");
++    expect(nodes.get("vision-angle")?.textContent).toMatch(/^\d+ deg$/);
++  });
++
++  it("does not count a half repetition that never reaches the bottom threshold", () => {
++    feed([...hold(170, 5), ...ramp(170, 90, 10), ...hold(90, 5), ...ramp(90, 170, 10), ...hold(170, 5)]);
++    expect(module.VisionCoach.repCount).toBe(0);
++  });
++
++  it("ignores a single noisy frame", () => {
++    feed([...hold(170, 6), 20, ...hold(170, 6)]);
++    expect(module.VisionCoach.repCount).toBe(0);
++    expect(module.VisionCoach.phase).toBe("up");
++  });
++
++  it("keeps a rep in progress across a brief occlusion instead of resetting the state", () => {
++    feed([...hold(170, 5), ...ramp(170, 40, 10), ...hold(40, 6)]);
++    expect(module.VisionCoach.phase).toBe("down");
++    const hidden = pose({ ...both(SHOULDERS, 0.5, 0.3, 0.05), ...both(ELBOWS, 0.5, 0.5, 0.05), ...both(WRISTS, 0.5, 0.7, 0.05), ...both(HIPS, 0.5, 0.7, 0.05) });
++    module.VisionCoach.processExercise(hidden);
++    expect(module.VisionCoach.phase).toBe("down");
++    feed([...ramp(40, 170, 10), ...hold(170, 5)]);
++    expect(module.VisionCoach.repCount).toBe(1);
++  });
++
++  it("measures the same true angle on a 16:9 frame once the aspect ratio is applied", () => {
++    // Pixel-space 45 degree angle in a 1280x720 frame, converted to normalised coordinates.
++    const shoulder = { x: 500 / 1280, y: 300 / 720 };
++    const elbow = { x: 500 / 1280, y: 500 / 720 };
++    const wrist = { x: 700 / 1280, y: 300 / 720 };
++    module.setFrameAspect(1, 1);
++    const distorted = module.angleBetween(shoulder, elbow, wrist);
++    module.setFrameAspect(1280, 720);
++    const corrected = module.angleBetween(shoulder, elbow, wrist);
++    expect(Math.abs(distorted - 45)).toBeGreaterThan(10);
++    expect(corrected).toBeCloseTo(45, 1);
++  });
++
++  it("takes every joint of one angle from the same body side", () => {
++    const lm = pose({
++      [SHOULDER_L]: { x: 0.5, y: 0.3, visibility: 0.9 }, [ELBOW_L]: { x: 0.5, y: 0.5, visibility: 0.9 }, [WRIST_L]: { x: 0.7, y: 0.5, visibility: 0.9 },
++      [SHOULDER_R]: { x: 0.1, y: 0.1, visibility: 0.5 }, [ELBOW_R]: { x: 0.9, y: 0.9, visibility: 0.5 }, [WRIST_R]: { x: 0.1, y: 0.9, visibility: 0.5 },
++      ...both(HIPS, 0.5, 0.7),
++    });
++    expect(module.bestSide(lm, module.EXERCISE_CONFIG.curl.required)).toBe(0);
++    module.VisionCoach.processExercise(lm);
++    expect(nodes.get("vision-angle")?.textContent).toBe("90 deg");
++  });
++
++  it("maps catalogue names to the right analysis rules", () => {
++    const key = module.coachKeyFor;
++    expect(key("Barbell Back Squat")).toBe("squat");
++    expect(key("Dumbbell Biceps Curl")).toBe("curl");
++    expect(key("Push-Up")).toBe("pushup");
++    expect(key("Bent Over Row")).toBe("row");
++    expect(key("Seated Cable Row")).toBe("seatedrow");
++    expect(key("Lying Leg Curl")).toBe("legCurl");
++    expect(key("Burpee")).toBeNull();
++  });
++
++  it("gives seated-row torso feedback without bent-over hinge rules", () => {
++    const row = module.EXERCISE_CONFIG.seatedrow;
++    const leaning = pose({ ...both(SHOULDERS, 0.7, 0.3), ...both(HIPS, 0.5, 0.7) });
++    const upright = pose({ ...both(SHOULDERS, 0.5, 0.3), ...both(HIPS, 0.5, 0.7) });
++    expect(row.feedback(80, "down", leaning)).toBe("Keep your torso more stable");
++    expect(row.feedback(130, "down", upright)).toBe("Complete a comfortable range of motion");
++  });
++
++  it("keeps the loop alive when a frame throws", () => {
++    const coach = module.VisionCoach;
++    coach.running = true;
++    coach.tick = () => { throw new Error("boom"); };
++    coach.loop();
++    expect(coach.running).toBe(true);
++    expect(rafCalls.count).toBe(1); // next frame still scheduled
++  });
++
++  it("reports a lost pose instead of leaving stale feedback, after a short grace period", () => {
++    const coach = module.VisionCoach;
++    coach.handleNoPose(1000);
++    expect(nodes.get("camera-feedback")?.textContent ?? "").toBe("");
++    coach.handleNoPose(1700);
++    expect(nodes.get("camera-feedback")?.textContent).toContain("can't see you");
++  });
++
++  it("never shows the server's generic 'model not configured' text as coaching", async () => {
++    const built = makeDocument();
++    const api = { post: async () => ({
++      modelConfigured: false,
++      confidence: 0.35,
++      feedback: [{ cue: "Keep the movement controlled and capture a full repetition from a clear angle." }],
++    }) };
++    const m = loadModule(built.documentStub, api);
++    m.VisionCoach.running = true;
++    m.VisionCoach.video = { videoWidth: 0, videoHeight: 0, readyState: 0 };
++    m.VisionCoach.coachFrameBuffer = Array.from({ length: 8 }, () => []);
++    m.VisionCoach.currentExercise = "burpee";
++    await m.VisionCoach.requestUniversalCoachAnalysis();
++    expect(m.VisionCoach.coachFeedback).toBe("");
++    expect(m.VisionCoach.aiCoachAvailable).toBe(false);
++    m.VisionCoach.processExercise(pose({}));
++    expect(built.nodes.get("camera-feedback")?.textContent).toContain("No form rules exist for this exercise yet");
++  });
++
++  it("drops stale AI feedback after its time-to-live", () => {
++    const coach = module.VisionCoach;
++    coach.currentExercise = "burpee";
++    coach.aiCoachAvailable = true;
++    coach.coachFeedback = "Brace your core.";
++    coach.coachFeedbackAt = 0;
++    clock.t = 1000;
++    coach.processExercise(pose({}));
++    expect(nodes.get("camera-feedback")?.textContent).toBe("Brace your core.");
++    clock.t = 20000;
++    coach.processExercise(pose({}));
++    expect(nodes.get("camera-feedback")?.textContent).not.toBe("Brace your core.");
++  });
++});
++
++function loadCatalogueNames(): string[] {
++  const csv = fs.readFileSync(path.resolve(__dirname, "../../data/exercises.csv"), "utf8").split("\n").slice(1);
++  const names = new Set<string>();
++  for (const line of csv) {
++    const match = line.match(/^(?:"([^"]*)"|([^,]*))/);
++    const name = (match?.[1] ?? match?.[2] ?? "").trim();
++    if (name) names.add(name);
++  }
++  return [...names];
++}
++
++describe("whole-catalogue coverage (movement-pattern engine)", () => {
++  let module: VisionModule;
++  beforeEach(() => {
++    clock.t = 0;
++    module = loadModule(makeDocument().documentStub, { get: async () => ({}) });
++  });
++
++  it("gives every catalogue exercise a defined outcome, with no name left unclassified", () => {
++    const names = loadCatalogueNames();
++    expect(names.length).toBeGreaterThan(9000);
++    const tally: Record<string, number> = {};
++    for (const name of names) {
++      const result = module.classifyExercise(name);
++      tally[result.kind] = (tally[result.kind] ?? 0) + 1;
++      if (result.kind === "counted" || result.kind === "hold") {
++        expect(module.EXERCISE_CONFIG[result.key as string], `${name} -> ${result.key}`).toBeDefined();
++      } else {
++        expect(result.kind, name).toBe("tracking");
++        expect(result.reason.length, name).toBeGreaterThan(10); // honest reason, never silent
++      }
++    }
++    expect(tally.unknown ?? 0).toBe(0);
++    expect((tally.counted ?? 0) / names.length).toBeGreaterThan(0.8);
++  });
++
++  it.each([
++    ["Slow Tempo High Cable D Handle Bench Press", "pressHorizontal"],
++    ["Standard Stance Rope Overhead Press", "pressVertical"],
++    ["Kettlebell Press", "pressVertical"],
++    ["Overhead Triceps Extension", "tricepsExtension"],
++    ["Cable Pushdown", "tricepsPushdown"],
++    ["Skull Crusher", "tricepsExtension"],
++    ["Pike Push Up", "pressHorizontal"],
++    ["Push Up", "pushup"],
++    ["Lat Pulldown", "pullVertical"],
++    ["Assisted Pull Up", "pullVertical"],
++    ["Seated Cable Row", "seatedrow"],
++    ["Single Arm Bent Over Row", "row"],
++    ["Hammer Curl", "curl"],
++    ["Single Leg Barbell Curl", "curl"],
++    ["Seated Leg Curl", "legCurl"],
++    ["Leg Extension", "legExtension"],
++    ["Leg Press", "legPress"],
++    ["Bulgarian Split Squat", "squat"],
++    ["Walking Lunge", "lunge"],
++    ["Romanian Deadlift", "hinge"],
++    ["Hip Thrust", "hipThrust"],
++    ["Cable Lateral Raise", "lateralRaise"],
++    ["Hanging Leg Raise", "legRaise"],
++    ["Side Plank", "plank"],
++  ])("maps %s to %s", (name, key) => {
++    expect(module.classifyExercise(name).key).toBe(key);
++  });
++
++  it.each([
++    "Treadmill Run", "Burpee", "Kettlebell Swing", "Cable Woodchop", "Farmer Carry", "Shrug",
++    "Dumbbell Fly", "Calf Raise", "Ab Crunch", "Nordic Curl", "Face Pull", "Glute Kickback",
++  ])("is honest that %s cannot be rep-counted", (name) => {
++    const result = module.classifyExercise(name);
++    expect(result.key).toBeNull();
++    expect(result.kind).toBe("tracking");
++  });
++
++  /** Landmarks whose angle at the middle role equals `deg`; every other required joint sits on a vertical torso line. */
++  function patternPose(key: string, deg: number) {
++    const def = module.PATTERNS[key];
++    const r = (deg * Math.PI) / 180;
++    const base: Record<string, [number, number]> = {
++      shoulder: [0.5, 0.3], elbow: [0.5, 0.45], wrist: [0.5, 0.6], hip: [0.5, 0.65], knee: [0.5, 0.8], ankle: [0.5, 0.95],
++    };
++    const [first, vertex, third] = def.angle;
++    base[vertex] = [0.5, 0.5];
++    base[first] = [0.5, 0.3];
++    base[third] = [0.5 + 0.2 * Math.sin(r), 0.5 - 0.2 * Math.cos(r)];
++    const points: Record<number, { x: number; y: number }> = {};
++    for (const role of Object.keys(base)) {
++      for (const index of module.ROLE[role]) points[index] = { x: base[role][0], y: base[role][1] };
++    }
++    return pose(points);
++  }
++
++  it("counts exactly one repetition per full cycle for every movement pattern, including start-low movements", () => {
++    for (const key of Object.keys(module.PATTERNS)) {
++      const def = module.PATTERNS[key];
++      const rest = def.startsLow ? Math.max(5, def.down - 25) : Math.min(178, def.up + 12);
++      const work = def.startsLow ? Math.min(178, def.up + 12) : Math.max(2, def.down - 20);
++      const built = makeDocument();
++      const m = loadModule(built.documentStub, { get: async () => ({}) });
++      m.VisionCoach.currentExercise = key;
++      m.VisionCoach.comparison.unsupported = true;
++      m.VisionCoach.resetReps();
++      const ramp = (a: number, b: number, n = 10) => Array.from({ length: n }, (_, i) => a + ((b - a) * (i + 1)) / n);
++      const frames = [...Array(5).fill(rest), ...ramp(rest, work), ...Array(5).fill(work), ...ramp(work, rest), ...Array(5).fill(rest)];
++      const partial = (def.down + def.up) / 2; // between the thresholds: never reaches the work phase
++      const half = [...ramp(rest, partial), ...ramp(partial, rest)];
++
++      half.forEach((a) => m.VisionCoach.processExercise(patternPose(key, a)));
++      expect(m.VisionCoach.repCount, `${key} half rep`).toBe(0);
++      frames.forEach((a) => m.VisionCoach.processExercise(patternPose(key, a)));
++      expect(m.VisionCoach.repCount, `${key} full rep`).toBe(1);
++    }
++  });
++
++  it("reports plank as a hold with no repetitions", () => {
++    const built = makeDocument();
++    const m = loadModule(built.documentStub, { get: async () => ({}) });
++    m.VisionCoach.currentExercise = "plank";
++    const lm = pose({
++      ...both([SHOULDER_L, SHOULDER_R], 0.7, 0.5), ...both([HIP_L, HIP_R], 0.45, 0.6), ...both([ANKLE_L, ANKLE_R], 0.15, 0.5),
++      ...both([ELBOW_L, ELBOW_R], 0.7, 0.6), ...both([WRIST_L, WRIST_R], 0.75, 0.6),
++    });
++    m.VisionCoach.processExercise(lm);
++    expect(built.nodes.get("camera-feedback")?.textContent).toBe("Keep your hips up — avoid sagging");
++    expect(built.nodes.get("vision-angle")?.textContent).toBe("hold");
++    expect(m.VisionCoach.repCount).toBe(0);
++  });
++
++  it("tells the user when an exercise is tracking-only instead of showing a generic message", () => {
++    const built = makeDocument();
++    const m = loadModule(built.documentStub, { get: async () => ({}) });
++    m.VisionCoach.currentExercise = "universal";
++    m.VisionCoach.trackingReason = module.classifyExercise("Burpee").reason;
++    m.VisionCoach.processExercise(pose({}));
++    expect(built.nodes.get("camera-feedback")?.textContent).toContain("not rep-counted");
++  });
++
++  it("labels pattern-based coaching as experimental and the original five as not", () => {
++    const built = makeDocument();
++    const m = loadModule(built.documentStub, { get: async () => ({}) });
++    m.VisionCoach.currentExercise = "pressVertical";
++    expect(m.VisionCoach.coachingNotice()).toContain("experimental");
++    m.VisionCoach.currentExercise = "curl";
++    expect(m.VisionCoach.coachingNotice()).not.toContain("experimental");
++  });
++});
++
++describe("catalogue exercises actually recommended by the workout generator (DB seed)", () => {
++  const seed = fs.readFileSync(path.resolve(__dirname, "../db/seed.ts"), "utf8");
++  const block = seed.slice(seed.indexOf("const EXERCISES"), seed.indexOf("];", seed.indexOf("const EXERCISES")));
++  const rows = [...block.matchAll(/name:\s*"([^"]+)"[^}]*?movementPattern:\s*"([^"]+)"/g)].map((m) => ({ name: m[1], pattern: m[2] }));
++  let module: VisionModule;
++  beforeEach(() => { module = loadModule(makeDocument().documentStub, { get: async () => ({}) }); });
++
++  it("classifies every seeded exercise (name plus its movementPattern) with no unknowns", () => {
++    expect(rows.length).toBeGreaterThan(40);
++    for (const row of rows) {
++      const result = module.classifyExercise(row.name, row.pattern);
++      expect(result.kind, row.name).not.toBe("unknown");
++    }
++  });
++
++  it("uses movementPattern only when the name is not recognised, and never overrides a recognised name", () => {
++    expect(module.classifyExercise("Zottman Thing", "elbow_flexion").key).toBe("curl");
++    expect(module.classifyExercise("Totally New Pull", "vertical_pull").key).toBe("pullVertical");
++    expect(module.classifyExercise("Totally New Move", "dynamic").kind).toBe("tracking");
++    expect(module.classifyExercise("Totally New Move", "").kind).toBe("unknown");
++    // Dumbbell Fly is stored as horizontal_push but is an isolation move; the name wins.
++    expect(module.classifyExercise("Dumbbell Fly", "horizontal_push").kind).toBe("tracking");
++    expect(module.classifyExercise("Superman Rows (Bodyweight)", "horizontal_pull").kind).toBe("tracking");
++  });
++
++  it("handles press variants that have words between the angle and 'press'", () => {
++    expect(module.classifyExercise("Floor Dumbbell Press").key).toBe("pressHorizontal");
++    expect(module.classifyExercise("Incline Dumbbell Press").key).toBe("pressHorizontal");
++  });
++});
++
++describe("equipment scanner no longer pollutes the live coach when it has no model", () => {
++  it("hides its card and stops polling after the server reports it is not configured", async () => {
++    const built = makeDocument();
++    const calls: string[] = [];
++    const api = { post: async (p: string) => { calls.push(p); return { configured: false }; } };
++    const m = loadModule(built.documentStub, api);
++    const coach = m.VisionCoach;
++    coach.running = true;
++    coach.video = { readyState: 2, videoWidth: 10, videoHeight: 10 };
++    coach.equipmentCanvas = { getContext: () => ({ drawImage: () => {} }), toDataURL: () => "data:image/jpeg;base64,AA" };
++    await coach.analyzeEquipmentFrame();
++    expect(calls).toEqual(["/equipment/detect"]);
++    expect(coach.equipmentDisabled).toBe(true);
++    expect(built.nodes.get("equipment-recognition-card")?.style.display).toBe("none");
++    expect(coach.equipmentTimer).toBeNull();
++    expect(built.nodes.get("equipment-recognition-status")?.textContent ?? "").not.toContain("Model not configured");
++  });
++});
++
++describe("framing messages and partial visibility", () => {
++  it("names the joints that are missing instead of a generic request", () => {
++    const built = makeDocument();
++    const m = loadModule(built.documentStub, { get: async () => ({}) });
++    m.VisionCoach.currentExercise = "row";
++    // Desk-style framing: head and shoulders, arms visible, hips out of frame.
++    m.VisionCoach.processExercise(pose({
++      ...both([SHOULDER_L, SHOULDER_R], 0.5, 0.4), ...both([ELBOW_L, ELBOW_R], 0.5, 0.6), ...both([WRIST_L, WRIST_R], 0.5, 0.75),
++      ...both([HIP_L, HIP_R], 0.5, 1.1, 0.05),
++    }));
++    expect(built.nodes.get("camera-feedback")?.textContent).toContain("Can't see your hips yet.");
++  });
++
++  it("coaches a bent-over row without a visible knee (hinge check skipped, reps still counted)", () => {
++    const built = makeDocument();
++    const m = loadModule(built.documentStub, { get: async () => ({}) });
++    const coach = m.VisionCoach;
++    coach.currentExercise = "row";
++    coach.comparison.unsupported = true;
++    coach.resetReps();
++    const rowPose = (deg: number) => {
++      const r = (deg * Math.PI) / 180;
++      return pose({
++        ...both([SHOULDER_L, SHOULDER_R], 0.5, 0.3), ...both([ELBOW_L, ELBOW_R], 0.5, 0.5),
++        ...both([WRIST_L, WRIST_R], 0.5 + 0.2 * Math.sin(r), 0.5 - 0.2 * Math.cos(r)), ...both([HIP_L, HIP_R], 0.5, 0.7),
++        ...both([25, 26], 0.5, 0.9, 0.05), ...both([ANKLE_L, ANKLE_R], 0.5, 1.1, 0.05),
++      });
++    };
++    const ramp = (a: number, b: number) => Array.from({ length: 10 }, (_, i) => a + ((b - a) * (i + 1)) / 10);
++    [...Array(5).fill(170), ...ramp(170, 40), ...Array(5).fill(40), ...ramp(40, 170), ...Array(5).fill(170)]
++      .forEach((a) => coach.processExercise(rowPose(a)));
++    expect(coach.repCount).toBe(1);
++  });
++});
