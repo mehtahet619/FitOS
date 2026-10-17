@@ -1,6 +1,6 @@
 (() => {
   const form = document.getElementById("price-guess-form");
-  if (!form || !window.Api) return;
+  if (!form || typeof Api === "undefined") return;
 
   const input = document.getElementById("price-guess-input");
   const submit = document.getElementById("price-guess-submit");
@@ -53,4 +53,6 @@
   });
 
   void loadSummary();
+  // Refresh the in-memory community total so visitors on the page see new guesses.
+  window.setInterval(() => { void loadSummary(); }, 15000);
 })();
