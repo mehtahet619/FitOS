@@ -748,20 +748,41 @@ const VisionCoach = {
   },
 
   async createLandmarker() {
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    const withTimeout = (promise, timeoutMs, label) => {
+      let timeoutId;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds. Check your connection and retry.`)),
+          timeoutMs,
+        );
+      });
+      return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+    };
+
+    // Bound network/model initialization so mobile browsers never leave the
+    // Start Camera button spinning forever if a CDN request stalls.
+    const vision = await withTimeout(
+      FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      ),
+      15000,
+      "Pose runtime download",
     );
     const modelAssetPath =
       "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
     // GPU is not available on every browser/device; fall back to CPU instead of
-    // failing the whole feature.
+    // failing the whole feature. Give each delegate a bounded initialization time.
     for (const delegate of ["GPU", "CPU"]) {
       try {
-        const landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath, delegate },
-          runningMode: "VIDEO",
-          numPoses: 1,
-        });
+        const landmarker = await withTimeout(
+          PoseLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath, delegate },
+            runningMode: "VIDEO",
+            numPoses: 1,
+          }),
+          delegate === "GPU" ? 15000 : 20000,
+          `${delegate} pose model initialization`,
+        );
         this.poseDelegate = delegate;
         return landmarker;
       } catch (error) {
