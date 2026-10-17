@@ -1,4 +1,19 @@
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /verify-login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /homepage
+Disallow: /today
+Disallow: /workout
+Disallow: /workouts
+Disallow: /nutrition
+Disallow: /equipment
+Disallow: /history
+Disallow: /profile
+Disallow: /settings
 
 Sitemap: https://adaptive-fit-web.onrender.com/sitemap.xml

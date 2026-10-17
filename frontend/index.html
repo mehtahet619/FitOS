@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="FitOS" />
 <meta name="description" content="Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FitOS." />
 <meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="color-scheme" content="light" />
 <link rel="canonical" href="https://adaptive-fit-web.onrender.com/" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="FitOS" />
@@ -51,7 +52,9 @@
     }).catch(() => {});
   }
 </script>
-<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-96.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<link rel="manifest" href="/manifest.json" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <title>AI Workout Planner Based on Gym Equipment | FitOS</title>
 <link rel="stylesheet" href="styles.css?v=fitos-20261015-today-dashboard-v1" />
@@ -246,9 +249,19 @@
     <footer class="site-footer">
       <a class="site-brand footer-brand" href="/" aria-label="FitOS home"><img src="assets/site-logo.png" alt="" width="38" height="38" loading="lazy" /><span>FitOS</span></a>
       <p>Train for your life. Start with what you have.</p>
-      <nav aria-label="Footer navigation"><a href="#features">Features</a><a href="#faq">FAQ</a><a href="#pricing-guess-section">Price guess</a><a href="/login">Log in</a><a href="/register" data-cta-placement="footer">Get started</a></nav>
+      <nav aria-label="Footer navigation"><a href="#features">Features</a><a href="#faq">FAQ</a><a href="#pricing-guess-section">Price guess</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/login">Log in</a><a href="/register" data-cta-placement="footer">Get started</a></nav>
       <small>© <span id="landing-year">2026</span> FitOS</small>
     </footer>
+  </section>
+
+
+  <section id="screen-not-found" class="screen not-found-screen" aria-labelledby="not-found-title">
+    <a class="skip-link" href="#not-found-title">Skip to content</a>
+    <div class="not-found-mark" aria-hidden="true"><img src="assets/site-logo.png" alt="" width="56" height="56" /></div>
+    <p class="eyebrow">404 · Page not found</p>
+    <h1 id="not-found-title">This page isn't<br /><span>part of the plan.</span></h1>
+    <p>That address may be outdated, or the page may have moved. Head back to FitOS and continue from there.</p>
+    <div class="not-found-actions"><a class="button button-dark" href="/">Back to FitOS</a><a class="button button-glass" href="/login">Log in</a></div>
   </section>
 
   <!-- ============ FULL-SCREEN GYM INTRO ============ -->
@@ -508,7 +521,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="gym-intro.js?v=fitos-20261010-grow-impact-v1"></script>
 <script src="config.js"></script>
-<script src="api.js"></script>\n<script src="pricing-guesses.js?v=fitos-price-guess-v1"></script>
+<script src="api.js"></script>
+<script src="pricing-guesses.js?v=fitos-price-guess-v2"></script>
 <script src="app.js?v=fitos-20261015-today-dashboard-v1"></script>
 <script type="module" src="vision.js"></script>
 </body>

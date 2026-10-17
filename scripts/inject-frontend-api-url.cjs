@@ -30,7 +30,7 @@ fs.writeFileSync(
   "utf8",
 );
 
-const siteFiles = ["index.html", "app.js", "robots.txt", "sitemap.xml"];
+const siteFiles = ["index.html", "app.js", "robots.txt", "sitemap.xml", "terms.html", "privacy.html", "404.html"];
 for (const filename of siteFiles) {
   const filePath = path.join(__dirname, "..", "frontend", filename);
   const siteSource = fs.readFileSync(filePath, "utf8");
