@@ -20,6 +20,7 @@ import { coachRouter } from "./modules/coach/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 import { AuthedRequest, readIdentity, requireAuth } from "./common/auth";
+import { db } from "./db/client";
 
 const app = express();
 app.set("trust proxy", 1);
