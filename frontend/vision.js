@@ -194,16 +194,8 @@ function hipLineDeviation(shoulder, hip, ankle) {
   return (hip.y - lineY) / length;
 }
 
-function coachKeyFor(name = "") {
-  const n = String(name).toLowerCase();
-  // Lower-body / wrist curls are not biceps curls and must not use the elbow rules.
-  if (/leg.?curl|hamstring.?curl|wrist.?curl|nordic/.test(n)) return null;
-  if (/squat/.test(n)) return "squat";
-  if (/curl/.test(n)) return "curl";
-  if (/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/.test(n)) return "seatedrow";
-  if (/bent.?over.?row|barbell.?row|dumbbell.?row|one.?arm.?row|\browing\b/.test(n)) return "row";
-  if (/push.?up|press.?up/.test(n)) return "pushup";
-  return null;
+function coachKeyFor(name = "", movementPattern = "") {
+  return classifyExercise(name, movementPattern).key;
 }
 
 const EXERCISE_CONFIG = {
@@ -354,6 +346,233 @@ const EXERCISE_CONFIG = {
   },
 };
 
+
+const ROLE = {
+  shoulder: [LANDMARK.LEFT_SHOULDER, LANDMARK.RIGHT_SHOULDER],
+  elbow: [LANDMARK.LEFT_ELBOW, LANDMARK.RIGHT_ELBOW],
+  wrist: [LANDMARK.LEFT_WRIST, LANDMARK.RIGHT_WRIST],
+  hip: [LANDMARK.LEFT_HIP, LANDMARK.RIGHT_HIP],
+  knee: [LANDMARK.LEFT_KNEE, LANDMARK.RIGHT_KNEE],
+  ankle: [LANDMARK.LEFT_ANKLE, LANDMARK.RIGHT_ANKLE],
+};
+
+const CHECKS = {
+  torsoLean(lm, p) {
+    const shoulder = pick(lm, ...ROLE.shoulder);
+    const hip = pick(lm, ...ROLE.hip);
+    return tiltFromVertical(shoulder, hip) > p.max ? p.msg : null;
+  },
+  elbowTuck(lm, p) {
+    const shoulder = pick(lm, ...ROLE.shoulder);
+    const hip = pick(lm, ...ROLE.hip);
+    const elbow = pick(lm, ...ROLE.elbow);
+    return torsoLineOffset(elbow, shoulder, hip) > p.max ? p.msg : null;
+  },
+  hipLine(lm) {
+    const deviation = hipLineDeviation(pick(lm, ...ROLE.shoulder), pick(lm, ...ROLE.hip), pick(lm, ...ROLE.ankle));
+    if (deviation > 0.08) return "Keep your hips up — avoid sagging";
+    if (deviation < -0.08) return "Lower your hips — avoid piking";
+    return null;
+  },
+};
+
+// angle: three roles, angle measured at the middle one. up/down: high/low angle
+// thresholds. startsLow: the resting position is the LOW angle (e.g. overhead
+// press starts with bent elbows and the working phase is the extended one).
+const PATTERNS = {
+  pressHorizontal: {
+    label: "Horizontal press / dip", angle: ["shoulder", "elbow", "wrist"], up: 150, down: 90, view: "side",
+    restMsg: "Press to full lockout, then lower with control", workMsg: "Good depth — drive back up",
+  },
+  pressVertical: {
+    label: "Overhead press", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 155, down: 100, startsLow: true, view: "front",
+    checks: [{ type: "torsoLean", max: 20, msg: "Keep your ribs down — avoid leaning back" }],
+    restMsg: "Press up until your arms are straight", workMsg: "Lockout overhead, then lower with control",
+  },
+  pullVertical: {
+    label: "Pull-up / pulldown", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 150, down: 85, view: "front",
+    checks: [{ type: "torsoLean", max: 25, msg: "Avoid swinging — keep your torso steady" }],
+    restMsg: "Start from a full hang, then pull", workMsg: "Good pull — lower with control",
+  },
+  tricepsExtension: {
+    label: "Triceps extension", angle: ["shoulder", "elbow", "wrist"], up: 155, down: 100, startsLow: true, view: "side",
+    restMsg: "Extend your arms fully", workMsg: "Squeeze at the top, then return slowly",
+  },
+  tricepsPushdown: {
+    label: "Triceps pushdown", angle: ["shoulder", "elbow", "wrist"], needs: ["hip"], up: 155, down: 100, startsLow: true, view: "side",
+    checks: [
+      { type: "elbowTuck", max: 0.3, msg: "Keep your elbows pinned to your sides" },
+      { type: "torsoLean", max: 25, msg: "Stay tall — avoid leaning over the weight" },
+    ],
+    restMsg: "Push down until your arms are straight", workMsg: "Squeeze at the bottom, then return slowly",
+  },
+  lunge: {
+    label: "Lunge / step-up", angle: ["hip", "knee", "ankle"], up: 160, down: 110, view: "side",
+    restMsg: "Stand tall, then lower with control", workMsg: "Good depth — drive up through the front foot",
+  },
+  legPress: {
+    label: "Leg press", angle: ["hip", "knee", "ankle"], up: 155, down: 100, view: "side",
+    restMsg: "Press to near-full extension", workMsg: "Good depth — press back up",
+  },
+  hinge: {
+    label: "Hip hinge", angle: ["shoulder", "hip", "knee"], up: 160, down: 125, view: "side",
+    restMsg: "Stand tall, then hinge at the hips", workMsg: "Good hinge — drive your hips forward to stand",
+  },
+  hipThrust: {
+    label: "Hip thrust / bridge", angle: ["shoulder", "hip", "knee"], up: 155, down: 125, startsLow: true, view: "side",
+    restMsg: "Drive your hips up", workMsg: "Squeeze at the top, then lower with control",
+  },
+  lateralRaise: {
+    label: "Lateral raise", angle: ["hip", "shoulder", "elbow"], up: 70, down: 35, startsLow: true, view: "front",
+    checks: [{ type: "torsoLean", max: 15, msg: "Avoid swinging your torso" }],
+    restMsg: "Raise your arms out to the sides", workMsg: "Good height — lower with control",
+  },
+  frontRaise: {
+    label: "Front raise", angle: ["hip", "shoulder", "elbow"], up: 70, down: 35, startsLow: true, view: "side",
+    checks: [{ type: "torsoLean", max: 15, msg: "Avoid leaning back to lift the weight" }],
+    restMsg: "Raise your arms in front of you", workMsg: "Good height — lower with control",
+  },
+  legCurl: {
+    label: "Leg curl", angle: ["hip", "knee", "ankle"], up: 150, down: 100, view: "side",
+    restMsg: "Extend your legs, then curl", workMsg: "Squeeze, then lower with control",
+  },
+  legExtension: {
+    label: "Leg extension", angle: ["hip", "knee", "ankle"], up: 150, down: 110, startsLow: true, view: "side",
+    restMsg: "Extend your legs fully", workMsg: "Squeeze at the top, then lower slowly",
+  },
+  legRaise: {
+    label: "Leg raise", angle: ["shoulder", "hip", "knee"], up: 150, down: 115, view: "side",
+    restMsg: "Lower your legs with control", workMsg: "Good lift — lower slowly",
+  },
+};
+
+function buildPatternConfig(def) {
+  const roles = [...new Set([...def.angle, ...(def.needs || [])])];
+  const triplet = def.angle.map((role) => ROLE[role]);
+  return {
+    label: def.label,
+    pattern: true,
+    experimental: true,
+    view: def.view,
+    required: roles.map((role) => ROLE[role]),
+    startsLow: Boolean(def.startsLow),
+    upThreshold: def.up,
+    downThreshold: def.down,
+    angleOf(lm) {
+      const [a, b, c] = triplet.map(([left, right]) => pick(lm, left, right));
+      return angleBetween(a, b, c);
+    },
+    feedback(angle, phase, lm) {
+      for (const check of def.checks || []) {
+        const message = CHECKS[check.type](lm, check);
+        if (message) return message;
+      }
+      return phase === "down" ? def.workMsg : def.restMsg;
+    },
+  };
+}
+
+for (const [key, def] of Object.entries(PATTERNS)) EXERCISE_CONFIG[key] = buildPatternConfig(def);
+// Preserve the dedicated seated-row config: its upright-torso cue differs from bent-over rows.
+
+// Static hold: form cues only, no repetitions.
+EXERCISE_CONFIG.plank = {
+  label: "Plank",
+  hold: true,
+  experimental: true,
+  view: "side",
+  required: [ROLE.shoulder, ROLE.hip, ROLE.ankle],
+  angleOf: () => 0,
+  upThreshold: 0,
+  downThreshold: 0,
+  feedback: (angle, phase, lm) => CHECKS.hipLine(lm) || "Hold — keep a straight line from shoulders to ankles",
+};
+
+const TRACKING_REASONS = {
+  cardio: "Cardio and conditioning movements are not rep-counted.",
+  complex: "Complex, rotational or carrying movements can't be rep-counted reliably from one 2D camera.",
+  isolation: "This isolation movement can't be measured reliably from a single 2D camera, so reps and form aren't scored.",
+  hold: "Static holds other than plank aren't scored yet.",
+};
+
+/**
+ * Classifies a catalogue exercise name. Order matters: specific movements are
+ * tested before generic words ("leg curl" before "curl", "leg press" before
+ * "press"). Returns { key, kind, reason }.
+ */
+function classifyExercise(name = "", movementPattern = "") {
+  const n = String(name).toLowerCase().replace(/[^a-z0-9.\s-]/g, " ").replace(/\s+/g, " ").trim();
+  const has = (re) => re.test(n);
+  const counted = (key) => ({ key, kind: EXERCISE_CONFIG[key].hold ? "hold" : "counted", reason: "" });
+  const tracking = (reason) => ({ key: null, kind: "tracking", reason: TRACKING_REASONS[reason] });
+  if (!n) return { key: null, kind: "unknown", reason: "" };
+
+  if (has(/\bplank\b/)) return counted("plank");
+  if (has(/hollow|wall.?sit|dead.?hang|isometric|\bhold\b/)) return tracking("hold");
+  if (has(/treadmill|cycling|\bbike\b|battle.?rope|jump|burpee|mountain.?climber|\brun(ning)?\b|elliptical|stair|\bsled\b/)) return tracking("cardio");
+  if (has(/\bclean\b|snatch|\bjerk\b|swing|thruster|wood.?chop|\bchop\b|twist|rotation|rotary|windmill|turkish|get.?up|carry|\bwalk\b|pallof|\bpull\b.*\bsled\b/)) return tracking("complex");
+
+  if (has(/nordic/)) return tracking("isolation"); // knees fixed, torso lowers: not a knee-angle movement
+  if (has(/leg.?curl|hamstring.?curl/)) return counted("legCurl");
+  if (has(/leg.?extension|knee.?extension/)) return counted("legExtension");
+  if (has(/back.?extension|hyper.?extension|wrist.?curl|forearm/)) return tracking("isolation");
+  if (has(/leg.?raise|knee.?raise|hanging.?raise/)) return counted("legRaise");
+  if (has(/calf|shrug|crunch|sit.?up|\babs?\b|v.?up|russian|bicycle|glute.?kickback|donkey|hip.?abduct|hip.?adduct/)) return tracking("isolation");
+  if (has(/superman/)) return tracking("isolation"); // prone back extension, not a row
+  if (has(/upright.?row|face.?pull|pull.?apart|\bflyes?\b|\bfly\b|pec.?deck|cross.?over|rear.?delt|reverse.?fly/)) return tracking("isolation");
+  if (has(/kickback/)) return has(/tricep/) ? counted("tricepsExtension") : tracking("isolation");
+
+  if (has(/lateral.?raise|side.?raise/)) return counted("lateralRaise");
+  if (has(/front.?raise|plate.?raise/)) return counted("frontRaise");
+  if (has(/\braise\b/)) return tracking("isolation");
+
+  if (has(/leg.?press|hack.?press/)) return counted("legPress");
+  if (has(/\bsquat\b|goblet|sissy|pistol|hack/)) return counted("squat");
+  if (has(/lunge|step.?up|split.?squat/)) return counted("lunge");
+  if (has(/hip.?thrust|glute.?bridge|\bbridge\b|hip.?raise/)) return counted("hipThrust");
+  if (has(/deadlift|\brdl\b|romanian|good.?morning|pull.?through|stiff.?leg|hip.?hinge/)) return counted("hinge");
+
+  // Pike push-ups keep the hips high on purpose, so they must not use the push-up hip-line check.
+  if (has(/pike/)) return counted("pressHorizontal");
+  if (has(/push.?up|press.?up/)) return counted("pushup");
+  if (has(/\bdips?\b/)) return counted("pressHorizontal");
+  // Triceps work is tested before "overhead" so "Overhead Triceps Extension" is not an overhead press.
+  if (has(/push.?down|pushdown|press.?down|skull|tricep|overhead.?extension/)) {
+    return counted(has(/push.?down|pushdown|press.?down/) ? "tricepsPushdown" : "tricepsExtension");
+  }
+  if (has(/overhead|shoulder.?press|military|arnold|push.?press|landmine|kettlebell.?press/)) return counted("pressVertical");
+  if (has(/bench|chest.?press|(floor|incline|decline|flat).{0,20}press/)) return counted("pressHorizontal");
+  if (has(/pull.?down|pulldown|pull.?up|chin.?up|lat.?pull/)) return counted("pullVertical");
+  if (has(/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/)) return counted("seatedrow");
+  if (has(/\brow(ing)?\b/)) return counted("row");
+  if (has(/curl/)) return counted("curl");
+
+  // Name not recognised: fall back to the catalogue's own movementPattern field
+  // (sent with every workout exercise), so exercises added to the catalogue later
+  // still get coaching without any code change.
+  const hinted = MOVEMENT_PATTERN_HINTS[String(movementPattern || "").toLowerCase()];
+  if (hinted) return typeof hinted === "string" && EXERCISE_CONFIG[hinted] ? counted(hinted) : tracking(hinted.tracking);
+  return { key: null, kind: "unknown", reason: "" };
+}
+
+const MOVEMENT_PATTERN_HINTS = {
+  horizontal_push: "pressHorizontal",
+  vertical_push: "pressVertical",
+  horizontal_pull: "row",
+  vertical_pull: "pullVertical",
+  squat: "squat",
+  lunge: "lunge",
+  hinge: "hinge",
+  elbow_flexion: "curl",
+  elbow_extension: "tricepsExtension",
+  flexion: { tracking: "isolation" },
+  plantarflexion: { tracking: "isolation" },
+  abduction: { tracking: "isolation" },
+  anti_extension: { tracking: "isolation" },
+  rotation: { tracking: "complex" },
+  flexion_rotation: { tracking: "complex" },
+  dynamic: { tracking: "cardio" },
+};
 // A phase change must hold for this many consecutive frames, and the angle is
 // lightly smoothed, so single noisy frames cannot flip phases or add reps.
 const PHASE_CONFIRM_FRAMES = 2;
@@ -470,7 +689,9 @@ const VisionCoach = {
 
   async openFor(exercise) {
     const exerciseName = String(exercise?.exerciseName || exercise?.name || "Unknown exercise");
-    const key = coachKeyFor(exerciseName);
+    const classification = classifyExercise(exerciseName, exercise?.movementPattern || exercise?.movement_pattern || "");
+    const key = classification.key;
+    this.trackingReason = classification.reason || "";
     const placeholder = document.getElementById("camera-placeholder");
     const demoSection = document.getElementById("vision-demo");
     if (demoSection) demoSection.hidden = false;
@@ -487,7 +708,9 @@ const VisionCoach = {
     if (startButton) startButton.disabled = false;
     if (placeholder) placeholder.textContent = key
       ? 'Tap "Start Camera" to begin pose analysis in your browser.'
-      : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
+      : this.trackingReason
+        ? `Pose tracking for ${exerciseName}: ${this.trackingReason} Rep counting is not enabled for this movement.`
+        : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
     document.querySelectorAll("#vision-segment button").forEach((button) => {
       button.classList.toggle("active", Boolean(key) && button.dataset.exercise === key);
     });
@@ -497,15 +720,22 @@ const VisionCoach = {
 
   resetReps() {
     this.repCount = 0;
-    this.phase = "up";
+    this.phase = EXERCISE_CONFIG[this.currentExercise]?.startsLow ? "down" : "up";
     this.smoothedAngle = null;
     this.phaseFrames = 0;
     this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
     document.getElementById("vision-reps").textContent = "0";
     document.getElementById("vision-angle").textContent = "0 deg";
     this.resetComparisonCapture();
-    const label = EXERCISE_CONFIG[this.currentExercise]?.label || this.coachExerciseName || "Exercise";
-    this.renderComparisonNotice(`${label}: live pose analysis is active. AI feedback depends on backend configuration and model confidence.`);
+    const config = EXERCISE_CONFIG[this.currentExercise];
+    const label = config?.label || this.coachExerciseName || "Exercise";
+    const view = config?.view === "side" ? " Stand side-on to the camera." : config?.view === "front" ? " Face the camera." : "";
+    const note = config?.experimental
+      ? `${label}: rep counting and live cues for this movement are experimental estimates.${view}`
+      : this.trackingReason
+        ? `${label}: ${this.trackingReason} Pose tracking is active.`
+        : `${label}: live pose analysis is active. Form cues are computed on your device from body landmarks.`;
+    this.renderComparisonNotice(note);
   },
 
   resetComparisonCapture() {
@@ -1088,9 +1318,22 @@ const VisionCoach = {
     this.collectCoachFrame(lm);
 
     if (!config) {
-      if (feedbackEl) feedbackEl.textContent = this.freshAiFeedback() || (this.aiCoachAvailable === false
-        ? FRAMING_MESSAGE_UNSUPPORTED
-        : "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.");
+      if (feedbackEl) feedbackEl.textContent = this.trackingReason && !this.freshAiFeedback()
+        ? `${this.trackingReason} Pose tracking is active; rep counting is not enabled for this movement.`
+        : this.freshAiFeedback() || (this.aiCoachAvailable === false
+          ? FRAMING_MESSAGE_UNSUPPORTED
+          : "Analyzing this exercise with the shared coach. Keep your full body visible and move at a controlled pace.");
+      return;
+    }
+    if (config.hold) {
+      if (hasVisiblePose(lm, config.required)) {
+        activeSide = bestSide(lm, config.required);
+        if (feedbackEl) feedbackEl.textContent = config.feedback(0, "up", lm);
+        const angleEl = document.getElementById("vision-angle");
+        if (angleEl) angleEl.textContent = "hold";
+      } else {
+        this.showFramingMessage("Keep your shoulders, hips and ankles visible; stand side-on to the camera.");
+      }
       return;
     }
     if (!hasVisiblePose(lm, config.required)) {

@@ -28,7 +28,8 @@ interface VisionModule {
     feedback: (angle: number, phase: string, lm: unknown[]) => string;
   }>;
   setFrameAspect: (w: number, h: number) => void;
-  coachKeyFor: (name: string) => string | null;
+  coachKeyFor: (name: string, movementPattern?: string) => string | null;
+  classifyExercise: (name: string, movementPattern?: string) => { key: string | null; kind: string; reason: string };
   bestSide: (lm: unknown[], groups: number[][]) => number;
   angleBetween: (a: unknown, b: unknown, c: unknown) => number;
   VisionCoach: {
@@ -78,6 +79,7 @@ return {
   angleBetween: angleBetween,
   setFrameAspect: setFrameAspect,
   coachKeyFor: coachKeyFor,
+  classifyExercise: classifyExercise,
   bestSide: bestSide,
   hasVisiblePose: hasVisiblePose,
   tiltFromVertical: tiltFromVertical,
@@ -124,6 +126,44 @@ const ELBOWS = [ELBOW_L, ELBOW_R];
 const WRISTS = [WRIST_L, WRIST_R];
 const HIPS = [HIP_L, HIP_R];
 const ANKLES = [ANKLE_L, ANKLE_R];
+
+describe("catalogue-wide exercise classification", () => {
+  let module: VisionModule;
+  beforeEach(() => {
+    const built = makeDocument();
+    module = loadModule(built.documentStub, { get: async () => ({ configured: true, available: true }) });
+  });
+
+  it.each([
+    ["Dumbbell Bench Press", "pressHorizontal"],
+    ["Overhead Shoulder Press", "pressVertical"],
+    ["Lat Pulldown", "pullVertical"],
+    ["Leg Press", "legPress"],
+    ["Leg Extension", "legExtension"],
+    ["Hamstring Curl", "legCurl"],
+    ["Lateral Raise", "lateralRaise"],
+    ["Romanian Deadlift", "hinge"],
+    ["Hip Thrust", "hipThrust"],
+    ["Plank", "plank"],
+  ])("classifies %s as %s", (name, key) => {
+    expect(module.coachKeyFor(name)).toBe(key);
+    expect(module.EXERCISE_CONFIG[key]).toBeDefined();
+  });
+
+  it("uses the catalogue movement pattern when a name is not recognized", () => {
+    expect(module.coachKeyFor("New Catalogue Press Variant", "horizontal_push")).toBe("pressHorizontal");
+  });
+
+  it("does not claim reliable rep counting for cardio or complex movements", () => {
+    const burpee = module.classifyExercise("Turkish Get-Up");
+    const treadmill = module.classifyExercise("Treadmill Run");
+    expect(burpee.kind).toBe("tracking");
+    expect(burpee.key).toBeNull();
+    expect(burpee.reason).toMatch(/2D camera/i);
+    expect(treadmill.kind).toBe("tracking");
+    expect(treadmill.reason).toMatch(/Cardio/i);
+  });
+});
 
 describe("vision live form coaching", () => {
   let nodes: Map<string, StubNode>;
@@ -381,7 +421,7 @@ describe("vision pipeline: rep counting and robustness (synthetic landmark seque
     expect(key("Push-Up")).toBe("pushup");
     expect(key("Bent Over Row")).toBe("row");
     expect(key("Seated Cable Row")).toBe("seatedrow");
-    expect(key("Lying Leg Curl")).toBeNull();
+    expect(key("Lying Leg Curl")).toBe("legCurl");
     expect(key("Burpee")).toBeNull();
   });
 
