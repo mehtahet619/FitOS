@@ -14,6 +14,7 @@ import type { EquipmentDetection } from "./equipmentVisionProvider";
 import { deduplicateOverlappingDetections } from "./detectionUtils";
 
 interface WorkflowRequest {
+  api_key: string;
   inputs: {
     image: {
       type: "base64" | "url";
@@ -54,6 +55,7 @@ export class RoboflowWorkflowProvider {
     const prompts = Object.keys(equipmentLabelMap).map(text => ({ type: "text" as const, text }));
 
     const payload: WorkflowRequest = {
+      api_key: this.apiKey,
       inputs: {
         image: {
           type: "base64",
@@ -71,7 +73,6 @@ export class RoboflowWorkflowProvider {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify(payload),
         });

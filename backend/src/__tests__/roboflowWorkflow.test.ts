@@ -160,21 +160,13 @@ describe("RoboflowWorkflowProvider", () => {
     expect(result).toEqual([]);
   });
 
-  it("should send correct request headers", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ predictions: [] }),
-    });
-
+  it("sends the API key in the workflow request body", async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({ predictions: [] }) });
     await provider.detectEquipment(testBase64, equipmentLabelMap);
-
     const callArgs = (global.fetch as any).mock.calls[0];
-    expect(callArgs[1].headers).toMatchObject({
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${mockApiKey}`,
-    });
+    expect(callArgs[1].headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(JSON.parse(callArgs[1].body)).toMatchObject({ api_key: mockApiKey });
   });
-
   it("should include base64 image in request payload", async () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
