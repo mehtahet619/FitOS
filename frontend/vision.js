@@ -709,7 +709,9 @@ const VisionCoach = {
     if (startButton) startButton.disabled = false;
     if (placeholder) placeholder.textContent = key
       ? 'Tap "Start Camera" to begin pose analysis in your browser.'
-      : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
+      : this.trackingReason
+        ? `Pose tracking for ${exerciseName}: ${this.trackingReason} Rep counting is not enabled for this movement.`
+        : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
     document.querySelectorAll("#vision-segment button").forEach((button) => {
       button.classList.toggle("active", Boolean(key) && button.dataset.exercise === key);
     });
@@ -726,8 +728,15 @@ const VisionCoach = {
     document.getElementById("vision-reps").textContent = "0";
     document.getElementById("vision-angle").textContent = "0 deg";
     this.resetComparisonCapture();
-    const label = EXERCISE_CONFIG[this.currentExercise]?.label || this.coachExerciseName || "Exercise";
-    this.renderComparisonNotice(`${label}: live pose analysis is active. AI feedback depends on backend configuration and model confidence.`);
+    const config = EXERCISE_CONFIG[this.currentExercise];
+    const label = config?.label || this.coachExerciseName || "Exercise";
+    const view = config?.view === "side" ? " Stand side-on to the camera." : config?.view === "front" ? " Face the camera." : "";
+    const note = config?.experimental
+      ? `${label}: rep counting and live cues for this movement are experimental estimates.${view}`
+      : this.trackingReason
+        ? `${label}: ${this.trackingReason} Pose tracking is active.`
+        : `${label}: live pose analysis is active. Form cues are computed on your device from body landmarks.`;
+    this.renderComparisonNotice(note);
   },
 
   resetComparisonCapture() {
