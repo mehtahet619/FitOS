@@ -473,8 +473,7 @@ function buildPatternConfig(def) {
 }
 
 for (const [key, def] of Object.entries(PATTERNS)) EXERCISE_CONFIG[key] = buildPatternConfig(def);
-// Preserve the existing UI/test key for seated cable rows while reusing row geometry.
-// Keep the dedicated seated-row config above: its upright-torso cue differs from bent-over rows.
+// Preserve the dedicated seated-row config: its upright-torso cue differs from bent-over rows.
 
 // Static hold: form cues only, no repetitions.
 EXERCISE_CONFIG.plank = {
