@@ -144,7 +144,7 @@ async function getPriceGuessSummary(userId?: string) {
 app.get("/pricing-guesses", async (req, res) => {
   const identity = await readIdentity(req);
   res.setHeader("Cache-Control", "no-store");
-  res.json(await getPriceGuessSummary(identity?.userId));
+  res.json({ ...(await getPriceGuessSummary(identity?.userId)), authenticated: Boolean(identity?.userId) });
 });
 
 app.post("/pricing-guesses", requireAuth, async (req: AuthedRequest, res) => {
