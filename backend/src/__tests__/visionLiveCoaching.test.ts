@@ -421,7 +421,7 @@ describe("vision pipeline: rep counting and robustness (synthetic landmark seque
     expect(key("Push-Up")).toBe("pushup");
     expect(key("Bent Over Row")).toBe("row");
     expect(key("Seated Cable Row")).toBe("seatedrow");
-    expect(key("Lying Leg Curl")).toBeNull();
+    expect(key("Lying Leg Curl")).toBe("legCurl");
     expect(key("Burpee")).toBeNull();
   });
 
