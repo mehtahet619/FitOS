@@ -1374,6 +1374,7 @@ button:disabled, [aria-disabled="true"] {
 }
 .skip-link:focus { transform: translateY(0); }
 .not-found-screen {
+  display: none;
   min-height: 75vh;
   padding: clamp(36px, 8vw, 96px) 24px;
   display: flex;
@@ -1383,6 +1384,7 @@ button:disabled, [aria-disabled="true"] {
   max-width: 760px;
   margin: 0 auto;
 }
+.not-found-screen.active { display: flex; }
 .not-found-mark { margin-bottom: 24px; }
 .not-found-screen h1 {
   margin: 10px 0 16px;
