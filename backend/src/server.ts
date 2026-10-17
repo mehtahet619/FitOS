@@ -19,6 +19,7 @@ import { comparisonRouter, COMPARISON_BODY_LIMIT } from "./modules/comparison/ro
 import { coachRouter } from "./modules/coach/routes";
 import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
+import { AuthedRequest, readIdentity, requireAuth } from "./common/auth";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -120,29 +121,61 @@ app.use(express.json({ limit: "4mb" }));
 app.use(applySecurityHeaders);
 app.use(limiter);
 
-// Community price guesses are intentionally kept in process memory only (no DB writes).
-// They reset on backend restart and are local to this server instance.
-let communityPriceGuessSum = 0;
-let communityPriceGuessCount = 0;
+// Price guesses are persisted in the shared database so all visitors and backend
+// instances see the same total. The unique userId key guarantees one guess per account.
+async function getPriceGuessSummary(userId?: string) {
+  const aggregate = await db.get<{ average: number | string | null; count: number | string }>(
+    "SELECT AVG(price) AS average, COUNT(*) AS count FROM PricingGuess"
+  );
+  const ownGuess = userId
+    ? await db.get<{ price: number }>("SELECT price FROM PricingGuess WHERE userId = ?", userId)
+    : undefined;
+  const count = Number(aggregate?.count ?? 0);
+  const averageValue = aggregate?.average == null ? null : Number(aggregate.average);
+  return {
+    average: Number.isFinite(averageValue) ? averageValue : null,
+    count: Number.isSafeInteger(count) ? count : 0,
+    hasGuessed: Boolean(ownGuess),
+    userGuess: ownGuess ? Number(ownGuess.price) : null,
+  };
+}
 
-app.get("/pricing-guesses", (_req, res) => {
-  res.json({
-    average: communityPriceGuessCount ? communityPriceGuessSum / communityPriceGuessCount : null,
-    count: communityPriceGuessCount,
-  });
+app.get("/pricing-guesses", async (req, res) => {
+  const identity = await readIdentity(req);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(await getPriceGuessSummary(identity?.userId));
 });
 
-app.post("/pricing-guesses", (req, res) => {
+app.post("/pricing-guesses", requireAuth, async (req: AuthedRequest, res) => {
   const price = req.body?.price;
   if (!Number.isSafeInteger(price) || price < 1 || price > 100000) {
     return res.status(400).json({ error: "Enter a whole price between ₹1 and ₹1,00,000." });
   }
-  communityPriceGuessSum += price;
-  communityPriceGuessCount += 1;
-  return res.status(201).json({
-    average: communityPriceGuessSum / communityPriceGuessCount,
-    count: communityPriceGuessCount,
-  });
+  if (!req.userId) return res.status(401).json({ error: "Log in to submit your one price guess." });
+
+  try {
+    await db.run(
+      "INSERT INTO PricingGuess (userId, price, createdAt) VALUES (?, ?, ?)",
+      req.userId,
+      price,
+      new Date().toISOString()
+    );
+  } catch (error) {
+    // The primary key is userId. A concurrent duplicate request can never count twice.
+    const existing = await db.get<{ price: number }>(
+      "SELECT price FROM PricingGuess WHERE userId = ?",
+      req.userId
+    );
+    if (existing) {
+      return res.status(409).json({
+        error: "You've already submitted your guess. Each account gets one guess.",
+        ...(await getPriceGuessSummary(req.userId)),
+      });
+    }
+    throw error;
+  }
+
+  return res.status(201).json(await getPriceGuessSummary(req.userId));
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
