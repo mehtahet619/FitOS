@@ -204,6 +204,8 @@ async function routeCurrent() {
   const path = normalizePath(location.pathname);
   updateRouteMetadata(path);
   const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
+  const knownRoutes = new Set(["/", ...Object.keys(routeTabs), ...Object.keys(publicRoutes)]);
+  if (!knownRoutes.has(path)) { showScreen("screen-not-found"); return; }
   if (AuthState.status === "AUTH_LOADING") {
     showScreen(path === "/" ? "screen-landing" : "screen-intro");
     return;
