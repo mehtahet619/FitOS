@@ -473,6 +473,8 @@ function buildPatternConfig(def) {
 }
 
 for (const [key, def] of Object.entries(PATTERNS)) EXERCISE_CONFIG[key] = buildPatternConfig(def);
+// Preserve the existing UI/test key for seated cable rows while reusing row geometry.
+EXERCISE_CONFIG.seatedrow = { ...EXERCISE_CONFIG.row, label: "Seated Cable Row" };
 
 // Static hold: form cues only, no repetitions.
 EXERCISE_CONFIG.plank = {
@@ -542,7 +544,7 @@ function classifyExercise(name = "", movementPattern = "") {
   if (has(/overhead|shoulder.?press|military|arnold|push.?press|landmine|kettlebell.?press/)) return counted("pressVertical");
   if (has(/bench|chest.?press|(floor|incline|decline|flat).{0,20}press/)) return counted("pressHorizontal");
   if (has(/pull.?down|pulldown|pull.?up|chin.?up|lat.?pull/)) return counted("pullVertical");
-  if (has(/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/)) return counted("row");
+  if (has(/seated.?(cable.?)?row|cable.?row|machine.?row|low.?row/)) return counted("seatedrow");
   if (has(/\brow(ing)?\b/)) return counted("row");
   if (has(/curl/)) return counted("curl");
 
