@@ -1254,3 +1254,95 @@ html, body {
 @media (min-width: 820px) {
   .vision-stage { grid-template-columns: 1fr 1fr; align-items: start; }
 }
+
+
+/* Landing-page community price guess */
+.price-guess-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 64px);
+  padding-top: clamp(56px, 8vw, 100px);
+  padding-bottom: clamp(56px, 8vw, 100px);
+}
+.price-guess-copy h2 {
+  margin: 12px 0 18px;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 1.04;
+  letter-spacing: -.055em;
+}
+.price-guess-copy h2 span { color: #4c8e71; }
+.price-guess-copy > p:not(.eyebrow) {
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.75;
+}
+.price-guess-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 22px;
+  color: #68756d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.price-guess-note > span:first-child { color: #4c8e71; font-size: 18px; }
+.price-guess-card {
+  padding: clamp(22px, 4vw, 32px);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: 0 18px 50px rgba(20, 22, 26, .07);
+}
+.price-guess-card label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.price-guess-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 16px;
+  border: 1px solid #dfe5df;
+  border-radius: 14px;
+  background: #fbfcfa;
+}
+.price-guess-input-wrap:focus-within {
+  border-color: #68c9a6;
+  box-shadow: 0 0 0 3px rgba(104, 201, 166, .15);
+}
+.price-guess-input-wrap > span { color: #4c8e71; font-size: 22px; font-weight: 700; }
+.price-guess-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+}
+.price-guess-help { margin: 8px 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.price-guess-submit { width: 100%; justify-content: center; min-height: 52px; }
+.price-guess-feedback { min-height: 18px; margin: 10px 0 0; color: #4c8e71; font-size: 12px; line-height: 1.5; }
+.price-guess-feedback.is-error { color: var(--danger); }
+.price-guess-average {
+  display: grid;
+  gap: 5px;
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #f2f8f4;
+}
+.price-guess-average-label { color: #5d7566; font-size: 11px; font-weight: 650; }
+.price-guess-average strong { color: #234d38; font-size: clamp(28px, 4vw, 38px); letter-spacing: -.04em; }
+.price-guess-count { color: #6d7c72; font-size: 11px; }
+@media (max-width: 760px) {
+  .price-guess-section { grid-template-columns: 1fr; gap: 24px; }
+  .price-guess-copy h2 { font-size: clamp(34px, 10vw, 46px); }
+}
