@@ -68,17 +68,31 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least two characters to search." });
   try {
-    const url = new URL(OFF_BASE + "/cgi/search.pl");
-    url.searchParams.set("search_terms", q);
-    url.searchParams.set("search_simple", "1");
-    url.searchParams.set("action", "process");
-    url.searchParams.set("json", "1");
+    // Use Open Food Facts' dedicated Search-a-licious full-text API instead of
+    // the legacy /cgi/search.pl endpoint, which is subject to global 503 limits.
+    const url = new URL("https://search.openfoodfacts.org/search");
+    url.searchParams.set("q", q);
+    url.searchParams.set("langs", "en");
+    url.searchParams.set("page", "1");
     url.searchParams.set("page_size", "10");
     url.searchParams.set("fields", OFF_FIELDS);
-    const data = await offFetch(url.toString());
-    const products = (Array.isArray(data?.products) ? data.products : [])
-      .filter((p: any) => p?.code && p?.product_name)
-      .map((p: any) => normalizeProduct(p));
+    const response = await fetch(url.toString(), {
+      headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) {
+      console.error("[food-search] Open Food Facts Search-a-licious returned HTTP", response.status);
+      return res.status(502).json({ error: "Open Food Facts search is temporarily unavailable. Please try again shortly." });
+    }
+    const data = await response.json() as any;
+    const hits = Array.isArray(data?.hits) ? data.hits : [];
+    const products = hits
+      .map((hit: any) => hit?._source ?? hit?.document ?? hit)
+      .filter((p: any) => p?.code && (p?.product_name || p?.product_name_en))
+      .map((p: any) => normalizeProduct({
+        ...p,
+        product_name: p.product_name || p.product_name_en || "",
+      }));
     return res.json({ products, source: "Open Food Facts", count: products.length });
   } catch (error) {
     return res.status(502).json({ error: error instanceof Error ? error.message : "Open Food Facts search failed." });
