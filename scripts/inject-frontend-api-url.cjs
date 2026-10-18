@@ -6,6 +6,14 @@ if (!apiBaseUrl || !/^https:\/\//i.test(apiBaseUrl)) {
   throw new Error("Set API_BASE_URL to the HTTPS URL of the FitOS API service.");
 }
 const publicSiteUrl = process.env.PUBLIC_SITE_URL;
+const ga4MeasurementId = process.env.GA4_MEASUREMENT_ID || "";
+const clarityProjectId = process.env.CLARITY_PROJECT_ID || "";
+if (ga4MeasurementId && !/^G-[A-Z0-9]+$/i.test(ga4MeasurementId)) {
+  throw new Error("GA4_MEASUREMENT_ID must look like G-XXXXXXXXXX.");
+}
+if (clarityProjectId && !/^[a-z0-9]+$/i.test(clarityProjectId)) {
+  throw new Error("CLARITY_PROJECT_ID must contain only letters and numbers.");
+}
 if (!publicSiteUrl) {
   throw new Error("Set PUBLIC_SITE_URL to the canonical HTTPS origin of the FitOS website.");
 }
@@ -26,7 +34,9 @@ fs.writeFileSync(
   configPath,
   source
     .replace("__API_BASE_URL__", apiBaseUrl.replace(/\/$/, ""))
-    .replace("__PUBLIC_SITE_URL__", publicSiteOrigin),
+    .replace("__PUBLIC_SITE_URL__", publicSiteOrigin)
+    .replace("__GA4_MEASUREMENT_ID__", ga4MeasurementId)
+    .replace("__CLARITY_PROJECT_ID__", clarityProjectId),
   "utf8",
 );
 

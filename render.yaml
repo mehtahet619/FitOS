@@ -121,6 +121,24 @@ services:
       - path: /settings
         name: X-Robots-Tag
         value: noindex, nofollow
+      - path: /gym
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /scan
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /vision
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /diet
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /404
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /404.html
+        name: X-Robots-Tag
+        value: noindex, nofollow
     routes:
       - type: rewrite
         source: /terms
@@ -140,3 +158,7 @@ services:
       # If a custom domain is configured, keep this and backend FRONTEND_ORIGIN aligned with it.
       - key: PUBLIC_SITE_URL
         value: https://adaptive-fit-web.onrender.com
+      - key: GA4_MEASUREMENT_ID
+        sync: false
+      - key: CLARITY_PROJECT_ID
+        sync: false

@@ -1,19 +1,7 @@
 User-agent: *
 Allow: /
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-login
-Disallow: /forgot-password
-Disallow: /reset-password
-Disallow: /homepage
-Disallow: /today
-Disallow: /workout
-Disallow: /workouts
-Disallow: /nutrition
-Disallow: /equipment
-Disallow: /history
-Disallow: /profile
-Disallow: /settings
+
+# Private/application routes send X-Robots-Tag: noindex, nofollow.
+# Keep them crawlable so crawlers can see the noindex response header.
 
 Sitemap: https://adaptive-fit-web.onrender.com/sitemap.xml
