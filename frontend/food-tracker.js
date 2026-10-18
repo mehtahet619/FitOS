@@ -56,6 +56,7 @@
       if (!state.nutritionTargets) {
         try { state.nutritionTargets = await api("/nutrition/targets"); } catch { /* profile-based estimates remain available */ }
       }
+      renderNutritionGuidance();
     } catch { /* onboarding may not be complete; use general references */ }
   }
   function renderNutritionGuidance() {
