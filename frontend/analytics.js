@@ -63,36 +63,39 @@
     });
   }
 
+  function applyConsentSignals(value) {
+    const granted = value === "accepted";
+    if (typeof window.gtag === "function" && GA_ID) {
+      window.gtag("consent", "update", {
+        analytics_storage: granted ? "granted" : "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied"
+      });
+    }
+    if (typeof window.clarity === "function" && CLARITY_ID) {
+      window.clarity("consentv2", {
+        ad_Storage: "denied",
+        analytics_Storage: granted ? "granted" : "denied"
+      });
+    }
+  }
+
   function initializeProviders() {
     if (initialized || consentValue() !== "accepted") return;
     initialized = true;
     loadGa4();
     maskPrivateScreensForClarity();
     loadClarity();
+    applyConsentSignals("accepted");
   }
 
   function setConsent(value) {
     try { localStorage.setItem(CONSENT_KEY, value); } catch {}
     const banner = document.getElementById("fitos-consent-banner");
     if (banner) banner.hidden = true;
-    if (value === "accepted") {
-      initializeProviders();
-    } else {
-      if (typeof window.gtag === "function" && GA_ID) {
-        window.gtag("consent", "update", {
-          analytics_storage: "denied",
-          ad_storage: "denied",
-          ad_user_data: "denied",
-          ad_personalization: "denied"
-        });
-      }
-      if (typeof window.clarity === "function" && CLARITY_ID) {
-        window.clarity("consentv2", {
-          ad_Storage: "denied",
-          analytics_Storage: "denied"
-        });
-      }
-    }
+    if (value === "accepted") initializeProviders();
+    applyConsentSignals(value);
   }
 
   function mountConsentUi() {
