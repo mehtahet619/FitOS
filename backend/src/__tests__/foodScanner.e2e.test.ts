@@ -39,7 +39,8 @@ async function openApp(o: Opts = {}) {
   if (o.tz !== undefined) w.Date.prototype.getTimezoneOffset = () => o.tz;
   const load = (code: string) => { const s = w.document.createElement("script"); s.textContent = code; w.document.body.appendChild(s); };
   for (const f of ["api.js", "nutrition-guidance.js", "barcode-scanner.js"]) load(read(f));
-  load(read("vendor/zxing-library-0.21.3.min.js"));
+  // Load the pinned ZXing UMD build from the backend dev dependency. The old frontend/vendor file was never committed, causing CI ENOENT failures.
+  load(fs.readFileSync(path.join(__dirname, "../../node_modules/@zxing/library/umd/index.min.js"), "utf8"));
   // jsdom has no canvas: feed the scanner the pixels a camera frame would produce. Everything else is the shipped code.
   const realCreate = w.FitOSBarcode.createScanner;
   w.FitOSBarcode.createScanner = (opts: any) => realCreate({ ...opts, grabFrame: () => o.frame ?? blankFrame() });
