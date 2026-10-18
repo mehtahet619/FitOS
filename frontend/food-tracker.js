@@ -9,8 +9,12 @@
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt = (v, unit = "") => v === null || v === undefined ? "Not available" : `${Number(v.toFixed ? v.toFixed(1) : v)}${unit}`;
   const api = (path, opts = {}) => {
-    if (!window.Api || typeof window.Api.request !== "function") throw new Error("FitOS API client is not ready. Refresh the page and try again.");
-    return window.Api.request(path, opts);
+    if (!window.Api) throw new Error("FitOS API client is not ready. Refresh the page and try again.");
+    const method = (opts.method || "GET").toUpperCase();
+    if (method === "GET") return window.Api.get(path);
+    if (method === "POST") return window.Api.post(path, opts.body || {});
+    if (method === "DELETE") return window.Api.del(path);
+    throw new Error("Unsupported request method.");
   };
   function setStatus(id, message, isError = false) { const el = $(id); if (el) { el.textContent = message; el.style.color = isError ? "#a52b2b" : ""; } }
   function showView(view) {
