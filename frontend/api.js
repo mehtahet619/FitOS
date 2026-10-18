@@ -131,13 +131,13 @@ const Api = (() => {
       const data = parseResponse(response, text);
       // Analytics receives only a fixed event name after a successful response.
       // Never forward request bodies, email addresses, tokens, prices, or API paths.
-      const method = method.toUpperCase();
+      const normalizedMethod = method.toUpperCase();
       let eventName = null;
-      if (method === "POST" && path === "/auth/register/verify-otp") eventName = "sign_up";
-      else if (method === "POST" && (path === "/auth/login/verify-otp" || path === "/auth/login")) eventName = "login";
-      else if (method === "POST" && path === "/workouts/plan") eventName = "workout_plan_created";
-      else if (method === "POST" && path === "/workouts/generate") eventName = "workout_generated";
-      else if (method === "POST" && path === "/equipment/detect") eventName = "equipment_analysis_completed";
+      if (normalizedMethod === "POST" && path === "/auth/register/verify-otp") eventName = "sign_up";
+      else if (normalizedMethod === "POST" && (path === "/auth/login/verify-otp" || path === "/auth/login")) eventName = "login";
+      else if (normalizedMethod === "POST" && path === "/workouts/plan") eventName = "workout_plan_created";
+      else if (normalizedMethod === "POST" && path === "/workouts/generate") eventName = "workout_generated";
+      else if (normalizedMethod === "POST" && path === "/equipment/detect") eventName = "equipment_analysis_completed";
       if (eventName && window.FitOSAnalytics) window.FitOSAnalytics.track(eventName);
       return data;
     } catch (error) {
