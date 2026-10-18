@@ -4,18 +4,22 @@
   const root = $("fitos-food-tracker");
   if (!root || root.dataset.initialized) return;
   root.dataset.initialized = "true";
-  const state = { product: null, stream: null, scanTimer: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null };
+  const state = { product: null, scanner: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null };
   const num = (v) => v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt = (v, unit = "") => v === null || v === undefined ? "Not available" : `${Number(v.toFixed ? v.toFixed(1) : v)}${unit}`;
   const api = (path, opts = {}) => {
-    if (!window.Api) throw new Error("FitOS API client is not ready. Refresh the page and try again.");
+    // api.js declares `const Api`, which is a global binding but not a window property; accept either.
+    const client = window.Api || (typeof Api !== "undefined" ? Api : null);
+    if (!client) throw new Error("FitOS API client is not ready. Refresh the page and try again.");
     const method = (opts.method || "GET").toUpperCase();
-    if (method === "GET") return window.Api.get(path);
-    if (method === "POST") return window.Api.post(path, opts.body || {});
-    if (method === "DELETE") return window.Api.del(path);
+    if (method === "GET") return client.get(path);
+    if (method === "POST") return client.post(path, opts.body || {});
+    if (method === "DELETE") return client.del(path);
     throw new Error("Unsupported request method.");
   };
+  const round2 = (v) => v === null ? null : Math.round(v * 100) / 100;
+  const localDate = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   function setStatus(id, message, isError = false) { const el = $(id); if (el) { el.textContent = message; el.style.color = isError ? "#a52b2b" : ""; } }
   function showView(view) {
     root.querySelectorAll("[data-food-view]").forEach((button) => {
@@ -26,13 +30,22 @@
     if (view === "log") loadLogs().catch((e) => setStatus("food-nearby-status", e.message, true));
   }
   root.querySelectorAll("[data-food-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.foodView)));
+  let lookupInFlight = false;
   async function lookupBarcode(raw) {
     const code = String(raw || "").trim();
     if (!/^(?:\d{8}|\d{12,14})$/.test(code)) throw new Error("Barcode must contain 8, 12, 13, or 14 digits.");
+    if (lookupInFlight) return;
+    lookupInFlight = true;
     setStatus("food-camera-status", "Looking up product in Open Food Facts…");
-    const result = await api("/nutrition/foods/barcode/" + encodeURIComponent(code));
-    state.product = result.product; state.pendingManual = false; renderReview(result.product);
-    setStatus("food-camera-status", "Product found. Check the serving and nutrient values before logging.");
+    try {
+      const result = await api("/nutrition/foods/barcode/" + encodeURIComponent(code));
+      state.product = result.product; state.pendingManual = false; renderReview(result.product);
+      setStatus("food-camera-status", "Product found. Check the serving and nutrient values before logging.");
+    } catch (error) {
+      // Product missing, upstream down, or timed out: say so and keep manual entry one tap away.
+      const hint = error.status === 404 || error.status === 422 ? " You can use manual entry below." : " You can retry, or use manual entry below.";
+      setStatus("food-camera-status", (error.message || "Product lookup failed.") + hint, true);
+    } finally { lookupInFlight = false; }
   }
   function renderProductResult(product) {
     const image = product.imageUrl ? `<img src="${esc(product.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
@@ -82,7 +95,7 @@
       ${product.imageUrl ? `<img src="${esc(product.imageUrl)}" alt="" width="84" loading="lazy" referrerpolicy="no-referrer">` : ""}
       <p class="food-data-note">Source: ${esc(product.source || "Manual label")} · ${esc(n.basis || "Values from user-entered label")} · ${esc(product.verificationStatus || "manual_label")}. Values missing from the source stay blank.</p>
       <div class="food-review-grid">
-        <label>Serving amount (g/ml)<input id="food-review-serving" type="number" min="1" max="10000" value="100" required></label>
+        <label>Serving amount (g/ml)<input id="food-review-serving" type="number" min="1" max="10000" value="${product.servingQuantityG || 100}" required></label>
         <label>Serving unit<select id="food-review-unit"><option value="g">g</option><option value="ml">ml</option></select></label>
         <label>Calories (kcal / 100 g/ml)<input id="food-review-calories" type="number" min="0" step="0.1" value="${n.caloriesKcal ?? ""}" placeholder="Not listed"></label>
         <label>Protein (g / 100 g/ml)<input id="food-review-protein" type="number" min="0" step="0.1" value="${n.proteinG ?? ""}" placeholder="Not listed"></label>
@@ -90,7 +103,7 @@
         <label>Fat (g / 100 g/ml)<input id="food-review-fat" type="number" min="0" step="0.1" value="${n.fatG ?? ""}" placeholder="Not listed"></label>
         <label>Fiber (g / 100 g/ml)<input id="food-review-fiber" type="number" min="0" step="0.1" value="${n.fiberG ?? ""}" placeholder="Not listed"></label>
       </div>
-      <p class="food-data-note">The values above are per 100 g/ml. FitOS scales the available values to your selected serving. Confirm the package label and correct values if needed.</p>
+      <p class="food-data-note">${product.servingQuantityG ? `Package serving: ${esc(product.servingSize || product.servingQuantityG + " g")} (prefilled). ` : ""}The values above are per 100 g/ml. FitOS scales the available values to your selected serving. Confirm the package label and correct values if needed.</p>
       <div id="food-nutrition-guidance" class="food-nutrition-guidance" aria-live="polite"></div><div class="food-review-actions"><button type="button" class="btn btn-mint" id="food-confirm-log">Confirm & add to today</button><button type="button" class="btn btn-outline" id="food-cancel-review">Cancel</button></div>
       <p id="food-review-status" class="food-status" aria-live="polite"></p>`;
     $("food-confirm-log").addEventListener("click", confirmLog);
@@ -112,11 +125,11 @@
       brand: product.brand || "",
       servingAmount: serving,
       servingUnit: unit,
-      caloriesKcal: field("food-review-calories") === null ? null : field("food-review-calories") * scale,
-      proteinG: field("food-review-protein") === null ? null : field("food-review-protein") * scale,
-      carbsG: field("food-review-carbs") === null ? null : field("food-review-carbs") * scale,
-      fatG: field("food-review-fat") === null ? null : field("food-review-fat") * scale,
-      fiberG: field("food-review-fiber") === null ? null : field("food-review-fiber") * scale,
+      caloriesKcal: field("food-review-calories") === null ? null : round2(field("food-review-calories") * scale),
+      proteinG: field("food-review-protein") === null ? null : round2(field("food-review-protein") * scale),
+      carbsG: field("food-review-carbs") === null ? null : round2(field("food-review-carbs") * scale),
+      fatG: field("food-review-fat") === null ? null : round2(field("food-review-fat") * scale),
+      fiberG: field("food-review-fiber") === null ? null : round2(field("food-review-fiber") * scale),
       source: state.pendingManual ? "manual_label" : "open_food_facts"
     };
     try {
@@ -164,60 +177,51 @@
     const data = new FormData(event.currentTarget);
     const values = Object.fromEntries(data.entries());
     state.pendingManual = true;
+    // The manual form asks for label values for the serving amount entered. The review screen works per 100 g/ml,
+    // so convert once here; logging then scales back to exactly what the user typed.
+    const servingAmount = Number(values.serving);
+    const per100 = (v) => { const n = num(v); return n === null || !(servingAmount > 0) ? null : Math.round(n * 100 / servingAmount * 1000) / 1000; };
     state.product = { code: "", name: String(values.name).trim(), brand: "", source: "Manual label", verificationStatus: "user_entered_label", nutrimentsPer100g: {
-      basis: "Values entered by you from the package label; per 100 g/ml",
-      caloriesKcal: num(values.calories), proteinG: num(values.protein), carbsG: num(values.carbs), fatG: num(values.fat), fiberG: null
+      basis: "Values entered by you from the package label (converted to per 100 g/ml)",
+      caloriesKcal: per100(values.calories), proteinG: per100(values.protein), carbsG: per100(values.carbs), fatG: per100(values.fat), fiberG: null
     }};
     renderReview(state.product);
     $("food-review-serving").value = values.serving;
     $("food-product-review").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   async function startCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) return setStatus("food-camera-status", "Camera scanning is not supported in this browser. Enter the barcode manually.", true);
-    if (!("BarcodeDetector" in window)) return setStatus("food-camera-status", "This browser does not expose barcode detection. Enter the barcode manually or use product search.", true);
-    try {
-      const detector = new BarcodeDetector({ formats: ["ean_8", "ean_13", "upc_a", "upc_e"] });
-      state.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-      const video = $("food-barcode-video");
-      video.hidden = false; video.srcObject = state.stream; video.classList.add("food-camera-video");
-      await video.play();
-      $("food-camera-start").disabled = true; $("food-camera-stop").disabled = false;
-      setStatus("food-camera-status", "Camera is on. Hold a barcode in the frame.");
-      const scan = async () => {
-        if (!state.stream || video.readyState < 2) return;
-        try {
-          const codes = await detector.detect(video);
-          const code = codes.find((item) => /^(?:\d{8}|\d{12,14})$/.test(item.rawValue || ""));
-          if (code) {
-            stopCamera();
-            $("food-barcode-input").value = code.rawValue;
-            try { await lookupBarcode(code.rawValue); } catch (error) { setStatus("food-camera-status", error.message, true); }
-            return;
-          }
-        } catch { /* keep scanning; manual input remains available */ }
-        state.scanTimer = requestAnimationFrame(scan);
-      };
-      state.scanTimer = requestAnimationFrame(scan);
-    } catch (error) {
-      stopCamera();
-      setStatus("food-camera-status", error.name === "NotAllowedError" ? "Camera permission was denied. You can enter the barcode manually." : "Could not open the camera. Use manual barcode entry instead.", true);
-    }
-  }
-  function stopCamera() {
-    if (state.scanTimer) cancelAnimationFrame(state.scanTimer);
-    state.scanTimer = null;
-    if (state.stream) state.stream.getTracks().forEach((track) => track.stop());
-    state.stream = null;
+    if (!window.FitOSBarcode) return setStatus("food-camera-status", "The barcode scanner component did not load. Refresh the page or enter the barcode manually.", true);
+    stopCamera();
     const video = $("food-barcode-video");
-    if (video) { video.pause(); video.srcObject = null; video.hidden = true; }
+    state.scanner = window.FitOSBarcode.createScanner({
+      video,
+      onStatus: (message, isError) => setStatus("food-camera-status", message, !!isError),
+      onDetected: (code) => {
+        resetCameraUi();
+        $("food-barcode-input").value = code;
+        lookupBarcode(code).catch((error) => setStatus("food-camera-status", error.message, true));
+      },
+    });
+    video.hidden = false; video.classList.add("food-camera-video");
+    $("food-camera-start").disabled = true; $("food-camera-stop").disabled = false;
+    try { await state.scanner.start(); }
+    catch (error) { stopCamera(); setStatus("food-camera-status", error.message, true); }
+  }
+  function resetCameraUi() {
+    const video = $("food-barcode-video");
+    if (video) { video.hidden = true; }
     if ($("food-camera-start")) $("food-camera-start").disabled = false;
     if ($("food-camera-stop")) $("food-camera-stop").disabled = true;
+  }
+  function stopCamera() {
+    if (state.scanner) { state.scanner.stop(); state.scanner = null; }
+    resetCameraUi();
   }
   $("food-camera-start").addEventListener("click", startCamera);
   $("food-camera-stop").addEventListener("click", stopCamera);
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopCamera(); });
   async function loadLogs() {
-    const result = await api("/nutrition/logs");
+    const result = await api("/nutrition/logs?date=" + localDate() + "&tzOffset=" + new Date().getTimezoneOffset());
     state.logs = result.entries || [];
     const summary = result.totals || {};
     $("food-daily-summary").innerHTML = [
@@ -265,13 +269,12 @@
   });
   window.addEventListener("beforeunload", stopCamera);
   void loadNutritionProfile();
-  // Guard native form submission at the tracker root. If a later handler throws, search must not navigate/reload the page.
+  // Safety net: never let these forms navigate the page. This must run in the BUBBLE phase and must not call
+  // stopPropagation(): a capture-phase stopPropagation at the root keeps the event from ever reaching the forms' own
+  // submit handlers, which silently disabled barcode lookup and product search.
   root.addEventListener("submit", (event) => {
     const form = event.target;
-    if (form instanceof HTMLFormElement && ["food-search-form", "food-barcode-form"].includes(form.id)) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  }, true);
+    if (form instanceof HTMLFormElement && ["food-search-form", "food-barcode-form"].includes(form.id)) event.preventDefault();
+  });
   // Load log only when requested; do not make the Diet screen wait on the API.
 })();

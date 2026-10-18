@@ -155,3 +155,5 @@ const Api = (() => {
     del: (path) => request(path, { method: "DELETE" }),
   };
 })();
+// Top-level `const` in a classic script is not a window property; other scripts (food-tracker.js) read window.Api.
+window.Api = Api;

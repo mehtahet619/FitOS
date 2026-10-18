@@ -5,8 +5,12 @@ import { AuthedRequest, requireAuth } from "../../common/auth";
 
 export const foodScannerRouter = Router();
 
-const OFF_BASE = "https://world.openfoodfacts.org";
-const OFF_FIELDS = "code,product_name,brands,quantity,serving_size,nutriments,image_front_small_url,ingredients_text,allergens,ecoscore_grade,nova_group";
+// Overridable so tests (and staging) can point at a fake Open Food Facts server.
+const OFF_BASE = (process.env.OPENFOODFACTS_BASE_URL || "https://world.openfoodfacts.org").replace(/\/$/, "");
+const OFF_SEARCH_URL = process.env.OPENFOODFACTS_SEARCH_URL || "https://search.openfoodfacts.org/search";
+const OFF_PUBLIC_BASE = "https://world.openfoodfacts.org";
+const OFF_TIMEOUT_MS = Number(process.env.OPENFOODFACTS_TIMEOUT_MS) || 7000;
+const OFF_FIELDS = "code,product_name,brands,quantity,serving_size,serving_quantity,nutriments,image_front_small_url,ingredients_text,allergens,ecoscore_grade,nova_group";
 const PRODUCT_CODE = /^(?:[0-9]{8}|[0-9]{12,14})$/;
 const optionalNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") return null;
@@ -15,13 +19,20 @@ const optionalNumber = (value: unknown): number | null => {
 };
 function normalizeProduct(raw: any) {
   const n = raw?.nutriments || {};
-  const calories = optionalNumber(n["energy-kcal_100g"]);
+  // Prefer the explicit kcal field; fall back to kJ (energy_100g) / 4.184 for records that only store kJ.
+  const kcal = optionalNumber(n["energy-kcal_100g"]);
+  const kj = optionalNumber(n.energy_100g);
+  const calories = kcal !== null ? kcal : kj !== null ? Math.round((kj / 4.184) * 10) / 10 : null;
+  const sodiumG = optionalNumber(n.sodium_100g);
+  const caffeineG = optionalNumber(n.caffeine_100g);
+  const servingQuantity = optionalNumber(raw?.serving_quantity);
   return {
     code: String(raw?.code || ""),
     name: String(raw?.product_name || "").trim(),
     brand: String(raw?.brands || "").trim(),
     quantity: String(raw?.quantity || "").trim(),
     servingSize: String(raw?.serving_size || "").trim(),
+    servingQuantityG: servingQuantity !== null && servingQuantity > 0 ? servingQuantity : null,
     imageUrl: typeof raw?.image_front_small_url === "string" && /^https:\/\//i.test(raw.image_front_small_url) ? raw.image_front_small_url : null,
     ingredients: String(raw?.ingredients_text || "").slice(0, 2000),
     allergens: String(raw?.allergens || "").slice(0, 500),
@@ -35,33 +46,67 @@ function normalizeProduct(raw: any) {
       saturatedFatG: optionalNumber(n["saturated-fat_100g"]),
       sugarsG: optionalNumber(n.sugars_100g),
       saltG: optionalNumber(n.salt_100g),
-      sodiumMg: optionalNumber(n.sodium_100g) === null ? null : Number(n.sodium_100g) * 1000,
-      caffeineMg: optionalNumber(n.caffeine_100g) === null ? null : Number(n.caffeine_100g) * 1000,
+      sodiumMg: sodiumG === null ? null : Math.round(sodiumG * 1000 * 10) / 10,
+      caffeineMg: caffeineG === null ? null : Math.round(caffeineG * 1000 * 10) / 10,
     },
     source: "Open Food Facts",
-    sourceUrl: OFF_BASE + "/product/" + encodeURIComponent(String(raw?.code || "")),
+    sourceUrl: OFF_PUBLIC_BASE + "/product/" + encodeURIComponent(String(raw?.code || "")),
     verificationStatus: "community_database_unverified",
   };
 }
-async function offFetch(url: string) {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
-    signal: AbortSignal.timeout(7000),
-  });
-  if (!response.ok) throw new Error("Open Food Facts is temporarily unavailable. Please try again.");
-  return response.json() as Promise<any>;
+class OffError extends Error {
+  constructor(message: string, readonly status = 502) { super(message); }
+}
+// Turns every failure mode (timeout, DNS/network, 429, 5xx, bad JSON) into a short, user-safe message.
+async function offFetchOnce(url: string, timeoutMs: number) {
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: { "User-Agent": "FitOS/1.0 (food scanner)" }, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TimeoutError" || name === "AbortError") throw new OffError("Open Food Facts took too long to respond. Please try again, or enter the label manually.", 504);
+    throw new OffError("Could not reach Open Food Facts. Check your connection and try again, or enter the label manually.");
+  }
+  if (response.status === 404) return { notFound: true as const, data: null as any };
+  if (response.status === 429) throw new OffError("Open Food Facts is rate-limiting requests right now. Please wait a moment and try again.", 503);
+  if (!response.ok) throw new OffError("Open Food Facts is temporarily unavailable. Please try again, or enter the label manually.");
+  try {
+    return { notFound: false as const, data: (await response.json()) as any };
+  } catch {
+    throw new OffError("Open Food Facts returned an unreadable response. Please try again.");
+  }
+}
+async function offFetch(url: string, timeoutMs = OFF_TIMEOUT_MS) {
+  try {
+    return await offFetchOnce(url, timeoutMs);
+  } catch (error) {
+    // One retry for transient upstream failures; never for rate limiting.
+    if (error instanceof OffError && error.status !== 503) return offFetchOnce(url, timeoutMs);
+    throw error;
+  }
 }
 foodScannerRouter.get("/foods/barcode/:code", async (req, res) => {
   const code = String(req.params.code || "").trim();
   if (!PRODUCT_CODE.test(code)) return res.status(400).json({ error: "Enter a valid EAN/UPC barcode (8, 12, 13, or 14 digits)." });
   try {
-    const data = await offFetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`);
-    if (data?.status !== 1 || !data?.product) return res.status(404).json({ found: false, code, error: "Product not found in Open Food Facts. Search by name or enter the package label manually." });
-    const product = normalizeProduct({ ...data.product, code });
-    if (!product.name) return res.status(422).json({ found: false, code, error: "The product record has no name. Use manual entry after checking the package label." });
-    return res.json({ found: true, product });
+    // Open Food Facts stores UPC-A (12 digit) products as zero-padded EAN-13, so try both spellings.
+    const candidates = code.length === 12 ? [code, "0" + code] : [code];
+    let product: ReturnType<typeof normalizeProduct> | null = null;
+    let sawRecordWithoutName = false;
+    for (const candidate of candidates) {
+      const { notFound, data } = await offFetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(candidate)}.json?fields=${OFF_FIELDS}`);
+      if (notFound || data?.status !== 1 || !data?.product) continue;
+      const normalized = normalizeProduct({ ...data.product, code });
+      if (!normalized.name) { sawRecordWithoutName = true; continue; }
+      product = normalized;
+      break;
+    }
+    if (product) return res.json({ found: true, product });
+    if (sawRecordWithoutName) return res.status(422).json({ found: false, code, error: "The product record has no name. Use manual entry after checking the package label." });
+    return res.status(404).json({ found: false, code, error: "Product not found in Open Food Facts. Search by name or enter the package label manually." });
   } catch (error) {
-    return res.status(502).json({ error: error instanceof Error ? error.message : "Open Food Facts lookup failed." });
+    if (error instanceof OffError) return res.status(error.status).json({ error: error.message });
+    return res.status(502).json({ error: "Open Food Facts lookup failed. Please try again." });
   }
 });
 foodScannerRouter.get("/foods/search", async (req, res) => {
@@ -70,7 +115,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
   try {
     // Use Open Food Facts' dedicated Search-a-licious full-text API instead of
     // the legacy /cgi/search.pl endpoint, which is subject to global 503 limits.
-    const url = new URL("https://search.openfoodfacts.org/search");
+    const url = new URL(OFF_SEARCH_URL);
     url.searchParams.set("q", q);
     url.searchParams.set("langs", "en");
     url.searchParams.set("page", "1");
@@ -78,7 +123,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     url.searchParams.set("fields", OFF_FIELDS);
     const response = await fetch(url.toString(), {
       headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(Math.max(OFF_TIMEOUT_MS, 12000)),
     });
     if (!response.ok) {
       console.error("[food-search] Open Food Facts Search-a-licious returned HTTP", response.status);
@@ -95,19 +140,29 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
       }));
     return res.json({ products, source: "Open Food Facts", count: products.length });
   } catch (error) {
-    return res.status(502).json({ error: error instanceof Error ? error.message : "Open Food Facts search failed." });
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    return res.status(timedOut ? 504 : 502).json({ error: timedOut ? "Open Food Facts search took too long. Please try again." : "Could not reach Open Food Facts search. Please try again shortly." });
   }
 });
+// A "day" is the user's local calendar day. The client sends its UTC offset (Date#getTimezoneOffset, minutes
+// west of UTC) so entries logged just after local midnight do not show up under the previous UTC date.
+function dayWindow(query: Record<string, unknown>) {
+  const date = typeof query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(query.date) ? query.date : new Date().toISOString().slice(0, 10);
+  const rawOffset = typeof query.tzOffset === "string" && /^-?\d{1,4}$/.test(query.tzOffset) ? Number(query.tzOffset) : 0;
+  const offset = Math.abs(rawOffset) <= 14 * 60 ? rawOffset : 0;
+  const [y, m, d] = date.split("-").map(Number);
+  const start = Date.UTC(y, m - 1, d) + offset * 60000;
+  return { date, from: new Date(start).toISOString(), to: new Date(start + 86400000).toISOString() };
+}
 foodScannerRouter.get("/logs", requireAuth, async (req: AuthedRequest, res) => {
-  const date = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
-    ? req.query.date : new Date().toISOString().slice(0, 10);
+  const { date, from, to } = dayWindow(req.query);
   const rows = await db.all<any>(
     `SELECT id, product_code AS "productCode", food_name AS "foodName", brand, serving_amount AS "servingAmount",
       serving_unit AS "servingUnit", calories_kcal AS "caloriesKcal", protein_g AS "proteinG",
       carbs_g AS "carbsG", fat_g AS "fatG", fiber_g AS "fiberG", source, source_url AS "sourceUrl",
       verification_status AS "verificationStatus", logged_at AS "loggedAt"
      FROM food_log WHERE user_id = ? AND logged_at >= ? AND logged_at < ? ORDER BY logged_at DESC LIMIT 200`,
-    req.userId!, date + "T00:00:00.000Z", date + "T23:59:59.999Z"
+    req.userId!, from, to
   );
   const totals = rows.reduce((acc: any, row: any) => {
     for (const key of ["caloriesKcal", "proteinG", "carbsG", "fatG", "fiberG"]) {
@@ -115,6 +170,7 @@ foodScannerRouter.get("/logs", requireAuth, async (req: AuthedRequest, res) => {
     }
     return acc;
   }, { caloriesKcal: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 });
+  for (const key of Object.keys(totals)) totals[key] = Math.round(totals[key] * 100) / 100;
   return res.json({ date, entries: rows, totals, note: "Totals sum only available values; missing nutrients are not treated as zero." });
 });
 foodScannerRouter.post("/logs", requireAuth, async (req: AuthedRequest, res) => {
@@ -131,7 +187,7 @@ foodScannerRouter.post("/logs", requireAuth, async (req: AuthedRequest, res) => 
   }
   const code = typeof b.productCode === "string" && PRODUCT_CODE.test(b.productCode) ? b.productCode : null;
   const source = ["open_food_facts", "manual_label", "manual_entry"].includes(b.source) ? b.source : "manual_entry";
-  const sourceUrl = source === "open_food_facts" && code ? OFF_BASE + "/product/" + encodeURIComponent(code) : null;
+  const sourceUrl = source === "open_food_facts" && code ? OFF_PUBLIC_BASE + "/product/" + encodeURIComponent(code) : null;
   const now = nowIso();
   // Prevent accidental repeat submissions of the same product within 10 seconds.
   if (code) {
