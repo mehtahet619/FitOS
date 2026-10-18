@@ -13,5 +13,7 @@ window.API_BASE = window.location.hostname === "localhost" || window.location.ho
 
 // Public measurement IDs are injected at build time. No provider is loaded
 // until the visitor explicitly accepts optional analytics cookies.
-window.FITOS_GA4_ID = "__GA4_MEASUREMENT_ID__";
-window.FITOS_CLARITY_ID = "__CLARITY_PROJECT_ID__";
+const configuredGa4Id = "__GA4_MEASUREMENT_ID__";
+window.FITOS_GA4_ID = configuredGa4Id.startsWith("__") ? "" : configuredGa4Id;
+const configuredClarityId = "__CLARITY_PROJECT_ID__";
+window.FITOS_CLARITY_ID = configuredClarityId.startsWith("__") ? "" : configuredClarityId;
