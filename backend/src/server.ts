@@ -12,6 +12,7 @@ import { workoutRouter } from "./modules/workouts/routes";
 import { nutritionRouter } from "./modules/nutrition/routes";
 import { foodRouter } from "./modules/food/routes";
 import { foodScannerRouter } from "./modules/food-scanner/routes";
+import { foodScannerRouter } from "./modules/nutrition/foodScanner";
 import { progressRouter } from "./modules/progress/routes";
 import { musclesRouter } from "./modules/muscles/routes";
 import { gymRouter } from "./modules/gym/routes";
