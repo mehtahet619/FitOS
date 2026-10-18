@@ -5,7 +5,7 @@
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const apiBase = () => (window.API_BASE_URL || window.API_BASE || "").replace(/\/$/, "");
   const el = id => document.getElementById(id);
-  let stream = null, scanTimer = null, mountObserver = null;
+  let stream = null, scanTimer = null, mountObserver = null, zxingControls = null, lookupInProgress = false;
   async function call(path, options = {}) {
     const headers = {"Content-Type":"application/json", ...(options.headers || {})};
     const token = localStorage.getItem("accessToken") || "";
@@ -26,7 +26,7 @@
       <p>Scan packaged food, read a nutrition label, or log a meal. Review every value before saving.</p>
       <div class="field"><label for="fos-barcode">Product barcode (EAN / UPC)</label><input id="fos-barcode" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Scan or enter 8–14 digits"></div>
       <div class="btn-row"><button class="btn btn-mint" id="fos-lookup" type="button">Look up product</button><button class="btn btn-outline" id="fos-camera" type="button">Scan barcode</button></div>
-      <div id="fos-camera-wrap" hidden><video id="fos-video" autoplay playsinline muted style="width:100%;max-height:260px;background:#111;border-radius:12px"></video><button class="btn btn-outline" id="fos-stop" type="button">Stop camera</button></div>
+      <div id="fos-camera-wrap" hidden><p id="fos-scan-status" role="status" aria-live="polite">Starting camera…</p><video id="fos-video" autoplay playsinline muted style="width:100%;max-height:260px;background:#111;border-radius:12px"></video><button class="btn btn-outline" id="fos-stop" type="button">Stop camera</button></div>
       <hr>
       <div class="card-label">SCAN A NUTRITION LABEL</div>
       <p>Upload a clear photo of the package nutrition panel. OCR fills draft fields where it can; check them against the label.</p>
@@ -58,15 +58,23 @@
   async function lookup() {
     const barcode = el("fos-barcode")?.value.trim() || "";
     if (!/^\d{8,14}$/.test(barcode)) return status("Enter an 8–14 digit barcode.", true);
-    status("Checking Open Food Facts…");
+    if (lookupInProgress) return;
+    lookupInProgress = true;
+    const button = el("fos-lookup");
+    if (button) { button.disabled = true; button.textContent = "Looking up…"; }
+    status("Looking up barcode in Open Food Facts…");
     el("fos-review").replaceChildren();
     try {
       const result = await call("/product/" + encodeURIComponent(barcode));
+      if (!result?.product) throw new Error("Open Food Facts returned no product data for this barcode.");
       renderProduct(result.product);
-      status("Product found. Verify the source, serving size and nutrition before logging.");
+      status("Product found. Verify the package details before logging.");
     } catch (error) {
-      status(error.message + " You can enter values from the package label below.", true);
+      status((error.message || "Product lookup failed.") + " You can enter values from the package label below.", true);
       renderManual(barcode);
+    } finally {
+      lookupInProgress = false;
+      if (button) { button.disabled = false; button.textContent = "Look up product"; }
     }
   }
   function renderManual(barcode = "", draft = {}) {
@@ -174,32 +182,81 @@
   }
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) return status("Camera access is unavailable here. Enter the barcode manually.", true);
-    let detector;
+    const wrap = el("fos-camera-wrap"), video = el("fos-video"), scanStatus = el("fos-scan-status");
+    wrap.hidden = false;
+    scanStatus.textContent = "Starting camera…";
     try {
-      if ("BarcodeDetector" in window) detector = new BarcodeDetector({formats:["ean_8","ean_13","upc_a","upc_e","qr_code"]});
-      else return status("This browser does not support live barcode detection. Enter the barcode manually.", true);
-      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}, audio:false});
-      const video = el("fos-video"); el("fos-camera-wrap").hidden = false; video.srcObject = stream; await video.play();
-      const scan = async () => {
-        if (!stream) return;
-        try {
-          const codes = await detector.detect(video);
-          let barcode = codes.find(code => ["ean_8","ean_13","upc_a","upc_e"].includes(code.format) && /^\d{8,14}$/.test(code.rawValue))?.rawValue;
-          const qr = codes.find(code => code.format === "qr_code")?.rawValue;
-          if (!barcode && qr) {
-            if (/^\d{8,14}$/.test(qr)) barcode = qr;
-            else try { const url = new URL(qr); const match = url.hostname === "world.openfoodfacts.org" && url.pathname.match(/^\/product\/(\d{8,14})\/?$/); if (match) barcode = match[1]; } catch {}
+      if ("BarcodeDetector" in window) {
+        const detector = new BarcodeDetector({formats:["ean_8","ean_13","upc_a","upc_e","qr_code"]});
+        stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}, audio:false});
+        video.srcObject = stream;
+        await video.play();
+        scanStatus.textContent = "Scanning… Hold the barcode steady inside the camera view.";
+        const scan = async () => {
+          if (!stream) return;
+          try {
+            const codes = await detector.detect(video);
+            let barcode = codes.find(code => ["ean_8","ean_13","upc_a","upc_e"].includes(code.format) && /^\d{8,14}$/.test(code.rawValue))?.rawValue;
+            const qr = codes.find(code => code.format === "qr_code")?.rawValue;
+            if (!barcode && qr) {
+              if (/^\d{8,14}$/.test(qr)) barcode = qr;
+              else try { const url = new URL(qr); const match = url.hostname === "world.openfoodfacts.org" && url.pathname.match(/^\/product\/(\d{8,14})\/?$/); if (match) barcode = match[1]; } catch {}
+            }
+            if (barcode) {
+              el("fos-barcode").value = barcode;
+              scanStatus.textContent = "Barcode detected. Looking up product…";
+              stopCamera();
+              await lookup();
+              return;
+            }
+          } catch {}
+          scanTimer = setTimeout(scan, 250);
+        };
+        void scan();
+      } else {
+        scanStatus.textContent = "Loading barcode scanner…";
+        if (!window.ZXingBrowser) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js";
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Barcode scanner could not load. Check your connection or enter the barcode manually."));
+            document.head.appendChild(script);
+          });
+        }
+        if (!window.ZXingBrowser?.BrowserMultiFormatReader) throw new Error("Live barcode scanning is not supported in this browser. Enter the barcode manually.");
+        const reader = new window.ZXingBrowser.BrowserMultiFormatReader();
+        scanStatus.textContent = "Scanning… Hold the barcode steady inside the camera view.";
+        zxingControls = await reader.decodeFromVideoDevice(undefined, video, async (result) => {
+          if (!result || lookupInProgress || !stream) return;
+          const raw = result.getText?.() || "";
+          let barcode = /^\d{8,14}$/.test(raw) ? raw : "";
+          if (!barcode) {
+            try {
+              const url = new URL(raw);
+              barcode = url.hostname === "world.openfoodfacts.org" ? (url.pathname.match(/^\/product\/(\d{8,14})\/?$/) || [])[1] || "" : "";
+            } catch {}
           }
-          if (barcode) { el("fos-barcode").value = barcode; stopCamera(); await lookup(); return; }
-        } catch {}
-        scanTimer = setTimeout(scan, 250);
-      };
-      void scan();
-    } catch { status("Camera permission denied or camera unavailable. Enter barcode manually.", true); stopCamera(); }
+          if (!barcode) return;
+          el("fos-barcode").value = barcode;
+          scanStatus.textContent = "Barcode detected. Looking up product…";
+          stopCamera();
+          await lookup();
+        });
+        stream = video.srcObject;
+      }
+    } catch (error) {
+      stopCamera();
+      status(error?.message || "Camera permission denied or camera unavailable. Enter barcode manually.", true);
+    }
   }
   function stopCamera() {
-    if (scanTimer) clearTimeout(scanTimer); scanTimer = null;
-    if (stream) stream.getTracks().forEach(track => track.stop()); stream = null;
+    if (scanTimer) clearTimeout(scanTimer);
+    scanTimer = null;
+    if (zxingControls) { try { zxingControls.stop(); } catch {} }
+    zxingControls = null;
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = null;
     const wrap = el("fos-camera-wrap"); if (wrap) wrap.hidden = true;
     const video = el("fos-video"); if (video) video.srcObject = null;
   }
