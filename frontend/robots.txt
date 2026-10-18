@@ -15,5 +15,9 @@ Disallow: /equipment
 Disallow: /history
 Disallow: /profile
 Disallow: /settings
+Disallow: /gym
+Disallow: /scan
+Disallow: /vision
+Disallow: /diet
 
 Sitemap: https://adaptive-fit-web.onrender.com/sitemap.xml
