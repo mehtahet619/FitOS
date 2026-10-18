@@ -181,6 +181,17 @@ app.post("/pricing-guesses", requireAuth, async (req: AuthedRequest, res) => {
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
+// Readiness endpoint for uptime monitors. It distinguishes a running API from
+// an API whose shared database is unavailable without exposing connection data.
+app.get("/health/ready", async (_req, res) => {
+  try {
+    await db.get<{ ok: number }>("SELECT 1 AS ok");
+    return res.json({ status: "ready", database: "ok" });
+  } catch {
+    return res.status(503).json({ status: "not_ready", database: "unavailable" });
+  }
+});
+
 app.use("/auth", authRouter);
 app.use("/api/auth", authRouter);
 app.use("/user", userRouter);
