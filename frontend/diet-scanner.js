@@ -197,7 +197,7 @@
       }).join("") : '<p class="muted">No food logged yet today. Scan a packaged food or enter a meal manually.</p>';
       list.querySelectorAll(".diet-delete").forEach((button) => button.addEventListener("click", async () => {
         if (!confirm("Delete this food log?")) return;
-        try { await API.delete("/food-scanner/logs/" + encodeURIComponent(button.dataset.id)); await loadDiary(); }
+        try { await API.del("/food-scanner/logs/" + encodeURIComponent(button.dataset.id)); await loadDiary(); }
         catch (error) { alert(error.message || "Could not delete food."); }
       }));
     } catch (error) {
