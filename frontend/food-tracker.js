@@ -4,7 +4,7 @@
   const root = $("fitos-food-tracker");
   if (!root || root.dataset.initialized) return;
   root.dataset.initialized = "true";
-  const state = { product: null, stream: null, scanTimer: null, logs: [], pendingManual: false };
+  const state = { product: null, stream: null, scanTimer: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null };
   const num = (v) => v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt = (v, unit = "") => v === null || v === undefined ? "Not available" : `${Number(v.toFixed ? v.toFixed(1) : v)}${unit}`;
@@ -48,6 +48,30 @@
     state.product = result.product; state.pendingManual = false; renderReview(result.product);
     $("food-product-review").scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  async function loadNutritionProfile() {
+    try {
+      const profile = await api("/user/profile");
+      state.profile = profile.profile || profile;
+      state.nutritionTargets = profile.nutritionTargets || null;
+      if (!state.nutritionTargets) {
+        try { state.nutritionTargets = await api("/nutrition/targets"); } catch { /* profile-based estimates remain available */ }
+      }
+    } catch { /* onboarding may not be complete; use general references */ }
+  }
+  function renderNutritionGuidance() {
+    const output = $("food-nutrition-guidance");
+    if (!output || !state.product || !window.FitOSNutritionGuidance) return;
+    const serving = Number($("food-review-serving")?.value || 100);
+    const n = state.product.nutrimentsPer100g || {};
+    const guidance = window.FitOSNutritionGuidance.assess({
+      nutrients: n, servingGrams: serving, profile: state.profile || {},
+      targets: state.nutritionTargets || {}
+    });
+    output.innerHTML = `<h4>How this serving fits your day</h4>
+      <p class="food-data-note">Guidance uses your saved profile and nutrition targets where available, plus general adult reference values. It is not a diagnosis or a simple healthy/unhealthy verdict.</p>
+      <ul>${guidance.notes.map((note) => `<li>${esc(note)}</li>`).join("")}</ul>
+      <p class="food-data-note">General references: sodium under 2,000 mg/day; caffeine up to 400 mg/day for most healthy adults; fibre about 25 g/day; free sugars ideally below 50 g/day on a 2,000 kcal diet. Product total sugars may differ from free sugars. Pregnancy, medication, health conditions, and age can change advice.</p>`;
+  }
   function renderReview(product) {
     const n = product.nutrimentsPer100g || {};
     const container = $("food-product-review");
@@ -66,10 +90,10 @@
         <label>Fiber (g / 100 g/ml)<input id="food-review-fiber" type="number" min="0" step="0.1" value="${n.fiberG ?? ""}" placeholder="Not listed"></label>
       </div>
       <p class="food-data-note">The values above are per 100 g/ml. FitOS scales the available values to your selected serving. Confirm the package label and correct values if needed.</p>
-      <div class="food-review-actions"><button type="button" class="btn btn-mint" id="food-confirm-log">Confirm & add to today</button><button type="button" class="btn btn-outline" id="food-cancel-review">Cancel</button></div>
+      <div id="food-nutrition-guidance" class="food-nutrition-guidance" aria-live="polite"></div><div class="food-review-actions"><button type="button" class="btn btn-mint" id="food-confirm-log">Confirm & add to today</button><button type="button" class="btn btn-outline" id="food-cancel-review">Cancel</button></div>
       <p id="food-review-status" class="food-status" aria-live="polite"></p>`;
     $("food-confirm-log").addEventListener("click", confirmLog);
-    $("food-cancel-review").addEventListener("click", () => { container.hidden = true; state.product = null; });
+    $("food-review-serving").addEventListener("input", renderNutritionGuidance);\n    renderNutritionGuidance();\n    $("food-cancel-review").addEventListener("click", () => { container.hidden = true; state.product = null; });
   }
   async function confirmLog() {
     const product = state.product;
@@ -222,5 +246,5 @@
     if (link && link.href && !link.href.startsWith(window.location.origin)) link.rel = "noopener noreferrer";
   });
   window.addEventListener("beforeunload", stopCamera);
-  // Load log only when requested; do not make the Diet screen wait on the API.
+  void loadNutritionProfile();\n  // Load log only when requested; do not make the Diet screen wait on the API.
 })();
