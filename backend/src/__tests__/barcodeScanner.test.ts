@@ -6,7 +6,7 @@ import { barcodeFrame, blankFrame } from "./helpers/barcodeImages";
 const req = createRequire(__filename);
 const frontend = path.join(__dirname, "../../../frontend");
 const B = req(path.join(frontend, "barcode-scanner.js"));
-const ZXing = req(path.join(frontend, "vendor/zxing-library-0.21.3.min.js"));
+const ZXing = req("@zxing/library");
 
 describe("barcode helpers", () => {
   it("validates GTIN check digits", () => {
