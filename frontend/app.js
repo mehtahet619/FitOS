@@ -2382,9 +2382,10 @@ function showWorkoutNotice(message, tone) {
 
 /* ================= DIET ================= */
 async function loadDiet() {
-  const el = $("diet-content");
-  el.innerHTML = `<div class="food-finder-empty"><div class="food-orbit">🥗</div><h2>Hungry for something healthy?</h2><p>We'll search nearby restaurants and find the healthiest dishes available right now.</p><button class="btn btn-primary" id="find-healthy-btn">✨ Find Healthy Food Near Me</button></div>`;
-  $("find-healthy-btn").addEventListener("click", findHealthyFood);
+  // The Diet screen is rendered by food-tracker.js. Keep this legacy mount empty
+  // so the old duplicate food-discovery card is not inserted above the tracker.
+  const host = $("diet-content");
+  if (host) host.replaceChildren();
 }
 
 async function findHealthyFood() {
