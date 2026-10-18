@@ -132,11 +132,26 @@
     catch (error) { setStatus("food-camera-status", error.message, true); }
   });
   $("food-search-form").addEventListener("submit", async (event) => {
+    // Keep product search entirely client-side. Prevent native form navigation before
+    // any validation or async work so the page never reloads and clears the results.
     event.preventDefault();
+    event.stopPropagation();
     const query = $("food-search-input").value.trim();
-    if (query.length < 2) return;
-    $("food-search-results").innerHTML = '<p class="food-empty">Searching Open Food Facts…</p>';
-    try { await searchProducts(query); } catch (error) { $("food-search-results").innerHTML = `<p class="food-empty">${esc(error.message)}</p>`; }
+    const results = $("food-search-results");
+    if (query.length < 2) {
+      results.innerHTML = '<p class="food-empty" role="status">Enter at least 2 characters to search.</p>';
+      return;
+    }
+    const button = $("food-search-form").querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    results.innerHTML = '<p class="food-empty" role="status">Searching Open Food Facts…</p>';
+    try {
+      await searchProducts(query);
+    } catch (error) {
+      results.innerHTML = `<p class="food-empty" role="alert">${esc(error.message || "Product search failed. Please try again.")}</p>`;
+    } finally {
+      if (button) button.disabled = false;
+    }
   });
   $("food-search-results").addEventListener("click", (event) => {
     const button = event.target.closest("[data-select-product]");
