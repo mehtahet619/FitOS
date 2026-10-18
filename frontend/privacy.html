@@ -31,15 +31,17 @@
 <p>FitOS uses its backend and hosting infrastructure to process requests and store account and product data. Authentication uses browser storage and session cookies as part of the sign-in flow. Basic request, security, and diagnostic logs may be generated to operate the service and investigate errors. Do not share passwords or one-time verification codes with anyone.</p>
 <h2>5. Third-party providers</h2>
 <p>Some functions depend on hosting, database, email delivery, AI/vision, and places/menu providers. When a feature needs one of these providers, relevant request data may be processed by that provider to deliver the feature. Their own terms and privacy policies may also apply. The exact providers can change as the service develops.</p>
-<h2>6. Community price guesses</h2>
-<p>The landing-page price-guess feature accepts a monthly price estimate and updates an average and count in backend process memory. It is not designed to write those guesses to the FitOS application database. The in-memory totals can be reset by a backend restart and may differ across backend instances.</p>
-<h2>7. Retention and security</h2>
+<h2>6. Optional analytics</h2>
+<p>If FitOS is configured with Google Analytics 4 or Microsoft Clarity project IDs, those optional analytics scripts are loaded only after you explicitly accept them in the on-site analytics choice. Rejecting optional analytics prevents those scripts from loading. You can change your choice using Cookie settings while the consent controls are available. The implementation sends a limited set of product events, such as completed signup, login, workout-plan creation, workout generation, and equipment analysis. It is designed not to send passwords, one-time codes, session tokens, email addresses, workout details, or request bodies to analytics. Microsoft Clarity may record interactions only after consent; private application screens are marked for masking. Third-party providers may process technical data under their own terms. The exact enabled providers depend on the IDs configured by the operator.</p>
+<h2>7. Community price guesses</h2>
+<p>The landing-page price-guess feature stores one monthly price estimate per authenticated account in the FitOS application database so that the community average and count are shared across visitors and backend instances. The account ID is used to enforce one guess per account. The public summary exposes the average and count, not individual account identities. These guesses are product data and are subject to the service's retention and deletion processes.</p>
+<h2>8. Retention and security</h2>
 <p>FitOS uses security measures appropriate to a developing web application, but no online service can promise absolute security. Retention periods, deletion workflows, and the final operator contact process are not yet published in a sufficiently specific form on this page. Do not submit information you do not want processed by the service.</p>
-<h2>8. Your choices</h2>
+<h2>9. Your choices</h2>
 <p>You can choose what profile details to provide, decline optional camera or location permissions, and stop using the service. Browser controls can be used to clear locally stored site data and revoke permissions. Clearing local data may sign you out, but it does not necessarily delete information already stored on the backend.</p>
-<h2>9. Children and sensitive information</h2>
+<h2>10. Children and sensitive information</h2>
 <p>FitOS is a general fitness planning tool, not designed to collect medical records. Do not submit sensitive health information or images of other people. If you are not legally able to agree to these terms where you live, do not create an account without the required consent.</p>
-<h2>10. Policy changes and contact</h2>
+<h2>11. Policy changes and contact</h2>
 <p>This policy may be revised when features or data practices change. A dedicated public privacy contact is not currently listed here. Before broad public launch, FitOS should publish an operator identity and contact channel for privacy requests, along with concrete retention and deletion procedures.</p>
 <p class="legal-note">This page is transparent about current known product behavior but is not a substitute for a legal review. Confirm the deployed providers, data retention, deletion options, and applicable legal obligations before treating it as a final compliance policy.</p>
 </main>
