@@ -4,7 +4,6 @@ import { db, nowIso } from "../../db/client";
 import { AuthedRequest, requireAuth } from "../../common/auth";
 
 export const foodScannerRouter = Router();
-foodScannerRouter.use(requireAuth);
 
 const OFF_BASE = "https://world.openfoodfacts.org";
 const OFF_FIELDS = "code,product_name,brands,quantity,serving_size,nutriments,image_front_small_url,ingredients_text,allergens,ecoscore_grade,nova_group";
@@ -85,7 +84,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     return res.status(502).json({ error: error instanceof Error ? error.message : "Open Food Facts search failed." });
   }
 });
-foodScannerRouter.get("/logs", async (req: AuthedRequest, res) => {
+foodScannerRouter.get("/logs", requireAuth, async (req: AuthedRequest, res) => {
   const date = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
     ? req.query.date : new Date().toISOString().slice(0, 10);
   const rows = await db.all<any>(
@@ -104,7 +103,7 @@ foodScannerRouter.get("/logs", async (req: AuthedRequest, res) => {
   }, { caloriesKcal: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 });
   return res.json({ date, entries: rows, totals, note: "Totals sum only available values; missing nutrients are not treated as zero." });
 });
-foodScannerRouter.post("/logs", async (req: AuthedRequest, res) => {
+foodScannerRouter.post("/logs", requireAuth, async (req: AuthedRequest, res) => {
   const b = req.body || {};
   const name = typeof b.foodName === "string" ? b.foodName.trim().slice(0, 120) : "";
   const amount = Number(b.servingAmount);
@@ -135,7 +134,7 @@ foodScannerRouter.post("/logs", async (req: AuthedRequest, res) => {
   );
   return res.status(201).json({ id, loggedAt: now });
 });
-foodScannerRouter.patch("/logs/:id", async (req: AuthedRequest, res) => {
+foodScannerRouter.patch("/logs/:id", requireAuth, async (req: AuthedRequest, res) => {
   const id = String(req.params.id || "");
   const b = req.body || {};
   const existing = await db.get<any>("SELECT * FROM food_log WHERE id = ? AND user_id = ?", id, req.userId!);
@@ -146,7 +145,7 @@ foodScannerRouter.patch("/logs/:id", async (req: AuthedRequest, res) => {
   await db.run("UPDATE food_log SET food_name = ?, serving_amount = ?, updated_at = ? WHERE id = ? AND user_id = ?", name, amount, nowIso(), id, req.userId!);
   return res.json({ success: true });
 });
-foodScannerRouter.delete("/logs/:id", async (req: AuthedRequest, res) => {
+foodScannerRouter.delete("/logs/:id", requireAuth, async (req: AuthedRequest, res) => {
   const result = await db.run("DELETE FROM food_log WHERE id = ? AND user_id = ?", String(req.params.id || ""), req.userId!);
   if (!result.changes) return res.status(404).json({ error: "Food log entry not found." });
   return res.json({ success: true });
