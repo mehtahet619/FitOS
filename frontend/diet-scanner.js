@@ -5,7 +5,7 @@
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const apiBase = () => (window.API_BASE_URL || window.API_BASE || "").replace(/\/$/, "");
   const el = id => document.getElementById(id);
-  let stream = null, scanTimer = null, mountObserver = null, zxingControls = null, lookupInProgress = false;
+  let stream = null, scanTimer = null, mountObserver = null, zxingControls = null, lookupInProgress = false, profilePromise = null;
   async function call(path, options = {}) {
     const headers = {"Content-Type":"application/json", ...(options.headers || {})};
     const token = localStorage.getItem("accessToken") || "";
@@ -14,6 +14,38 @@
     const data = response.status === 204 ? null : await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error || "Food scanner request failed.");
     return data;
+  }
+  async function getProfile() {
+    if (!profilePromise) {
+      profilePromise = (async () => {
+        const response = await fetch(apiBase() + "/user/profile", {
+          credentials: "include",
+          headers: { Authorization: "Bearer " + (localStorage.getItem("accessToken") || "") }
+        });
+        if (!response.ok) throw new Error("Complete your FitOS profile to calculate personal nutrition targets.");
+        const profile = await response.json();
+        return { ...profile, ...(profile.profile || {}), ...(profile.nutritionTargets ? { nutritionTargets: profile.nutritionTargets } : {}) };
+      })().catch(error => { profilePromise = null; throw error; });
+    }
+    return profilePromise;
+  }
+  function calculateTargets(profile) {
+    if (profile.nutritionTargets && Number(profile.nutritionTargets.calorieTarget) > 0) return profile.nutritionTargets;
+    const weight = Number(profile.weightKg), height = Number(profile.heightCm), age = Number(profile.age), days = Number(profile.daysPerWeek);
+    if (!(weight > 0 && height > 0 && age > 0 && days >= 1 && days <= 7)) throw new Error("Your profile is missing age, height, weight, or training days.");
+    const bmr = 10 * weight + 6.25 * height - 5 * age + (String(profile.gender).toLowerCase() === "male" ? 5 : -161);
+    const activity = days >= 6 ? 1.7 : days >= 4 ? 1.55 : days >= 2 ? 1.375 : 1.2;
+    let calories = bmr * activity, proteinPerKg = 1.6;
+    switch (profile.primaryGoal) {
+      case "fat_loss": calories -= 400; proteinPerKg = 2.0; break;
+      case "muscle_gain": calories += 300; proteinPerKg = 1.8; break;
+      case "strength": proteinPerKg = 1.8; break;
+      case "endurance": proteinPerKg = 1.4; break;
+    }
+    calories = Math.max(1200, Math.round(calories));
+    const proteinTargetG = Math.round(weight * proteinPerKg);
+    const fatTargetG = Math.round(calories * 0.25 / 9);
+    return { calorieTarget: calories, proteinTargetG, fatTargetG, carbTargetG: Math.max(0, Math.round((calories - proteinTargetG * 4 - fatTargetG * 9) / 4)) };
   }
   function mount() {
     const screen = el("screen-diet");
@@ -106,7 +138,10 @@
       <div class="field"><label for="pr-meal">Meal</label><select id="pr-meal"><option>snack</option><option>breakfast</option><option>lunch</option><option>dinner</option></select></div>
       <div class="field"><label for="pr-basis">Nutrition basis</label><select id="pr-basis"><option value="100">Values per 100 g/ml</option><option value="serving">Values per serving</option></select></div>
       ${[["caloriesKcal","Calories (kcal)"],["proteinG","Protein (g)"],["carbsG","Carbohydrates (g)"],["fatG","Fat (g)"]].map(([key,label]) => `<div class="field"><label for="pr-${key}">${label}</label><input id="pr-${key}" type="number" min="0" step="any" value="${n[key] ?? ""}"></div>`).join("")}
-      <button class="btn btn-mint" id="pr-save" type="button">Confirm and log food</button></div>`;
+      <div id="fos-product-assessment" class="food-status" aria-live="polite">Calculating your personal assessment…</div><button class="btn btn-mint" id="pr-save" type="button">Confirm and log food</button></div>`;
+    const refreshAssessment = () => { void updateProductAssessment(p); };
+    ["pr-count","pr-basis","pr-caloriesKcal","pr-proteinG","pr-carbsG","pr-fatG"].forEach(id => el(id)?.addEventListener("input", refreshAssessment));
+    void updateProductAssessment(p);
     el("pr-save").addEventListener("click", () => {
       const keys = ["caloriesKcal","proteinG","carbsG","fatG"], values = keys.map(key => el("pr-" + key).value.trim() === "" ? NaN : Number(el("pr-" + key).value));
       const name = el("pr-name").value.trim(), servings = Number(el("pr-count").value);
@@ -119,6 +154,51 @@
       }
       void save({foodName:name, barcode:p.barcode, servingDescription:el("pr-serving").value, servings, caloriesKcal:values[0], proteinG:values[1], carbsG:values[2], fatG:values[3], mealType:el("pr-meal").value, source:"Open Food Facts", verified:true, requestKey:crypto.randomUUID()});
     });
+  }
+  async function updateProductAssessment(product) {
+    const host = el("fos-product-assessment");
+    if (!host) return;
+    try {
+      const profile = await getProfile();
+      const targets = calculateTargets(profile);
+      const basis = el("pr-basis")?.value || "100";
+      const servings = Number(el("pr-count")?.value || 1);
+      const quantityG = Number(product?.servingQuantityG);
+      const read = key => {
+        const raw = el("pr-" + key)?.value;
+        if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0) return null;
+        return basis === "100" ? (quantityG > 0 ? n * quantityG / 100 : null) : n;
+      };
+      const serving = {
+        caloriesKcal: read("caloriesKcal"),
+        proteinG: read("proteinG"),
+        carbsG: read("carbsG"),
+        fatG: read("fatG")
+      };
+      let totals = {};
+      try { totals = (await call("/logs")).totals || {}; } catch {}
+      const rows = [
+        ["Calories", serving.caloriesKcal, targets.calorieTarget, Number(totals.caloriesKcal || 0), "kcal"],
+        ["Protein", serving.proteinG, targets.proteinTargetG, Number(totals.proteinG || 0), "g"],
+        ["Carbohydrates", serving.carbsG, targets.carbTargetG, Number(totals.carbsG || 0), "g"],
+        ["Fat", serving.fatG, targets.fatTargetG, Number(totals.fatG || 0), "g"]
+      ];
+      const lines = rows.map(([label, amount, target, consumed, unit]) => {
+        if (amount === null) return "<p>" + esc(label) + ": unavailable in the product record.</p>";
+        const contribution = target > 0 ? Math.round(amount / target * 100) : 0;
+        const remaining = Math.max(0, target - consumed - amount);
+        return "<p><strong>" + esc(label) + ":</strong> " + (Math.round(amount * 10) / 10) + " " + unit +
+          " per serving (" + contribution + "% of your daily target); after this entry, approximately " +
+          (Math.round(remaining * 10) / 10) + " " + unit + " remains.</p>";
+      }).join("");
+      host.innerHTML = "<strong>Your personalized assessment</strong><p>Goal: " + esc(String(profile.primaryGoal || "general fitness").replace(/_/g, " ")) +
+        " · Diet: " + esc(profile.dietaryPref || "not specified") + " · servings selected: " + esc(servings) +
+        "</p>" + lines + "<p>Estimates are based on your saved profile and today's logged intake. Check package values; this is general wellness guidance, not medical advice.</p>";
+    } catch (error) {
+      host.textContent = (error.message || "Personal nutrition assessment is unavailable.") + " You can still review the label, but personalized targets require a complete saved profile.";
+    }
   }
   async function save(body) {
     try { await call("/logs", {method:"POST", body:JSON.stringify(body)}); status("Food logged."); await loadLogs(); }
