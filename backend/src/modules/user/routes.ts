@@ -33,7 +33,8 @@ userRouter.get("/profile", async (req: AuthedRequest, res) => {
   };
 
   log("profile-query:start");
-  const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);\n  const nutritionTargets = await db.get<any>(`SELECT calorieTarget, proteinTargetG, carbTargetG, fatTargetG FROM NutritionProfile WHERE userId = ?`, userId);
+  const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);
+  const nutritionTargets = await db.get<any>(`SELECT calorieTarget, proteinTargetG, carbTargetG, fatTargetG FROM NutritionProfile WHERE userId = ?`, userId);
   log("profile-query:end");
   if (!profile) return res.status(404).json({ error: "Profile not created yet" });
   log("response ready");
