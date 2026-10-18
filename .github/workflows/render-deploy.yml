@@ -3,6 +3,9 @@ name: Deploy to Render
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
 
 permissions:
   contents: read
@@ -16,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
-      - run: npm install
+      - run: npm ci
       - run: npm run lint
 
   typecheck:
@@ -26,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
 
   test:
@@ -36,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
-      - run: npm install
+      - run: npm ci
       - run: npm test
 
   build:
@@ -46,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
-      - run: npm install
+      - run: npm ci
       - run: npm run build
 
   secretlint:
@@ -56,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22.14.0, cache: npm, cache-dependency-path: backend/package-lock.json }
-      - run: npm install
+      - run: npm ci
       - run: npm run secretlint
 
   codeql:
