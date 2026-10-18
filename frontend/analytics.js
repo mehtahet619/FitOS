@@ -41,10 +41,17 @@
     })(window, document, "clarity", "script", CLARITY_ID);
   }
 
+  function maskPrivateScreensForClarity() {
+    document.querySelectorAll('.screen:not(#screen-landing)').forEach((element) => {
+      element.setAttribute('data-clarity-mask', 'true');
+    });
+  }
+
   function initializeProviders() {
     if (initialized || consentValue() !== "accepted") return;
     initialized = true;
     loadGa4();
+    maskPrivateScreensForClarity();
     loadClarity();
   }
 
