@@ -203,6 +203,7 @@ app.use("/workouts", workoutRouter);
 app.use("/nutrition", nutritionRouter);
 app.use("/food", foodRouter);
 app.use("/nutrition", foodScannerRouter);
+app.use("/food-scanner", foodScannerRouter);
 app.use("/progress", progressRouter);
 app.use("/muscles", musclesRouter);
 app.use("/gym", gymRouter);
