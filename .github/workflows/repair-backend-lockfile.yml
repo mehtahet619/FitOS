@@ -1,0 +1,43 @@
+name: Repair backend npm lockfile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/repair-backend-lockfile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Regenerate backend lockfile
+        working-directory: backend
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify clean locked install
+        working-directory: backend
+        run: |
+          rm -rf node_modules
+          npm ci
+      - name: Commit regenerated lockfile
+        run: |
+          if git diff --quiet -- backend/package-lock.json; then
+            echo "Lockfile is already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json
+          git commit -m "fix: synchronize backend npm lockfile"
+          git push origin HEAD:main
