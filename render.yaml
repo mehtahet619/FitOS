@@ -94,6 +94,15 @@ services:
       - path: /reset-password
         name: X-Robots-Tag
         value: noindex, nofollow
+      - path: /verify-email
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /verify-login
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /forgot-password
+        name: X-Robots-Tag
+        value: noindex, nofollow
       - path: /homepage
         name: X-Robots-Tag
         value: noindex, nofollow
