@@ -1406,3 +1406,48 @@ button:disabled, [aria-disabled="true"] {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Optional analytics consent: compact, accessible and mobile-friendly. */
+.fitos-consent-banner {
+  position: fixed;
+  z-index: 1200;
+  inset: auto 16px 88px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 980px;
+  margin-inline: auto;
+  padding: 20px;
+  border: 1px solid #d9e2dc;
+  border-radius: 16px;
+  background: #fff;
+  color: #202a24;
+  box-shadow: 0 12px 40px rgb(20 35 27 / 18%);
+}
+.fitos-consent-banner[hidden] { display: none; }
+.fitos-consent-copy { max-width: 600px; }
+.fitos-consent-copy strong { display: block; font-size: 16px; }
+.fitos-consent-copy p { margin: 6px 0; color: #68736d; font-size: 13px; line-height: 1.5; }
+.fitos-consent-copy a { color: #27684d; font-size: 13px; text-underline-offset: 3px; }
+.fitos-consent-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fitos-consent-actions button, .fitos-cookie-settings {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid #d7e0d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #26362d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.fitos-consent-actions .fitos-consent-accept { background: #27684d; border-color: #27684d; color: #fff; }
+.fitos-cookie-settings { position: fixed; z-index: 1100; right: 12px; bottom: 12px; min-height: 36px; padding: 7px 10px; font-size: 11px; opacity: .94; }
+@media (max-width: 640px) {
+  .fitos-consent-banner { inset: auto 10px 74px; flex-direction: column; align-items: stretch; gap: 14px; padding: 16px; }
+  .fitos-consent-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .fitos-consent-actions button { padding-inline: 8px; }
+}
