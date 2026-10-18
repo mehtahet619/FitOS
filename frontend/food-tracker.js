@@ -262,5 +262,14 @@
     if (link && link.href && !link.href.startsWith(window.location.origin)) link.rel = "noopener noreferrer";
   });
   window.addEventListener("beforeunload", stopCamera);
-  void loadNutritionProfile();\n  // Load log only when requested; do not make the Diet screen wait on the API.
+  void loadNutritionProfile();
+  // Guard native form submission at the tracker root. If a later handler throws, search must not navigate/reload the page.
+  root.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (form instanceof HTMLFormElement && ["food-search-form", "food-barcode-form"].includes(form.id)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+  // Load log only when requested; do not make the Diet screen wait on the API.
 })();
