@@ -4,8 +4,9 @@ describe("FitOS nutrition guidance", () => {
   afterEach(() => { delete (globalThis as any).window; });
 
   async function loadGuidance() {
+    vi.resetModules();
     (globalThis as any).window = {};
-    await import("../../../../frontend/nutrition-guidance.js");
+    await import("../../../frontend/nutrition-guidance.js");
     return (globalThis as any).window.FitOSNutritionGuidance;
   }
 
