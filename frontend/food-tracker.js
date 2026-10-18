@@ -238,30 +238,47 @@
     catch (error) { window.alert(error.message); }
   });
   async function nearbyWithCoords(latitude, longitude, label) {
-    setStatus("food-nearby-status", "Searching for real nearby listings…");
+    const results = $("food-nearby-results");
+    results.innerHTML = "";
+    setStatus("food-nearby-status", "Finding real menu dishes near you and ranking health plus distance…");
     try {
-      const result = await api("/food/nearby?lat=" + encodeURIComponent(latitude) + "&lng=" + encodeURIComponent(longitude));
-      if (!result.configured || !result.places?.length) {
-        $("food-nearby-results").innerHTML = `<p class="food-empty">${esc(result.message || "No real listings were returned by the configured places provider.")}</p>`;
-        setStatus("food-nearby-status", "Location: " + label + ". No listings were invented.");
+      const result = await api("/food/healthy-nearby", { method: "POST", body: { latitude, longitude } });
+      const recommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
+      if (!recommendations.length) {
+        const message = result.error || "The live provider returned no menu dishes for this location. No dishes were invented.";
+        results.innerHTML = `<p class="food-empty">${esc(message)}</p>`;
+        setStatus("food-nearby-status", "Location: " + label + ". No ranked dishes were returned.", true);
         return;
       }
-      $("food-nearby-results").innerHTML = result.places.map((item) => {
-        const p = item.place || item;
-        const url = typeof p.restaurantUrl === "string" && /^https:\/\//i.test(p.restaurantUrl) ? p.restaurantUrl : "";
-        return `<article class="food-nearby-entry"><div class="food-result-main"><strong>${esc(p.name || "Food place")}</strong><small>${esc(p.address || p.locality || "")}</small>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open listing</a>` : ""}</div></article>`;
+      results.innerHTML = recommendations.map((item, index) => {
+        const url = typeof item.restaurantUrl === "string" && /^https:\/\//i.test(item.restaurantUrl) ? item.restaurantUrl : "";
+        const distance = Number.isFinite(Number(item.distanceKm)) ? Number(item.distanceKm).toFixed(1) + " km away" : "Distance unavailable";
+        const price = Number.isFinite(Number(item.priceInr)) && Number(item.priceInr) > 0 ? "₹" + Math.round(Number(item.priceInr)) : "Price unavailable";
+        const score = Number.isFinite(Number(item.healthScore)) ? Math.round(Number(item.healthScore)) + "/100" : "Score unavailable";
+        const reasons = Array.isArray(item.reasons) ? item.reasons.map(esc).join(" · ") : "";
+        return `<article class="food-nearby-entry"><div class="food-result-main"><small>#${index + 1} · Health score ${score} · ${esc(distance)}</small><strong>${esc(item.dishName || item.name || "Menu dish")}</strong><span>${esc(item.restaurantName || "Restaurant")} · ${esc(price)}</span><small>${esc(item.locality || "")}${item.restaurantRating ? " · Rating " + esc(item.restaurantRating) : ""}</small>${reasons ? `<p>${reasons}</p>` : ""}<small>${esc(item.nutritionDisclaimer || "Nutrition data may be estimated; confirm with the restaurant.")}</small>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open restaurant listing</a>` : ""}</div></article>`;
       }).join("");
-      setStatus("food-nearby-status", "Location: " + label + ". Results come from the configured places provider.");
-    } catch (error) { setStatus("food-nearby-status", error.message, true); }
+      setStatus("food-nearby-status", `Location: ${label}. Ranked ${recommendations.length} dishes from ${result.restaurantsFound || "nearby"} restaurants. ${result.ranking || ""}`);
+    } catch (error) {
+      const message = error?.message || "Nearby food search failed.";
+      results.innerHTML = `<p class="food-empty">${esc(message)}</p>`;
+      setStatus("food-nearby-status", message, true);
+    }
   }
   $("food-nearby-location").addEventListener("click", () => {
-    if (!navigator.geolocation) return setStatus("food-nearby-status", "Geolocation is unavailable. Enter a place manually if your maps provider supports it.", true);
+    if (!navigator.geolocation) return setStatus("food-nearby-status", "Geolocation is unavailable in this browser.", true);
     setStatus("food-nearby-status", "Waiting for your location permission…");
-    navigator.geolocation.getCurrentPosition((position) => nearbyWithCoords(position.coords.latitude, position.coords.longitude, "your device location"), (error) => setStatus("food-nearby-status", error.code === 1 ? "Location permission denied. No location was sent." : "Could not get location. You can search manually.", true), { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+    navigator.geolocation.getCurrentPosition(
+      (position) => nearbyWithCoords(position.coords.latitude, position.coords.longitude, "your device location"),
+      (error) => setStatus("food-nearby-status", error.code === 1 ? "Location permission denied. No location was sent." : error.code === 3 ? "Location request timed out. Try again with GPS enabled." : "Could not get location. Check device location settings and try again.", true),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+    );
   });
   $("food-nearby-manual-form").addEventListener("submit", (event) => {
     event.preventDefault();
-    setStatus("food-nearby-status", "This app’s live places API currently accepts coordinates, not free-text addresses. Use GPS with permission or use the existing Healthy Food Near You section.");
+    const query = $("food-nearby-query").value.trim();
+    if (!query) return setStatus("food-nearby-status", "Enter a place name or use GPS.", true);
+    setStatus("food-nearby-status", "Text-address search is not connected to a geocoder yet. Use GPS for live nearby ranking.", true);
   });
   root.addEventListener("click", (event) => {
     const link = event.target.closest("a");

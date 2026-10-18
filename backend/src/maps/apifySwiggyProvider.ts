@@ -430,14 +430,13 @@ export class ApifySwiggyMapsProvider {
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places = restaurantsToTransform
+      // Without real coordinates we cannot honestly claim a restaurant is nearby.
+      .filter((r) => r.latitude != null && r.longitude != null && isValidLatLng(Number(r.latitude), Number(r.longitude)))
       .map((r) => {
         const restaurantName = r.name as string;
-        const hasCoordinates = r.latitude != null && r.longitude != null;
-        const latitude = hasCoordinates ? r.latitude! : userLat;
-        const longitude = hasCoordinates ? r.longitude! : userLng;
-        const distance = hasCoordinates
-          ? this.calculateDistance(userLat, userLng, latitude, longitude)
-          : 0;
+        const latitude = Number(r.latitude);
+        const longitude = Number(r.longitude);
+        const distance = this.calculateDistance(userLat, userLng, latitude, longitude);
 
         const restaurantDishes = dishes
           .filter((dish) => dish.restaurantId === r.id)

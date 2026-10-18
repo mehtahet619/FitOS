@@ -78,24 +78,20 @@ export class MockMapsProvider implements MapsProvider {
 }
 
 export function getMapsProvider(): MapsProvider {
-  const provider = process.env.MAPS_PROVIDER || "mock";
-
+  const configuredProvider = process.env.MAPS_PROVIDER;
+  const apiKey = process.env.APIFY_API_KEY;
+  // Prefer live search when credentials exist, even if an old deployment still
+  // has MAPS_PROVIDER=mock. Without credentials, never fabricate listings.
+  const provider = configuredProvider === "apify_swiggy" ||
+    (Boolean(apiKey) && (!configuredProvider || configuredProvider === "mock"))
+    ? "apify_swiggy" : configuredProvider || "mock";
   if (provider === "apify_swiggy") {
-    const apiKey = process.env.APIFY_API_KEY;
     if (!apiKey) {
-      console.warn("MAPS_PROVIDER=apify_swiggy but APIFY_API_KEY not set — falling back to mock");
+      console.warn("MAPS_PROVIDER=apify_swiggy but APIFY_API_KEY not set — no live places provider available");
       return new MockMapsProvider();
     }
     return new ApifySwiggyProvider(apiKey);
   }
-
-  // if (provider === "google_places") {
-  //   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  //   if (!apiKey) return new MockMapsProvider();
-  //   return new GooglePlacesProvider(apiKey);
-  // }
-
-  // Default to mock
   return new MockMapsProvider();
 }
 

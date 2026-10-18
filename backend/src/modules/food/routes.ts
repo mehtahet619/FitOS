@@ -10,63 +10,53 @@ export const foodRouter = Router();
 foodRouter.use(requireAuth);
 
 foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
-  const latitude = Number(req.body?.latitude);
-  const longitude = Number(req.body?.longitude);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return res.status(400).json({ error: "Location is required" });
-  }
-
+  const latitude = Number(req.body?.latitude), longitude = Number(req.body?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)
+    return res.status(400).json({ error: "A valid GPS location is required." });
   const result = await getMapsProvider().findNearbyFood({ latitude, longitude, query: "healthy food" });
-  const dishes: HealthyDishInput[] = result.places.flatMap((place) =>
-    place.dishes.map((dish) => ({
-      dishId: uuidv4(),
-      name: dish.name,
-      restaurantName: place.name,
-      restaurantUrl: place.restaurantUrl,
-      priceInr: dish.estPriceInr,
-      calories: dish.estCalories,
-      proteinG: dish.estProteinG,
-      description: `${place.cuisines || "Nearby menu"} ${place.locality || ""}`.trim(),
-    }))
-  );
-  console.log("Apify restaurants:", result.places.length);
-  console.log("Verified menu items:", dishes.length);
-  if (!dishes.length) {
-    const diagnostics = result.diagnostics;
-    return res.status(424).json({
-      success: false,
-      stage: diagnostics?.stage || "dish_normalization",
-      restaurantsFound: diagnostics?.restaurantsFound ?? result.places.length,
-      restaurantIdentifiersFound: diagnostics?.restaurantIdentifiersFound ?? 0,
-      rawMenuRecordsFound: diagnostics?.rawMenuRecordsFound ?? 0,
-      normalizedDishesFound: diagnostics?.normalizedDishesFound ?? 0,
-      error: diagnostics?.error || "We found nearby restaurants, but exact menu items are not available from the current data source.",
-    });
-  }
-
-  const analyses = await getAiProvider().analyzeHealthyDishes({ dishes });
-  const validIds = new Set(dishes.map((dish) => dish.dishId));
-  const byId = new Map(dishes.map((dish) => [dish.dishId, dish]));
-  const recommendations = analyses
-    .filter((analysis) => validIds.has(analysis.dishId))
-    .map((analysis) => ({
-      ...byId.get(analysis.dishId)!,
-      dishName: byId.get(analysis.dishId)!.name,
-      healthScore: Math.max(0, Math.min(100, Number(analysis.healthScore) || 0)),
-      reasons: Array.isArray(analysis.reasons) ? analysis.reasons.slice(0, 4) : [],
-      nutritionConfidence: analysis.nutritionConfidence || "llm_estimated",
-    }))
-    .sort((a, b) => b.healthScore - a.healthScore)
-    .slice(0, 10);
-  console.log("Meal plan data source:", "healthy-dish-analysis");
-  console.log("Generated meals:", recommendations.length);
-  return res.json({
-    restaurantsFound: result.places.length,
-    dishesFound: dishes.length,
-    recommendations,
-    dataSource: "healthy-dish-analysis",
+  if (!result.configured) return res.status(503).json({ success: false, configured: false, error: "Nearby food search is not configured on the server. Enable a live places/menu provider and its API credentials.", stage: "provider_configuration" });
+  const places = result.places.filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && p.latitude >= -90 && p.latitude <= 90 && p.longitude >= -180 && p.longitude <= 180);
+  const dishes: HealthyDishInput[] = places.flatMap((p) => p.dishes.filter((d) => Boolean(d.name?.trim()) && d.inStock !== false).map((d) => ({
+    dishId: `${p.id}::${d.id || d.name}`, name: d.name, restaurantName: p.name, restaurantUrl: p.restaurantUrl,
+    priceInr: d.estPriceInr > 0 ? d.estPriceInr : undefined, calories: d.estCalories, proteinG: d.estProteinG,
+    carbsG: d.estCarbsG, fatG: d.estFatG, description: `${p.cuisines || ""} ${d.description || ""} ${d.category || ""}`.trim(), category: d.category,
+  })));
+  if (!dishes.length) return res.status(424).json({
+    success: false, configured: true, stage: result.diagnostics?.stage || "menu_extraction",
+    restaurantsFound: result.diagnostics?.restaurantsFound ?? places.length,
+    restaurantIdentifiersFound: result.diagnostics?.restaurantIdentifiersFound ?? 0,
+    rawMenuRecordsFound: result.diagnostics?.rawMenuRecordsFound ?? 0,
+    normalizedDishesFound: result.diagnostics?.normalizedDishesFound ?? 0,
+    error: result.diagnostics?.error || "The provider returned no menu dishes with real restaurant coordinates. No dishes were invented.",
   });
+  const analyses = await getAiProvider().analyzeHealthyDishes({ dishes });
+  const dishById = new Map(dishes.map((d) => [d.dishId, d]));
+  const placeByDishId = new Map<string, typeof places[number]>();
+  for (const p of places) for (const d of p.dishes) placeByDishId.set(`${p.id}::${d.id || d.name}`, p);
+  const recommendations = analyses.filter((x) => dishById.has(x.dishId) && placeByDishId.has(x.dishId)).map((x) => {
+    const dish = dishById.get(x.dishId)!, place = placeByDishId.get(x.dishId)!;
+    const distanceKm = haversineKm(latitude, longitude, place.latitude, place.longitude);
+    const healthScore = Math.max(0, Math.min(100, Number(x.healthScore) || 0));
+    const proximityScore = Math.max(0, 100 * (1 - distanceKm / 10));
+    return { ...dish, dishName: dish.name, restaurantName: place.name, restaurantUrl: place.restaurantUrl,
+      locality: place.locality, restaurantRating: place.rating, distanceKm: Math.round(distanceKm * 100) / 100,
+      latitude: place.latitude, longitude: place.longitude, healthScore, proximityScore: Math.round(proximityScore),
+      combinedScore: Math.round(healthScore * 0.8 + proximityScore * 0.2),
+      reasons: Array.isArray(x.reasons) ? x.reasons.slice(0, 4) : [],
+      nutritionConfidence: x.nutritionConfidence || "estimated",
+      nutritionDisclaimer: "Nutrition is estimated from available menu data and is not a verified label value.",
+    };
+  }).sort((x, y) => y.combinedScore - x.combinedScore || x.distanceKm - y.distanceKm).slice(0, 20);
+  return res.json({ success: true, configured: true, restaurantsFound: places.length, dishesFound: dishes.length,
+    recommendations, ranking: "80% dish health score + 20% proximity score (within 10 km)",
+    dataSource: "live provider menu data; nutrition estimates are labeled" });
 });
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const r = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
 
 foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
   const { lat, lng, foodId } = req.query;
