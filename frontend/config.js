@@ -10,3 +10,8 @@ window.API_BASE = window.location.hostname === "localhost" || window.location.ho
   : configuredApiBase.startsWith("https://")
     ? configuredApiBase.replace(/\/$/, "")
     : "https://adaptive-fit-api.onrender.com";
+
+// Public measurement IDs are injected at build time. No provider is loaded
+// until the visitor explicitly accepts optional analytics cookies.
+window.FITOS_GA4_ID = "__GA4_MEASUREMENT_ID__";
+window.FITOS_CLARITY_ID = "__CLARITY_PROJECT_ID__";
