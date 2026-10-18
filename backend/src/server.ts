@@ -200,9 +200,12 @@ app.use("/equipment", equipmentRouter);
 app.use("/", equipmentRouter); // exposes /user/equipment alongside /equipment
 app.use("/exercises", exerciseRouter);
 app.use("/workouts", workoutRouter);
+// Mount public food search/barcode routes before the authenticated nutrition router.
+// nutritionRouter.use(requireAuth) otherwise returns 401 for /nutrition/foods/search before
+// the food-scanner router can handle it, triggering the frontend logout/navigation flow.
+app.use("/nutrition", foodScannerRouter);
 app.use("/nutrition", nutritionRouter);
 app.use("/food", foodRouter);
-app.use("/nutrition", foodScannerRouter);
 app.use("/food-scanner", foodScannerRouter);
 app.use("/progress", progressRouter);
 app.use("/muscles", musclesRouter);
