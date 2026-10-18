@@ -14,6 +14,20 @@ permissions:
   checks: read
 
 jobs:
+  frontend-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.14.0 }
+      - name: Check frontend JavaScript syntax
+        run: |
+          node --check frontend/analytics.js
+          node --check frontend/api.js
+          node --check frontend/config.js
+          node --check scripts/inject-frontend-api-url.cjs
+
   lint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
