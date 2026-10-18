@@ -20,7 +20,19 @@
     window.__fitosGa4Loaded = true;
     window.dataLayer = window.dataLayer || [];
     window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
+    window.gtag("consent", "default", {
+      analytics_storage: "denied",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied"
+    });
     window.gtag("js", new Date());
+    window.gtag("consent", "update", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied"
+    });
     window.gtag("config", GA_ID, { send_page_view: false, allow_google_signals: false });
     const script = document.createElement("script");
     script.async = true;
@@ -39,6 +51,10 @@
       t.referrerPolicy="strict-origin-when-cross-origin";
       y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
     })(window, document, "clarity", "script", CLARITY_ID);
+    window.clarity("consentv2", {
+      ad_Storage: "denied",
+      analytics_Storage: "granted"
+    });
   }
 
   function maskPrivateScreensForClarity() {
@@ -59,7 +75,24 @@
     try { localStorage.setItem(CONSENT_KEY, value); } catch {}
     const banner = document.getElementById("fitos-consent-banner");
     if (banner) banner.hidden = true;
-    initializeProviders();
+    if (value === "accepted") {
+      initializeProviders();
+    } else {
+      if (typeof window.gtag === "function" && GA_ID) {
+        window.gtag("consent", "update", {
+          analytics_storage: "denied",
+          ad_storage: "denied",
+          ad_user_data: "denied",
+          ad_personalization: "denied"
+        });
+      }
+      if (typeof window.clarity === "function" && CLARITY_ID) {
+        window.clarity("consentv2", {
+          ad_Storage: "denied",
+          analytics_Storage: "denied"
+        });
+      }
+    }
   }
 
   function mountConsentUi() {
