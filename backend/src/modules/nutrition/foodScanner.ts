@@ -24,22 +24,24 @@ foodScannerRouter.get("/product/:barcode", async (req, res) => {
     const payload = await response.json() as { status?: number; product?: any };
     if (payload.status !== 1 || !payload.product) return res.status(404).json({ error: "Product not found in Open Food Facts. Enter nutrition from the package label." });
     const p = payload.product, n = p.nutriments || {};
-    const pick = (a: string, b: string) => numberOrNull(n[b]) ?? numberOrNull(n[a]);
-    const calories = pick("energy-kcal_100g", "energy-kcal_serving") ??
-      (numberOrNull(n.energy_100g) === null ? null : Math.round(numberOrNull(n.energy_100g)! / 4.184 * 100) / 100);
+    // The API response declares its nutrition basis as per_100g, so never
+    // silently substitute per-serving values into these fields.
+    const per100g = (key: string) => numberOrNull(n[key]);
+    const calories = per100g("energy-kcal_100g") ??
+      (per100g("energy_100g") === null ? null : Math.round(per100g("energy_100g")! / 4.184 * 100) / 100);
     return res.json({ product: {
       barcode, name: p.product_name || "", brand: p.brands || "", packageSize: p.quantity || "",
       servingSize: p.serving_size || "", servingQuantityG: numberOrNull(p.serving_quantity),
       imageUrl: p.image_front_url || null, source: "Open Food Facts",
       sourceUrl: `https://world.openfoodfacts.org/product/${barcode}`,
       nutrition: { basis: "per_100g", caloriesKcal: calories,
-        proteinG: pick("proteins_100g", "proteins_serving"),
-        carbsG: pick("carbohydrates_100g", "carbohydrates_serving"),
-        fatG: pick("fat_100g", "fat_serving"),
-        sugarsG: pick("sugars_100g", "sugars_serving"),
-        fiberG: pick("fiber_100g", "fiber_serving"),
-        saturatedFatG: pick("saturated-fat_100g", "saturated-fat_serving"),
-        saltG: pick("salt_100g", "salt_serving") },
+        proteinG: per100g("proteins_100g"),
+        carbsG: per100g("carbohydrates_100g"),
+        fatG: per100g("fat_100g"),
+        sugarsG: per100g("sugars_100g"),
+        fiberG: per100g("fiber_100g"),
+        saturatedFatG: per100g("saturated-fat_100g"),
+        saltG: per100g("salt_100g") },
       allergens: p.allergens_tags || []
     }});
   } catch (error) {
