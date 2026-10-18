@@ -94,7 +94,9 @@
       <div id="food-nutrition-guidance" class="food-nutrition-guidance" aria-live="polite"></div><div class="food-review-actions"><button type="button" class="btn btn-mint" id="food-confirm-log">Confirm & add to today</button><button type="button" class="btn btn-outline" id="food-cancel-review">Cancel</button></div>
       <p id="food-review-status" class="food-status" aria-live="polite"></p>`;
     $("food-confirm-log").addEventListener("click", confirmLog);
-    $("food-review-serving").addEventListener("input", renderNutritionGuidance);\n    renderNutritionGuidance();\n    $("food-cancel-review").addEventListener("click", () => { container.hidden = true; state.product = null; });
+    $("food-review-serving").addEventListener("input", renderNutritionGuidance);
+    renderNutritionGuidance();
+    $("food-cancel-review").addEventListener("click", () => { container.hidden = true; state.product = null; });
   }
   async function confirmLog() {
     const product = state.product;
