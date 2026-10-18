@@ -15,7 +15,7 @@ foodScannerRouter.get("/product/:barcode", async (req, res) => {
   const barcode = String(req.params.barcode || "").trim();
   if (!/^\d{8,14}$/.test(barcode)) return res.status(400).json({ error: "Enter a valid 8–14 digit EAN/UPC barcode." });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,brands,quantity,image_front_url,nutriments,serving_size,serving_quantity,allergens_tags`, {
       signal: controller.signal, headers: { "User-Agent": "FitOS/1.0 (food nutrition scanner)" }
