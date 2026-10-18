@@ -187,10 +187,11 @@
       ];
       const lines = rows.map(([label, amount, target, consumed, unit]) => {
         if (amount === null) return "<p>" + esc(label) + ": unavailable in the product record.</p>";
-        const contribution = target > 0 ? Math.round(amount / target * 100) : 0;
-        const remaining = Math.max(0, target - consumed - amount);
-        return "<p><strong>" + esc(label) + ":</strong> " + (Math.round(amount * 10) / 10) + " " + unit +
-          " per serving (" + contribution + "% of your daily target); after this entry, approximately " +
+        const selectedAmount = amount * Math.max(0.1, Math.min(50, servings || 1));
+        const contribution = target > 0 ? Math.round(selectedAmount / target * 100) : 0;
+        const remaining = Math.max(0, target - consumed - selectedAmount);
+        return "<p><strong>" + esc(label) + ":</strong> " + (Math.round(selectedAmount * 10) / 10) + " " + unit +
+          " for " + esc(servings) + " serving(s) (" + contribution + "% of your daily target); after this entry, approximately " +
           (Math.round(remaining * 10) / 10) + " " + unit + " remains.</p>";
       }).join("");
       host.innerHTML = "<strong>Your personalized assessment</strong><p>Goal: " + esc(String(profile.primaryGoal || "general fitness").replace(/_/g, " ")) +
