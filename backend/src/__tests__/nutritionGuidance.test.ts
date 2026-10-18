@@ -6,7 +6,8 @@ describe("FitOS nutrition guidance", () => {
   async function loadGuidance() {
     vi.resetModules();
     (globalThis as any).window = {};
-    await import("../../../frontend/nutrition-guidance.js");
+    const guidanceModulePath = "../../../frontend/nutrition-guidance.js";
+    await import(guidanceModulePath);
     return (globalThis as any).window.FitOSNutritionGuidance;
   }
 
