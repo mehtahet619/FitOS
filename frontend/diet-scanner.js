@@ -1,7 +1,7 @@
 /* FitOS Diet Scanner: Open Food Facts barcode lookup + user-confirmed food diary. */
 (function () {
   "use strict";
-  const API = window.Api;
+  const API = typeof Api !== "undefined" ? Api : window.Api;
   if (!API) return;
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
   let stream = null;
@@ -11,7 +11,6 @@
   function stopCamera() {
     if (stream) stream.getTracks().forEach((track) => track.stop());
     stream = null;
-    if (activeScanner && typeof activeScanner.reset === "function") activeScanner.reset();
     activeScanner = null;
   }
   function shell() {
@@ -77,7 +76,6 @@
         let detector;
         try { detector = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","qr_code"] }); }
         catch { detector = new BarcodeDetector(); }
-        activeScanner = { reset: stopCamera };
         const tick = async () => {
           if (!stream || !document.getElementById("diet-scan-video")) return;
           try {
