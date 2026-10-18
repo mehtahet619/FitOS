@@ -16,7 +16,7 @@ const optionalNumber = (value: unknown): number | null => {
 };
 function normalizeProduct(raw: any) {
   const n = raw?.nutriments || {};
-  const calories = optionalNumber(n["energy-kcal_100g"] ?? n["energy-kcal_value"]);
+  const calories = optionalNumber(n["energy-kcal_100g"]);
   return {
     code: String(raw?.code || ""),
     name: String(raw?.product_name || "").trim(),
@@ -45,7 +45,7 @@ function normalizeProduct(raw: any) {
 }
 async function offFetch(url: string) {
   const response = await fetch(url, {
-    headers: { "User-Agent": "FitOS/1.0 (food scanner; contact: support@fitos.app)" },
+    headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
     signal: AbortSignal.timeout(7000),
   });
   if (!response.ok) throw new Error("Open Food Facts is temporarily unavailable. Please try again.");
@@ -88,10 +88,10 @@ foodScannerRouter.get("/logs", async (req: AuthedRequest, res) => {
   const date = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
     ? req.query.date : new Date().toISOString().slice(0, 10);
   const rows = await db.all<any>(
-    `SELECT id, product_code AS productCode, food_name AS foodName, brand, serving_amount AS servingAmount,
-      serving_unit AS servingUnit, calories_kcal AS caloriesKcal, protein_g AS proteinG,
-      carbs_g AS carbsG, fat_g AS fatG, fiber_g AS fiberG, source, source_url AS sourceUrl,
-      verification_status AS verificationStatus, logged_at AS loggedAt
+    `SELECT id, product_code AS "productCode", food_name AS "foodName", brand, serving_amount AS "servingAmount",
+      serving_unit AS "servingUnit", calories_kcal AS "caloriesKcal", protein_g AS "proteinG",
+      carbs_g AS "carbsG", fat_g AS "fatG", fiber_g AS "fiberG", source, source_url AS "sourceUrl",
+      verification_status AS "verificationStatus", logged_at AS "loggedAt"
      FROM food_log WHERE user_id = ? AND logged_at >= ? AND logged_at < ? ORDER BY logged_at DESC LIMIT 200`,
     req.userId!, date + "T00:00:00.000Z", date + "T23:59:59.999Z"
   );
