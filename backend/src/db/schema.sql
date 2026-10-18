@@ -503,3 +503,28 @@ CREATE TABLE IF NOT EXISTS PricingGuess (
   createdAt TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pricing_guess_created_at ON PricingGuess(createdAt);
+
+
+-- User-owned food log; nutrition values retain their original source and verification state.
+CREATE TABLE IF NOT EXISTS food_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  product_code TEXT,
+  food_name TEXT NOT NULL,
+  brand TEXT,
+  serving_amount REAL NOT NULL,
+  serving_unit TEXT NOT NULL,
+  calories_kcal REAL,
+  protein_g REAL,
+  carbs_g REAL,
+  fat_g REAL,
+  fiber_g REAL,
+  source TEXT NOT NULL,
+  source_url TEXT,
+  verification_status TEXT NOT NULL DEFAULT 'user_confirmed',
+  logged_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_food_log_user_date ON food_log(user_id, logged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_food_log_user_code ON food_log(user_id, product_code, logged_at);
