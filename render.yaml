@@ -133,6 +133,12 @@ services:
       - path: /diet
         name: X-Robots-Tag
         value: noindex, nofollow
+      - path: /404
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /404.html
+        name: X-Robots-Tag
+        value: noindex, nofollow
     routes:
       - type: rewrite
         source: /terms
