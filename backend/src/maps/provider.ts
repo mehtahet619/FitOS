@@ -24,8 +24,9 @@ export interface NearbyPlace {
   rating: number;
   priceRange: string;
   isOpenNow: boolean;
-  latitude: number;
-  longitude: number;
+  /** Coordinates are optional because the Swiggy actor returns distance but not geocoded restaurant coordinates. */
+  latitude?: number;
+  longitude?: number;
   dishes: {
     id?: string;
     restaurantId?: string;
