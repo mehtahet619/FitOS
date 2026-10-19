@@ -268,7 +268,7 @@
         const hasCalories = caloriesValue !== null && caloriesValue !== undefined && Number.isFinite(Number(caloriesValue));
         const protein = hasProtein ? `~${Number(proteinValue)} g` : "Not listed";
         const calories = hasCalories ? `~${Number(caloriesValue)} kcal` : "Not listed";
-        const reasons = Array.isArray(item.reasons) ? item.reasons.map(esc).join("") : "";
+        const reasons = Array.isArray(item.reasons) ? item.reasons.map(esc).join(" · ") : "";
         const rating = item.restaurantRating !== null && item.restaurantRating !== undefined && Number.isFinite(Number(item.restaurantRating)) ? `★ ${Number(item.restaurantRating).toFixed(1)}` : "";
         const dishName = esc(item.dishName || item.name || "Menu dish");
         const restaurantName = esc(item.restaurantName || "Restaurant");
