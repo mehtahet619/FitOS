@@ -5,6 +5,7 @@ import { getMapsProvider } from "../../maps/provider";
 import { rankPlaces, DEFAULT_WEIGHTS } from "./rankRestaurants";
 import { getAiProvider, HealthyDishInput } from "../../ai/provider";
 import { v4 as uuidv4 } from "uuid";
+import { runHealthyFoodSearch } from "./healthyFoodCache";
 
 export const foodRouter = Router();
 foodRouter.use(requireAuth);
@@ -13,7 +14,23 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   const latitude = Number(req.body?.latitude), longitude = Number(req.body?.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)
     return res.status(400).json({ error: "A valid GPS location is required." });
-  const result = await getMapsProvider().findNearbyFood({ latitude, longitude, query: "healthy food" });
+  // Coalesce/cache identical nearby searches. Rounded coordinates are only a cache key;
+  // the actual actor request still receives the exact live GPS coordinates from the device.
+  const searchKey = `${latitude.toFixed(3)}:${longitude.toFixed(3)}:healthy-food`;
+  let result: Awaited<ReturnType<ReturnType<typeof getMapsProvider>["findNearbyFood"]>>;
+  let cacheHit = false;
+  try {
+    const search = await runHealthyFoodSearch(
+      searchKey,
+      () => getMapsProvider().findNearbyFood({ latitude, longitude, query: "healthy food" }),
+      (value) => value.configured && value.places.length > 0,
+    );
+    result = search.value;
+    cacheHit = search.cached;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Nearby-food search is busy.";
+    return res.status(503).json({ success: false, configured: true, stage: "search_in_progress", error: message });
+  }
   if (!result.configured) return res.status(503).json({ success: false, configured: false, error: "Nearby food search is not configured on the server. Enable a live places/menu provider and its API credentials.", stage: "provider_configuration" });
   const places = result.places.filter((p) => {
     const hasCoordinates = Number.isFinite(p.latitude) && Number.isFinite(p.longitude) &&
@@ -56,7 +73,7 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
       nutritionDisclaimer: "Nutrition is estimated from available menu data and is not a verified label value.",
     };
   }).sort((x, y) => y.combinedScore - x.combinedScore || x.distanceKm - y.distanceKm).slice(0, 20);
-  return res.json({ success: true, configured: true, restaurantsFound: places.length, dishesFound: dishes.length,
+  return res.json({ success: true, configured: true, cacheHit, restaurantsFound: places.length, dishesFound: dishes.length,
     recommendations, ranking: "80% dish health score + 20% proximity score (within 10 km)",
     dataSource: "live provider menu data; nutrition estimates are labeled" });
 });
