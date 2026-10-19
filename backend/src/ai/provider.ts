@@ -9,7 +9,7 @@
 export interface AiProvider {
   explainSubstitution(input: { originalExercise: string; substituteExercise: string; reason: string }): Promise<string>;
   explainWorkout(input: { focus: string; exerciseNames: string[] }): Promise<string>;
-  analyzeHealthyDishes(input: { dishes: HealthyDishInput[] }): Promise<HealthyDishAnalysis[]>;
+  analyzeHealthyDishes(input: { dishes: HealthyDishInput[]; preferences?: HealthyFoodPreferences }): Promise<HealthyDishAnalysis[]>;
 }
 
 export interface HealthyDishInput {
@@ -24,6 +24,16 @@ export interface HealthyDishInput {
   proteinG?: number;
   carbsG?: number;
   fatG?: number;
+  isVeg?: boolean;
+}
+
+export interface HealthyFoodPreferences {
+  primaryGoal?: string;
+  dietaryPref?: string;
+  allergies?: string;
+  foodLikes?: string;
+  dailyBudgetInr?: number;
+  weightKg?: number;
 }
 
 export interface HealthyDishAnalysis {
@@ -40,7 +50,7 @@ export class TemplateAiProvider implements AiProvider {
   async explainWorkout(input: { focus: string; exerciseNames: string[] }): Promise<string> {
     return `Today's ${input.focus} session: ${input.exerciseNames.join(", ")}. Built around your current equipment.`;
   }
-  async analyzeHealthyDishes(input: { dishes: HealthyDishInput[] }): Promise<HealthyDishAnalysis[]> {
+  async analyzeHealthyDishes(input: { dishes: HealthyDishInput[]; preferences?: HealthyFoodPreferences }): Promise<HealthyDishAnalysis[]> {
     return input.dishes.map((dish) => {
       const text = `${dish.name} ${dish.description || ""} ${dish.category || ""}`.toLowerCase();
       let score = 55;
@@ -105,15 +115,16 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
   return results;
 }
 
-async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[]): Promise<HealthyDishAnalysis[]> {
+async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[], preferences?: HealthyFoodPreferences): Promise<HealthyDishAnalysis[]> {
   const system = [
     "You rank real nearby menu dishes for a fitness app.",
     "Use only the supplied dish records and IDs. Never create, rename, or infer a dish, restaurant, price, distance, calories, protein, or other nutrition value.",
     "Prioritize protein only when protein data is explicitly present; consider known calories/macros, ingredient descriptions, and cooking style when supplied.",
     "Missing nutrition is unknown, not zero. Do not claim a dish is high-protein when protein grams are absent.",
+    "Use the user preferences as ranking context. Never assume ingredients or allergen absence from a dish name; mark uncertainty in reasons and do not make medical safety guarantees.",
     "Return JSON only: {\\"recommendations\\":[{\\"dishId\\":string,\\"healthScore\\":number,\\"reasons\\":string[]}]}",
   ].join(" ");
-  const user = JSON.stringify({ task: "Rank the supplied dishes from most fitness-friendly to least fitness-friendly. Scores are comparative, not medical advice.", dishes });
+  const user = JSON.stringify({ task: "Rank the supplied dishes from most fitness-friendly to least fitness-friendly. Scores are comparative, not medical advice.", preferences: preferences || {}, dishes });
   const anthropic = provider.name === "Anthropic";
   const response = await fetch(provider.url, {
     method: "POST",
@@ -137,7 +148,7 @@ class LlmAiProvider extends TemplateAiProvider {
   async analyzeHealthyDishes(input: { dishes: HealthyDishInput[] }): Promise<HealthyDishAnalysis[]> {
     if (!input.dishes.length) return [];
     for (const provider of configuredProviders()) {
-      try { return await analyzeWithProvider(provider, input.dishes); }
+      try { return await analyzeWithProvider(provider, input.dishes, input.preferences); }
       catch (error) {
         console.warn(`[food-ai] ${provider.name} ranking failed; trying next provider: ${error instanceof Error ? error.message : String(error)}`);
       }
