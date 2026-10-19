@@ -499,7 +499,7 @@ export class ApifySwiggyMapsProvider {
     const match = normalized.match(/[0-9]+(?:\.[0-9]+)?/);
     const amount = match ? Number(match[0]) : Number.NaN;
     if (!Number.isFinite(amount) || amount < 0) return undefined;
-    if ((/\\bm\\b|meter/.test(normalized)) && !/km/.test(normalized)) return amount / 1000;
+    if ((/\bm\b|meter/.test(normalized)) && !/km/.test(normalized)) return amount / 1000;
     return amount;
   }
 
