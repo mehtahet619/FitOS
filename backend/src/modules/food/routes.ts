@@ -16,7 +16,7 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "A valid GPS location is required." });
   // Coalesce/cache identical nearby searches. Rounded coordinates are only a cache key;
   // the actual actor request still receives the exact live GPS coordinates from the device.
-  const searchKey = `${latitude.toFixed(3)}:${longitude.toFixed(3)}:healthy-food`;
+  const searchKey = `${latitude.toFixed(4)}:${longitude.toFixed(4)}:healthy-food`;
   let result: Awaited<ReturnType<ReturnType<typeof getMapsProvider>["findNearbyFood"]>>;
   let cacheHit = false;
   try {
@@ -51,7 +51,9 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     restaurantIdentifiersFound: result.diagnostics?.restaurantIdentifiersFound ?? 0,
     rawMenuRecordsFound: result.diagnostics?.rawMenuRecordsFound ?? 0,
     normalizedDishesFound: result.diagnostics?.normalizedDishesFound ?? 0,
-    error: result.diagnostics?.error || "The provider returned no menu dishes with real restaurant coordinates. No dishes were invented.",
+    error: vegetarianOnly
+      ? "The provider did not identify any menu dishes as vegetarian. FitOS will not guess whether a dish is vegetarian."
+      : result.diagnostics?.error || "The provider returned no verified menu dish names. No dishes were invented.",
   });
   const analyses = await getAiProvider().analyzeHealthyDishes({ dishes, preferences: {
     primaryGoal: profile?.primaryGoal, dietaryPref: profile?.dietaryPref, allergies: profile?.allergies,
