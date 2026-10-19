@@ -483,7 +483,8 @@ export class ApifySwiggyMapsProvider {
           restaurantUrl: r.url,
         };
       })
-      .filter((place): place is NearbyPlace => place !== null)
+      .filter((place) => place !== null)
+      .map((place) => place as NearbyPlace)
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 10); // Return top 10 closest restaurants
 
