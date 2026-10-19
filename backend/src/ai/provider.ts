@@ -61,7 +61,7 @@ export class TemplateAiProvider implements AiProvider {
       if (/fried|deep fry|dessert|sweet|cola|shake/.test(text)) score -= 18;
       return {
         dishId: dish.dishId, healthScore: Math.max(0, Math.min(100, score)),
-        reasons: [dish.proteinG != null ? `Menu data lists ${dish.proteinG} g protein` : "Nutrition data is not listed by the source"],
+        reasons: [dish.proteinG != null ? `Available data lists ${dish.proteinG} g protein; verify with the restaurant` : "Nutrition data is not listed by the source"],
         nutritionConfidence: "estimated" as const,
       };
     });
@@ -108,7 +108,7 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
       dishId: row.dishId,
       healthScore: Math.max(0, Math.min(100, score)),
       reasons,
-      nutritionConfidence: hasNutrition ? "llm_estimated" : "estimated",
+      nutritionConfidence: "estimated",
     });
   }
   if (!results.length) throw new Error("LLM response did not contain any valid supplied dish IDs.");
@@ -145,7 +145,7 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
 }
 
 class LlmAiProvider extends TemplateAiProvider {
-  async analyzeHealthyDishes(input: { dishes: HealthyDishInput[] }): Promise<HealthyDishAnalysis[]> {
+  async analyzeHealthyDishes(input: { dishes: HealthyDishInput[]; preferences?: HealthyFoodPreferences }): Promise<HealthyDishAnalysis[]> {
     if (!input.dishes.length) return [];
     for (const provider of configuredProviders()) {
       try { return await analyzeWithProvider(provider, input.dishes, input.preferences); }
