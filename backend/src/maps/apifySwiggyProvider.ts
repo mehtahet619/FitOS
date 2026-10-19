@@ -39,8 +39,10 @@ interface FoodDish {
 }
 
 interface ApifyRestaurant {
-  id?: string;
-  restaurantId?: string;
+  id?: string | number;
+  restaurantId?: string | number;
+  restaurant_id?: string | number;
+  restaurantName?: string;
   name?: string;
   restaurantName?: string;
   Restaurantname?: string;
@@ -58,8 +60,11 @@ interface ApifyRestaurant {
   locality?: string;
   deliveryPrice?: number;
   deliveryTime?: string | number;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | string;
+  longitude?: number | string;
+  lat?: number | string;
+  lng?: number | string;
+  lon?: number | string;
   address?: string;
   url?: string;
   restaurantUrl?: string;
@@ -68,7 +73,18 @@ interface ApifyRestaurant {
   dishes?: ApifyMenuItem[];
   rowType?: string;
   itemName?: string;
-  price?: number;
+  dishName?: string;
+  title?: string;
+  item_name?: string;
+  restaurant_id?: string | number;
+  restaurant?: string;
+  dishId?: string | number;
+  itemId?: string | number;
+  veg?: boolean | string | number;
+  vegetarian?: boolean | string | number;
+  available?: boolean | string;
+  inStock?: boolean | string;
+  price?: number | string;
   priceInr?: number;
   category?: string;
   description?: string;
@@ -79,14 +95,25 @@ interface ApifyRestaurant {
 
 interface ApifyMenuItem {
   rowType?: string;
-  id?: string;
-  restaurantId?: string;
+  id?: string | number;
+  restaurantId?: string | number;
+  restaurant_id?: string | number;
+  restaurantName?: string;
+  restaurant?: string;
   name?: string;
+  dishName?: string;
+  title?: string;
   itemName?: string;
-  price?: number;
-  priceInr?: number;
-  isVeg?: boolean;
-  inStock?: boolean;
+  item_name?: string;
+  dishId?: string | number;
+  itemId?: string | number;
+  price?: number | string;
+  priceInr?: number | string;
+  isVeg?: boolean | string | number;
+  veg?: boolean | string | number;
+  vegetarian?: boolean | string | number;
+  inStock?: boolean | string;
+  available?: boolean | string;
   imageUrl?: string;
   category?: string;
   description?: string;
@@ -234,8 +261,32 @@ export class ApifySwiggyMapsProvider {
   }
 
   private extractRestaurantIdentifier(restaurant: ApifyRestaurant): string | null {
-    const candidate = restaurant.id || restaurant.restaurantId || restaurant.restaurantUrl || restaurant.url;
-    return candidate ? String(candidate) : null;
+    const direct = restaurant.id ?? restaurant.restaurantId ?? restaurant.restaurant_id;
+    if (direct !== undefined && direct !== null && String(direct).trim()) {
+      return String(direct).trim();
+    }
+    const url = restaurant.restaurantUrl || restaurant.url || restaurant.LinkrestaurantUrl;
+    const match = typeof url === "string" ? url.match(/rest(?:aurant)?[-_/]?([0-9]+)/i) : null;
+    return match?.[1] ?? null;
+  }
+
+  private normalizeIdentifier(value: unknown): string | undefined {
+    if (typeof value !== "string" && typeof value !== "number") return undefined;
+    const raw = String(value).trim();
+    if (!raw) return undefined;
+    const urlMatch = raw.match(/rest(?:aurant)?[-_/]?([0-9]+)/i);
+    return urlMatch?.[1] ?? raw;
+  }
+
+  private parseBoolean(value: unknown): boolean | undefined {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1 ? true : value === 0 ? false : undefined;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "yes", "1", "veg", "vegetarian", "in stock", "available"].includes(normalized)) return true;
+      if (["false", "no", "0", "non-veg", "non vegetarian", "out of stock", "unavailable"].includes(normalized)) return false;
+    }
+    return undefined;
   }
 
   /**
@@ -304,38 +355,57 @@ export class ApifySwiggyMapsProvider {
 
   private normalizeDishes(records: ApifyRestaurant[], restaurants: ApifyRestaurant[]): FoodDish[] {
     const restaurantMap = new Map(
-      restaurants.map((restaurant) => [restaurant.id!, { name: restaurant.name!, restaurantUrl: restaurant.url }])
+      restaurants.map((restaurant) => [
+        this.normalizeIdentifier(restaurant.id) || this.normalizeIdentifier(restaurant.restaurantId) || "",
+        { name: restaurant.name!, restaurantUrl: restaurant.url },
+      ])
     );
     const normalized = records
-      .map((raw) => {
-        const item = raw as ApifyMenuItem & Record<string, unknown>;
-        const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
-        const restaurantId = this.firstString(item, ["restaurantId", "restaurant_id"]);
-        const restaurantName = this.firstString(item, ["restaurantName", "restaurant"]);
+      .flatMap((raw) => {
+        const record = raw as ApifyRestaurant & Record<string, unknown>;
+        const nested = record.menus || record.menuItems || record.dishes;
+        const rows: (ApifyMenuItem & Record<string, unknown>)[] = Array.isArray(nested)
+          ? nested.map((item) => ({
+              ...item,
+              restaurantId: item.restaurantId ?? item.restaurant_id ?? record.id ?? record.restaurantId,
+              restaurantName: item.restaurantName ?? record.name ?? record.restaurantName ?? record.Restaurantname,
+              restaurantUrl: (item as Record<string, unknown>).restaurantUrl ?? record.url ?? record.restaurantUrl,
+            } as ApifyMenuItem & Record<string, unknown>))
+          : [];
+        if (record.rowType?.toLowerCase().includes("restaurant") && rows.length) return rows;
+        return [record as ApifyMenuItem & Record<string, unknown>, ...rows];
+      })
+      .map((item) => {
+        const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name", "item"]);
+        const rawRestaurantId = item.restaurantId ?? item.restaurant_id;
+        const restaurantId = this.normalizeIdentifier(rawRestaurantId);
+        const restaurantName = this.firstString(item, ["restaurantName", "restaurant", "Restaurantname"]);
         const id = this.firstString(item, ["id", "dishId", "itemId"]);
         const price = this.firstNumber(item, ["priceInr", "price", "cost", "itemPrice"]);
         const description = this.firstString(item, ["description", "itemDescription", "desc"]);
         const category = this.firstString(item, ["category", "categoryName", "menuCategory"]);
-        const inStock = item.inStock !== false;
+        const stockValue = this.parseBoolean(item.inStock ?? item.available);
+        const inStock = stockValue !== false;
         if (!name || !inStock) return null;
         const restaurant = restaurantId ? restaurantMap.get(restaurantId) : undefined;
+        const vegValue = this.parseBoolean(item.isVeg ?? item.veg ?? item.vegetarian);
         return {
           id: id || `${restaurantId || "nearby"}-${name}`,
           restaurantId: restaurantId || "unknown",
           restaurantName: restaurant?.name || restaurantName || "Nearby Restaurant",
-          restaurantUrl: restaurant?.restaurantUrl,
+          restaurantUrl: this.firstString(item, ["restaurantUrl", "restaurant_url"]),
           name,
           category,
           description,
           priceInr: price,
-          isVeg: Boolean(item.isVeg ?? item.veg ?? item.vegetarian),
+          isVeg: vegValue,
           inStock,
           imageUrl: this.firstString(item, ["imageUrl", "image", "image_url"]),
           calories: this.estimateCalories(item),
           proteinG: this.estimateProtein(item),
         };
       })
-      .filter((dish) => dish !== null) as FoodDish[];
+      .filter((dish): dish is FoodDish => dish !== null);
     return normalized;
   }
 
@@ -350,7 +420,10 @@ export class ApifySwiggyMapsProvider {
   private firstNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
     for (const key of keys) {
       const value = record[key];
-      const parsed = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+      if (typeof value !== "number" && typeof value !== "string") continue;
+      const text = String(value).trim();
+      if (!text) continue;
+      const parsed = typeof value === "number" ? value : Number(text.replace(/[^0-9.]/g, ""));
       if (Number.isFinite(parsed)) return parsed;
     }
     return undefined;
@@ -432,15 +505,25 @@ export class ApifySwiggyMapsProvider {
     const places = restaurantsToTransform
       .map((r) => {
         const restaurantName = r.name as string;
-        const hasCoordinates = r.latitude != null && r.longitude != null;
-        const latitude = hasCoordinates ? r.latitude! : userLat;
-        const longitude = hasCoordinates ? r.longitude! : userLng;
+        const parsedLat = Number(r.latitude ?? r.lat);
+        const parsedLng = Number(r.longitude ?? r.lng ?? r.lon);
+        const hasCoordinates =
+          Number.isFinite(parsedLat) && parsedLat >= -90 && parsedLat <= 90 &&
+          Number.isFinite(parsedLng) && parsedLng >= -180 && parsedLng <= 180;
+        // Keep the API shape stable when the actor omits coordinates, but never
+        // pretend the user's coordinates are the restaurant's real coordinates.
+        const latitude = hasCoordinates ? parsedLat : userLat;
+        const longitude = hasCoordinates ? parsedLng : userLng;
         const distance = hasCoordinates
           ? this.calculateDistance(userLat, userLng, latitude, longitude)
-          : 0;
+          : Number.POSITIVE_INFINITY;
 
         const restaurantDishes = dishes
-          .filter((dish) => dish.restaurantId === r.id)
+          .filter((dish) => {
+            const dishId = this.normalizeIdentifier(dish.restaurantId);
+            const restaurantId = this.normalizeIdentifier(r.id) || this.normalizeIdentifier(r.restaurantId);
+            return Boolean(dishId && restaurantId && dishId === restaurantId);
+          })
           .map((dish) => ({
             id: dish.id,
             restaurantId: dish.restaurantId,
