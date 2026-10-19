@@ -110,6 +110,10 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
     });
   }
   if (!results.length) throw new Error("LLM response did not contain any valid supplied dish IDs.");
+  // A constant score across a multi-dish result is a collapsed ranking, not useful personalization.
+  if (results.length > 1 && new Set(results.map((item) => item.healthScore)).size === 1) {
+    throw new Error("LLM returned an identical score for every dish; use the differentiated fallback ranking.");
+  }
   return results;
 }
 
