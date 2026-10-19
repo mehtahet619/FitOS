@@ -432,7 +432,7 @@ export class ApifySwiggyMapsProvider {
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places: (NearbyPlace | null)[] = restaurantsToTransform
-      .map((r) => {
+      .map((r): NearbyPlace | null => {
         const restaurantName = r.name as string;
         const hasCoordinates =
           r.latitude != null &&
@@ -496,8 +496,22 @@ export class ApifySwiggyMapsProvider {
     if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
     if (typeof value !== "string" || !value.trim()) return undefined;
     const normalized = value.trim().toLowerCase().replace(/,/g, "");
-    const match = normalized.match(/[0-9]+(?:\.[0-9]+)?/);
-    const amount = match ? Number(match[0]) : Number.NaN;
+    let start = -1;
+    let end = -1;
+    let decimalSeen = false;
+    for (let index = 0; index < normalized.length; index += 1) {
+      const character = normalized[index];
+      if (character >= "0" && character <= "9") {
+        if (start === -1) start = index;
+        end = index + 1;
+      } else if (character === "." && start !== -1 && !decimalSeen) {
+        decimalSeen = true;
+        end = index + 1;
+      } else if (start !== -1) {
+        break;
+      }
+    }
+    const amount = start === -1 ? Number.NaN : Number(normalized.slice(start, end));
     if (!Number.isFinite(amount) || amount < 0) return undefined;
     const isMetres = normalized.includes("meter") || normalized.endsWith(" m") || normalized === "m";
     const isKilometres = normalized.includes("km") || normalized.includes("kilometer") || normalized.includes("kilometre");
