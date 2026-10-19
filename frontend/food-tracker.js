@@ -14,7 +14,7 @@
     if (!client) throw new Error("FitOS API client is not ready. Refresh the page and try again.");
     const method = (opts.method || "GET").toUpperCase();
     if (method === "GET") return client.get(path);
-    if (method === "POST") return client.post(path, opts.body || {});
+    if (method === "POST") return client.post(path, opts.body || {}, { timeoutMs: opts.timeoutMs });
     if (method === "DELETE") return client.del(path);
     throw new Error("Unsupported request method.");
   };
@@ -242,7 +242,11 @@
     results.innerHTML = "";
     setStatus("food-nearby-status", "Finding real menu dishes near you and ranking health plus distance…");
     try {
-      const result = await api("/food/healthy-nearby", { method: "POST", body: { latitude, longitude } });
+      const result = await api("/food/healthy-nearby", {
+        method: "POST",
+        body: { latitude, longitude },
+        timeoutMs: 150000,
+      });
       const recommendations = Array.isArray(result.recommendations) ? result.recommendations : [];
       if (!recommendations.length) {
         const message = result.error || "The live provider returned no menu dishes for this location. No dishes were invented.";

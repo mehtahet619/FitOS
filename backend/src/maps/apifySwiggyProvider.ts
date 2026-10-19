@@ -109,7 +109,7 @@ export class ApifySwiggyMapsProvider {
   private readonly apifyApiUrl = "https://api.apify.com/v2";
   private readonly actorId = "PAPknIT75qTicSSUI";
   private readonly timeoutMs = 60000; // 1 minute timeout for scraper runs
-  private readonly maxRetries = 2;
+  private readonly maxRetries = 0; // One attempt only: avoid repeating the full restaurant + menu scrape.
   public lastDiagnostics: FoodPipelineDiagnostics = {
     success: false,
     stage: "restaurant_search",
@@ -246,15 +246,33 @@ export class ApifySwiggyMapsProvider {
   private async startActorRun(input: Record<string, unknown>): Promise<string> {
     const url = `${this.apifyApiUrl}/acts/${this.actorId}/runs?token=${this.apiKey}`;
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Apify actor start failed (${response.status}): ${text.slice(0, 200)}`);
+      const errorText = await response.text().catch(() => "");
+      const proxyRejected = /proxy.{0,40}(reject|invalid|not available|not supported|group|residential)|(?:reject|invalid).{0,40}proxy/i.test(errorText);
+      const hasProxyConfiguration = Boolean(input.proxyConfiguration && typeof input.proxyConfiguration === "object");
+      if (proxyRejected && hasProxyConfiguration) {
+        console.warn("[Apify Swiggy] Residential proxy rejected; retrying this actor start with DATACENTER proxy.");
+        response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...input,
+            proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["DATACENTER"] },
+          }),
+        });
+        if (!response.ok) {
+          const fallbackText = await response.text().catch(() => "");
+          throw new Error(`Apify actor start failed with residential and datacenter proxies (${response.status}): ${fallbackText.slice(0, 300)}`);
+        }
+      } else {
+        throw new Error(`Apify actor start failed (${response.status}): ${errorText.slice(0, 300)}`);
+      }
     }
 
     const data = (await response.json()) as { data?: { id?: string } };

@@ -114,10 +114,16 @@ class ApifySwiggyProvider implements MapsProvider {
     try {
       const places = await this.swiggy.findNearbyFood(input);
       return { configured: true, places, diagnostics: this.swiggy.lastDiagnostics };
-    } catch (e: any) {
-      console.error("Apify Swiggy provider error:", e.message);
-      // Return empty configured result instead of error
-      return { configured: true, places: [], diagnostics: this.swiggy.lastDiagnostics };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("Apify Swiggy provider error:", message);
+      const diagnostics = {
+        ...this.swiggy.lastDiagnostics,
+        success: false,
+        error: message,
+      };
+      this.swiggy.lastDiagnostics = diagnostics;
+      return { configured: true, places: [], diagnostics };
     }
   }
 }
