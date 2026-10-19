@@ -120,7 +120,7 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
     "Prioritize protein only when protein data is explicitly present; consider known calories/macros, ingredient descriptions, and cooking style when supplied.",
     "Missing nutrition is unknown, not zero. Do not claim a dish is high-protein when protein grams are absent.",
     "Use the user preferences as ranking context. Never assume ingredients or allergen absence from a dish name; mark uncertainty in reasons and do not make medical safety guarantees.",
-    "Return JSON only: {\\"recommendations\\":[{\\"dishId\\":string,\\"healthScore\\":number,\\"reasons\\":string[]}]}",
+    "Return valid JSON only, with a top-level recommendations array. Each item must contain dishId (string), healthScore (number), and reasons (array of strings).",
   ].join(" ");
   const user = JSON.stringify({ task: "Rank the supplied dishes from most fitness-friendly to least fitness-friendly. Scores are comparative, not medical advice.", preferences: preferences || {}, dishes });
   const anthropic = provider.name === "Anthropic";
