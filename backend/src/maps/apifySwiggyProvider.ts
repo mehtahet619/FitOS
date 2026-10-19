@@ -357,11 +357,13 @@ export class ApifySwiggyMapsProvider {
           category,
           description,
           priceInr: price,
-          isVeg: Boolean(item.isVeg ?? item.veg ?? item.vegetarian),
+          isVeg: typeof (item.isVeg ?? item.veg ?? item.vegetarian) === "boolean" ? Boolean(item.isVeg ?? item.veg ?? item.vegetarian) : undefined,
           inStock,
           imageUrl: this.firstString(item, ["imageUrl", "image", "image_url"]),
-          calories: this.estimateCalories(item),
-          proteinG: this.estimateProtein(item),
+          calories: this.firstNumber(item, ["calories", "caloriesKcal", "energyKcal"]),
+          proteinG: this.firstNumber(item, ["proteinG", "protein", "proteins"]),
+          carbsG: this.firstNumber(item, ["carbsG", "carbohydrates", "carbs"]),
+          fatG: this.firstNumber(item, ["fatG", "fat", "totalFat"]),
         };
       })
       .filter((dish) => dish !== null) as FoodDish[];
@@ -565,78 +567,6 @@ export class ApifySwiggyMapsProvider {
         Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
-  }
-
-  /**
-   * Estimate calorie content based on menu item name/category.
-   * This is a rough heuristic — real data would come from a nutrition API.
-   */
-  private estimateCalories(item: ApifyMenuItem): number | undefined {
-    const name = `${item.name || item.itemName || ""} ${item.category || ""}`.toLowerCase();
-
-    // Simple heuristics based on common categories
-    if (
-      name.includes("salad") ||
-      name.includes("juice") ||
-      name.includes("smoothie")
-    ) {
-      return 150;
-    }
-    if (name.includes("rice") || name.includes("biryani")) {
-      return 400;
-    }
-    if (name.includes("thali") || name.includes("combo")) {
-      return 600;
-    }
-    if (
-      name.includes("pizza") ||
-      name.includes("burger") ||
-      name.includes("sandwich")
-    ) {
-      return 500;
-    }
-    if (
-      name.includes("dal") ||
-      name.includes("curry") ||
-      name.includes("gravy")
-    ) {
-      return 250;
-    }
-
-    // Default estimate
-    return 350;
-  }
-
-  /**
-   * Estimate protein content based on category.
-   */
-  private estimateProtein(item: ApifyMenuItem): number | undefined {
-    const name = `${item.name || item.itemName || ""} ${item.category || ""}`.toLowerCase();
-
-    if (
-      name.includes("paneer") ||
-      name.includes("chicken") ||
-      name.includes("fish") ||
-      name.includes("meat")
-    ) {
-      return 20;
-    }
-    if (
-      name.includes("dal") ||
-      name.includes("lentil") ||
-      name.includes("bean")
-    ) {
-      return 12;
-    }
-    if (
-      name.includes("rice") ||
-      name.includes("bread") ||
-      name.includes("pasta")
-    ) {
-      return 8;
-    }
-
-    return 10; // Default
   }
 
   /**
