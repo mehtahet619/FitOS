@@ -312,15 +312,24 @@ export class ApifySwiggyMapsProvider {
       .map((raw) => {
         const item = raw as ApifyMenuItem & Record<string, unknown>;
         const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
-        const restaurantId = this.firstString(item, ["restaurantId", "restaurant_id"]);
-        const restaurantName = this.firstString(item, ["restaurantName", "restaurant"]);
+        const rawRestaurantId = this.firstString(item, ["restaurantId", "restaurant_id", "restaurantID", "restaurant_id"]);
+        const restaurantName = this.firstString(item, ["restaurantName", "restaurant", "restaurant_name", "Restaurantname"]);
+        const restaurantUrl = this.firstString(item, ["restaurantUrl", "restaurantURL", "url", "LinkrestaurantUrl"]);
+        const matchedRestaurant = restaurants.find((candidate) =>
+          (rawRestaurantId && [candidate.id, candidate.restaurantId].some((value) => value != null && String(value) === rawRestaurantId)) ||
+          (restaurantUrl && [candidate.url, candidate.restaurantUrl, candidate.LinkrestaurantUrl].some((value) => value != null && String(value) === restaurantUrl)) ||
+          (restaurantName && [candidate.name, candidate.restaurantName, candidate.Restaurantname].some((value) =>
+            typeof value === "string" && value.trim().toLowerCase() === restaurantName.trim().toLowerCase()
+          ))
+        );
+        const restaurantId = matchedRestaurant?.id || rawRestaurantId;
         const id = this.firstString(item, ["id", "dishId", "itemId"]);
         const price = this.firstNumber(item, ["priceInr", "price", "cost", "itemPrice"]);
         const description = this.firstString(item, ["description", "itemDescription", "desc"]);
         const category = this.firstString(item, ["category", "categoryName", "menuCategory"]);
         const inStock = item.inStock !== false;
         if (!name || !inStock) return null;
-        const restaurant = restaurantId ? restaurantMap.get(restaurantId) : undefined;
+        const restaurant = restaurantId ? restaurantMap.get(restaurantId) : matchedRestaurant ? { name: matchedRestaurant.name!, restaurantUrl: matchedRestaurant.url } : undefined;
         return {
           id: id || `${restaurantId || "nearby"}-${name}`,
           restaurantId: restaurantId || "unknown",
