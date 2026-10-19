@@ -101,8 +101,7 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
     const reasons = Array.isArray(row.reasons)
       ? row.reasons.filter((reason): reason is string => typeof reason === "string").slice(0, 4).map((reason) => reason.slice(0, 180))
       : [];
-    const dish = known.get(row.dishId)!;
-    // A model cannot make missing nutrition into verified nutrition.
+    // LLM scores never make source nutrition verified.
     results.push({
       dishId: row.dishId,
       healthScore: Math.max(0, Math.min(100, score)),
