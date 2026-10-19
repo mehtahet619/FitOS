@@ -381,8 +381,16 @@ export class ApifySwiggyMapsProvider {
   private firstNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
     for (const key of keys) {
       const value = record[key];
-      const parsed = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.]/g, ""));
-      if (Number.isFinite(parsed)) return parsed;
+      if (typeof value === "number") {
+        if (Number.isFinite(value) && value >= 0) return value;
+        continue;
+      }
+      // Missing/blank strings must stay unknown; Number("") incorrectly becomes 0.
+      if (typeof value !== "string" || !value.trim()) continue;
+      const cleaned = value.trim().replace(/,/g, "").replace(/[^0-9.+-]/g, "");
+      if (!cleaned || !/[0-9]/.test(cleaned)) continue;
+      const parsed = Number(cleaned);
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
     }
     return undefined;
   }
