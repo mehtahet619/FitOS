@@ -21,3 +21,33 @@
   #screen-diet .food-input-row input { min-width: 0; width: 100%; }
   #screen-diet .food-input-row button { width: 100%; }
 }
+
+
+/* Nearby menu discovery: card-based, responsive product UI */
+#screen-diet .food-nearby-results,
+#food-nearby-results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; }
+#screen-diet .food-nearby-card { min-width:0; padding:18px; border:1px solid #e4e9e4; border-radius:18px; background:linear-gradient(160deg,#fff 0%,#f9fbf8 100%); box-shadow:0 8px 24px rgba(20,35,27,.045); transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; }
+#screen-diet .food-nearby-card:hover { transform:translateY(-2px); border-color:#c6ded0; box-shadow:0 14px 32px rgba(20,35,27,.09); }
+.food-nearby-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.food-rank { color:#63736a; font-size:10px; font-weight:800; letter-spacing:.12em; }
+.food-health-score { display:inline-flex; align-items:baseline; gap:2px; padding:6px 9px; border-radius:9px; background:#eaf6ef; color:#246344; font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; }
+.food-health-score small { font-size:10px; font-weight:700; }
+.food-nearby-card h3 { margin:0 0 5px; color:#19241e; font-size:clamp(16px,2vw,19px); line-height:1.3; letter-spacing:-.025em; overflow-wrap:anywhere; }
+.food-nearby-restaurant { margin:0; color:#4b5d52; font-size:13px; font-weight:650; }
+.food-nearby-meta { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:13px 0; }
+.food-nearby-meta span { padding:5px 8px; border:1px solid #e7ebe6; border-radius:7px; background:#fff; color:#536157; font-size:11px; }
+.food-nearby-nutrition { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:12px 0; }
+.food-nearby-nutrition > div { min-width:0; padding:10px 11px; border-radius:11px; background:#f0f4ef; }
+.food-nearby-nutrition small { display:block; margin-bottom:5px; color:#748077; font-size:9px; font-weight:800; letter-spacing:.1em; }
+.food-nearby-nutrition strong { display:block; color:#24392d; font-size:14px; overflow-wrap:anywhere; }
+.food-nearby-locality { margin:0; color:#7a827b; font-size:11px; }
+.food-nearby-reasons { margin:12px 0 0; padding:10px 0 0; border-top:1px solid #e8ede8; color:#59685e; font-size:12px; line-height:1.55; }
+.food-nearby-card-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.food-nearby-card-footer > span { color:#79837c; font-size:10px; font-weight:650; }
+.food-nearby-link { display:inline-flex; align-items:center; gap:6px; padding:9px 12px; border-radius:10px; background:#17231c; color:#fff !important; font-size:12px; font-weight:750; text-decoration:none; }
+.food-nearby-link:hover { background:#2b5c41; }
+.food-nearby-disclaimer { margin:12px 0 0; color:#858b85; font-size:10px; line-height:1.5; }
+#screen-diet .food-nearby-entry { display:block; padding:0; border:0; }
+#food-nearby-results:empty { display:none; }
+@media(max-width:720px) { #screen-diet .food-nearby-results,#food-nearby-results { grid-template-columns:1fr; gap:11px; } #screen-diet .food-nearby-card { padding:15px; border-radius:15px; } }
+@media(prefers-reduced-motion:reduce) { #screen-diet .food-nearby-card { transition:none; } #screen-diet .food-nearby-card:hover { transform:none; } }
