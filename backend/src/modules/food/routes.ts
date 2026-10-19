@@ -15,7 +15,12 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "A valid GPS location is required." });
   const result = await getMapsProvider().findNearbyFood({ latitude, longitude, query: "healthy food" });
   if (!result.configured) return res.status(503).json({ success: false, configured: false, error: "Nearby food search is not configured on the server. Enable a live places/menu provider and its API credentials.", stage: "provider_configuration" });
-  const places = result.places.filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && p.latitude >= -90 && p.latitude <= 90 && p.longitude >= -180 && p.longitude <= 180);
+  const places = result.places.filter((p) => {
+    const hasCoordinates = Number.isFinite(p.latitude) && Number.isFinite(p.longitude) &&
+      p.latitude! >= -90 && p.latitude! <= 90 && p.longitude! >= -180 && p.longitude! <= 180;
+    // Swiggy search results contain real distance values but not coordinates.
+    return hasCoordinates || (Number.isFinite(p.distanceKm) && p.distanceKm >= 0);
+  });
   const dishes: HealthyDishInput[] = places.flatMap((p) => p.dishes.filter((d) => Boolean(d.name?.trim()) && d.inStock !== false).map((d) => ({
     dishId: `${p.id}::${d.id || d.name}`, name: d.name, restaurantName: p.name, restaurantUrl: p.restaurantUrl,
     priceInr: d.estPriceInr > 0 ? d.estPriceInr : undefined, calories: d.estCalories, proteinG: d.estProteinG,
@@ -35,7 +40,11 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   for (const p of places) for (const d of p.dishes) placeByDishId.set(`${p.id}::${d.id || d.name}`, p);
   const recommendations = analyses.filter((x) => dishById.has(x.dishId) && placeByDishId.has(x.dishId)).map((x) => {
     const dish = dishById.get(x.dishId)!, place = placeByDishId.get(x.dishId)!;
-    const distanceKm = haversineKm(latitude, longitude, place.latitude, place.longitude);
+    const hasCoordinates = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) &&
+      place.latitude! >= -90 && place.latitude! <= 90 && place.longitude! >= -180 && place.longitude! <= 180;
+    const distanceKm = hasCoordinates
+      ? haversineKm(latitude, longitude, place.latitude!, place.longitude!)
+      : place.distanceKm;
     const healthScore = Math.max(0, Math.min(100, Number(x.healthScore) || 0));
     const proximityScore = Math.max(0, 100 * (1 - distanceKm / 10));
     return { ...dish, dishName: dish.name, restaurantName: place.name, restaurantUrl: place.restaurantUrl,

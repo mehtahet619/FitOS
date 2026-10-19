@@ -58,8 +58,10 @@ interface ApifyRestaurant {
   locality?: string;
   deliveryPrice?: number;
   deliveryTime?: string | number;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | string;
+  longitude?: number | string;
+  distance?: string | number;
+  isOpen?: boolean;
   address?: string;
   url?: string;
   restaurantUrl?: string;
@@ -310,15 +312,24 @@ export class ApifySwiggyMapsProvider {
       .map((raw) => {
         const item = raw as ApifyMenuItem & Record<string, unknown>;
         const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
-        const restaurantId = this.firstString(item, ["restaurantId", "restaurant_id"]);
-        const restaurantName = this.firstString(item, ["restaurantName", "restaurant"]);
+        const rawRestaurantId = this.firstString(item, ["restaurantId", "restaurant_id", "restaurantID", "restaurant_id"]);
+        const restaurantName = this.firstString(item, ["restaurantName", "restaurant", "restaurant_name", "Restaurantname"]);
+        const restaurantUrl = this.firstString(item, ["restaurantUrl", "restaurantURL", "url", "LinkrestaurantUrl"]);
+        const matchedRestaurant = restaurants.find((candidate) =>
+          (rawRestaurantId && [candidate.id, candidate.restaurantId].some((value) => value != null && String(value) === rawRestaurantId)) ||
+          (restaurantUrl && [candidate.url, candidate.restaurantUrl, candidate.LinkrestaurantUrl].some((value) => value != null && String(value) === restaurantUrl)) ||
+          (restaurantName && [candidate.name, candidate.restaurantName, candidate.Restaurantname].some((value) =>
+            typeof value === "string" && value.trim().toLowerCase() === restaurantName.trim().toLowerCase()
+          ))
+        );
+        const restaurantId = matchedRestaurant?.id || rawRestaurantId;
         const id = this.firstString(item, ["id", "dishId", "itemId"]);
         const price = this.firstNumber(item, ["priceInr", "price", "cost", "itemPrice"]);
         const description = this.firstString(item, ["description", "itemDescription", "desc"]);
         const category = this.firstString(item, ["category", "categoryName", "menuCategory"]);
         const inStock = item.inStock !== false;
         if (!name || !inStock) return null;
-        const restaurant = restaurantId ? restaurantMap.get(restaurantId) : undefined;
+        const restaurant = restaurantId ? restaurantMap.get(restaurantId) : matchedRestaurant ? { name: matchedRestaurant.name!, restaurantUrl: matchedRestaurant.url } : undefined;
         return {
           id: id || `${restaurantId || "nearby"}-${name}`,
           restaurantId: restaurantId || "unknown",
@@ -430,13 +441,22 @@ export class ApifySwiggyMapsProvider {
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places = restaurantsToTransform
-      // Without real coordinates we cannot honestly claim a restaurant is nearby.
-      .filter((r) => r.latitude != null && r.longitude != null && isValidLatLng(Number(r.latitude), Number(r.longitude)))
-      .map((r) => {
+      .flatMap((r): NearbyPlace[] => {
         const restaurantName = r.name as string;
-        const latitude = Number(r.latitude);
-        const longitude = Number(r.longitude);
-        const distance = this.calculateDistance(userLat, userLng, latitude, longitude);
+        const hasCoordinates =
+          r.latitude != null &&
+          r.longitude != null &&
+          isValidLatLng(Number(r.latitude), Number(r.longitude));
+        const latitude = hasCoordinates ? Number(r.latitude) : undefined;
+        const longitude = hasCoordinates ? Number(r.longitude) : undefined;
+        // The Swiggy actor returns a provider distance such as "3.1 km" but normally
+        // does not return restaurant coordinates. Keep those genuine results rather
+        // than dropping every restaurant or inventing map coordinates.
+        const providerDistance = this.parseDistanceKm(r.distance);
+        if (!hasCoordinates && providerDistance === undefined) return [];
+        const distance = hasCoordinates
+          ? this.calculateDistance(userLat, userLng, latitude!, longitude!)
+          : providerDistance!;
 
         const restaurantDishes = dishes
           .filter((dish) => dish.restaurantId === r.id)
@@ -454,13 +474,13 @@ export class ApifySwiggyMapsProvider {
             estProteinG: dish.proteinG,
           }));
 
-        return {
+        return [{
           id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
           name: restaurantName,
           distanceKm: distance,
           rating: Number(r.rating) || 4.0,
           priceRange: this.estimatePriceRange(r.costForTwo ?? r.deliveryPrice),
-          isOpenNow: true, // Assume open; could enhance with real hours
+          isOpenNow: typeof r.isOpen === "boolean" ? r.isOpen : true,
           latitude,
           longitude,
           dishes: restaurantDishes,
@@ -470,13 +490,41 @@ export class ApifySwiggyMapsProvider {
           deliveryTime: r.deliveryTime,
           costForTwo: r.costForTwo,
           restaurantUrl: r.url,
-        };
+        }];
       })
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 10); // Return top 10 closest restaurants
 
     console.log(`[Apify Swiggy] final transformed food suggestions: ${places.length}`);
     return places;
+  }
+
+  /** Parse provider distances such as "3.1 km", "850 m", or numeric kilometres. */
+  private parseDistanceKm(value?: string | number): number | undefined {
+    if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    const normalized = value.trim().toLowerCase().replace(/,/g, "");
+    let start = -1;
+    let end = -1;
+    let decimalSeen = false;
+    for (let index = 0; index < normalized.length; index += 1) {
+      const character = normalized[index];
+      if (character >= "0" && character <= "9") {
+        if (start === -1) start = index;
+        end = index + 1;
+      } else if (character === "." && start !== -1 && !decimalSeen) {
+        decimalSeen = true;
+        end = index + 1;
+      } else if (start !== -1) {
+        break;
+      }
+    }
+    const amount = start === -1 ? Number.NaN : Number(normalized.slice(start, end));
+    if (!Number.isFinite(amount) || amount < 0) return undefined;
+    const isMetres = normalized.includes("meter") || normalized.endsWith(" m") || normalized === "m";
+    const isKilometres = normalized.includes("km") || normalized.includes("kilometer") || normalized.includes("kilometre");
+    if (isMetres && !isKilometres) return amount / 1000;
+    return amount;
   }
 
   /**
