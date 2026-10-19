@@ -2417,7 +2417,29 @@ function startHealthyFinderLoader() {
 function renderHealthyFood(data) {
   const el = $("diet-content");
   el.innerHTML = `<div class="food-results-head"><div><h2>🥗 Healthy options near you</h2><p>✓ Found ${data.restaurantsFound} restaurants · ✓ Found ${data.dishesFound} available dishes</p></div></div><div class="food-filters"><button class="pill filter active" data-filter="all">All</button><button class="pill filter" data-filter="low">🔥 Low Calorie</button><button class="pill filter" data-filter="protein">💪 High Protein</button><button class="pill filter" data-filter="veg">🥗 Vegetarian</button><button class="pill filter" data-filter="budget">💰 Budget</button></div><div id="healthy-dishes"></div><button class="btn btn-outline" id="show-more-dishes">✨ Show More Healthy Options</button><div class="banner banner-info" style="margin-top:14px;">Approximate estimates, not medical advice.</div>`;
-  const cards = data.recommendations; let visible = 5; const render = () => { const filter = document.querySelector(".filter.active")?.dataset.filter || "all"; const filtered = cards.filter((d) => filter === "all" || filter === "low" && (d.calories || 999) <= 500 || filter === "protein" && (d.proteinG || 0) >= 20 || filter === "budget" && (d.priceInr || 9999) <= 300 || filter === "veg" && !/chicken|mutton|fish|prawn|meat/i.test(d.dishName || d.name)); $("healthy-dishes").innerHTML = filtered.slice(0, visible).map((d, i) => `<article class="healthy-dish-card" tabindex="0"><div class="dish-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : `#${i + 1}`} Best Choice</div><h3>${d.name}</h3><strong>${d.restaurantName}</strong><div class="dish-score">⭐ Health Score: ${d.healthScore}/100</div><div class="dish-nutrition">🔥 ~${d.calories || "?"} kcal · 💪 ~${d.proteinG || "?"}g Protein · 💰 ₹${d.priceInr || "?"}</div><div class="dish-reasons">${d.reasons.map((reason) => `<span>✓ ${reason}</span>`).join("")}</div><p>${d.nutritionConfidence === "estimated" ? "Nutrition confidence: Estimated" : "Nutrition confidence: Verified"}</p><button class="btn btn-outline">📍 Find Restaurant</button></article>`).join(""); }; render(); document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach((b) => b.classList.remove("active")); button.classList.add("active"); render(); })); $("show-more-dishes").addEventListener("click", () => { visible += 5; render(); }); }
+  const cards = data.recommendations; let visible = 5;
+  const render = () => {
+    const filter = document.querySelector(".filter.active")?.dataset.filter || "all";
+    const filtered = cards.filter((d) => filter === "all"
+      || filter === "low" && Number.isFinite(d.calories) && d.calories <= 500
+      || filter === "protein" && Number.isFinite(d.proteinG) && d.proteinG >= 20
+      || filter === "budget" && Number.isFinite(d.priceInr) && d.priceInr > 0 && d.priceInr <= 300
+      || filter === "veg" && d.isVeg === true);
+    $("healthy-dishes").innerHTML = filtered.slice(0, visible).map((d, i) => {
+      const calories = Number.isFinite(d.calories) ? `~${d.calories} kcal` : "Calories not available";
+      const protein = Number.isFinite(d.proteinG) ? `~${d.proteinG} g protein` : "Protein not available";
+      const price = Number.isFinite(d.priceInr) && d.priceInr > 0 ? `₹${d.priceInr}` : "Price unavailable";
+      const score = Number.isFinite(d.healthScore) ? `${d.healthScore}/100` : "Unavailable";
+      const reasons = (Array.isArray(d.reasons) ? d.reasons : []).map((reason) => `<span>✓ ${reason}</span>`).join("");
+      const confidence = d.nutritionConfidence === "verified" ? "Verified by source" : d.nutritionConfidence === "llm_estimated" ? "AI estimate; not verified" : "Estimated/unverified";
+      const restaurantLink = typeof d.restaurantUrl === "string" && /^https?:\/\//i.test(d.restaurantUrl) ? d.restaurantUrl : "";
+      return `<article class="healthy-dish-card" tabindex="0"><div class="dish-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : `#${i + 1}`} Recommendation</div><h3>${d.name}</h3><strong>${d.restaurantName}</strong><div class="dish-score">⭐ Health Score: ${score}</div><div class="dish-nutrition">🔥 ${calories} · 💪 ${protein} · 💰 ${price}</div><div class="dish-reasons">${reasons}</div><p>Nutrition confidence: ${confidence}</p>${restaurantLink ? `<a class="btn btn-outline" href="${restaurantLink}" target="_blank" rel="noopener noreferrer">📍 Open Restaurant Listing</a>` : `<span class="card-sub">Restaurant listing unavailable</span>`}</article>`;
+    }).join("") || `<div class="empty-state">No dishes match this filter with the available data. Try All or check the restaurant menu.</div>`;
+  };
+  render();
+  document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".filter").forEach((b) => b.classList.remove("active")); button.classList.add("active"); render(); }));
+  $("show-more-dishes").addEventListener("click", () => { visible += 5; render(); });
+}
 
 const MEAL_FACTS = [
   ["🥦 Fun fact", "Protein helps repair and build muscle after workouts."],
