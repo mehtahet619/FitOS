@@ -431,7 +431,7 @@ export class ApifySwiggyMapsProvider {
     const restaurantsToTransform = filtered.length > 0 ? filtered : restaurants;
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
-    const places: (NearbyPlace | null)[] = restaurantsToTransform
+    const places = restaurantsToTransform
       .map((r): NearbyPlace | null => {
         const restaurantName = r.name as string;
         const hasCoordinates =
