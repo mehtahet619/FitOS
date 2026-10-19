@@ -44,7 +44,6 @@ interface ApifyRestaurant {
   restaurant_id?: string | number;
   restaurantName?: string;
   name?: string;
-  restaurantName?: string;
   Restaurantname?: string;
   Cuisinescuisines?: string;
   Localitylocality?: string;
