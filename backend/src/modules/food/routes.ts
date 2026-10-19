@@ -38,11 +38,13 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     // Swiggy search results contain real distance values but not coordinates.
     return hasCoordinates || (Number.isFinite(p.distanceKm) && p.distanceKm >= 0);
   });
+  const profile = req.userId ? await db.get<any>(`SELECT primaryGoal, dietaryPref, allergies, foodLikes, dailyBudget, weightKg FROM UserProfile WHERE userId = ?`, req.userId) : undefined;
+  const vegetarianOnly = /vegetarian|vegan|^veg$/i.test(String(profile?.dietaryPref || "").trim());
   const dishes: HealthyDishInput[] = places.flatMap((p) => p.dishes.filter((d) => Boolean(d.name?.trim()) && d.inStock !== false).map((d) => ({
     dishId: `${p.id}::${d.id || d.name}`, name: d.name, restaurantName: p.name, restaurantUrl: p.restaurantUrl,
     priceInr: d.estPriceInr > 0 ? d.estPriceInr : undefined, calories: d.estCalories, proteinG: d.estProteinG,
-    carbsG: d.estCarbsG, fatG: d.estFatG, description: `${p.cuisines || ""} ${d.description || ""} ${d.category || ""}`.trim(), category: d.category,
-  })));
+    carbsG: d.estCarbsG, fatG: d.estFatG, isVeg: d.isVeg, description: `${p.cuisines || ""} ${d.description || ""} ${d.category || ""}`.trim(), category: d.category,
+  }))).filter((dish) => !vegetarianOnly || dish.isVeg === true);
   if (!dishes.length) return res.status(424).json({
     success: false, configured: true, stage: result.diagnostics?.stage || "menu_extraction",
     restaurantsFound: result.diagnostics?.restaurantsFound ?? places.length,
@@ -51,7 +53,12 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     normalizedDishesFound: result.diagnostics?.normalizedDishesFound ?? 0,
     error: result.diagnostics?.error || "The provider returned no menu dishes with real restaurant coordinates. No dishes were invented.",
   });
-  const analyses = await getAiProvider().analyzeHealthyDishes({ dishes });
+  const analyses = await getAiProvider().analyzeHealthyDishes({ dishes, preferences: {
+    primaryGoal: profile?.primaryGoal, dietaryPref: profile?.dietaryPref, allergies: profile?.allergies,
+    foodLikes: profile?.foodLikes,
+    dailyBudgetInr: Number.isFinite(Number(profile?.dailyBudget)) ? Number(profile?.dailyBudget) : undefined,
+    weightKg: Number.isFinite(Number(profile?.weightKg)) ? Number(profile?.weightKg) : undefined,
+  } });
   const dishById = new Map(dishes.map((d) => [d.dishId, d]));
   const placeByDishId = new Map<string, typeof places[number]>();
   for (const p of places) for (const d of p.dishes) placeByDishId.set(`${p.id}::${d.id || d.name}`, p);
