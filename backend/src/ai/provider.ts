@@ -103,7 +103,6 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
       : [];
     const dish = known.get(row.dishId)!;
     // A model cannot make missing nutrition into verified nutrition.
-    const hasNutrition = dish.calories != null || dish.proteinG != null || dish.carbsG != null || dish.fatG != null;
     results.push({
       dishId: row.dishId,
       healthScore: Math.max(0, Math.min(100, score)),
