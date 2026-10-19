@@ -432,7 +432,7 @@ export class ApifySwiggyMapsProvider {
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places = restaurantsToTransform
-      .map((r): NearbyPlace | null => {
+      .flatMap((r): NearbyPlace[] => {
         const restaurantName = r.name as string;
         const hasCoordinates =
           r.latitude != null &&
@@ -444,7 +444,7 @@ export class ApifySwiggyMapsProvider {
         // does not return restaurant coordinates. Keep those genuine results rather
         // than dropping every restaurant or inventing map coordinates.
         const providerDistance = this.parseDistanceKm(r.distance);
-        if (!hasCoordinates && providerDistance === undefined) return null;
+        if (!hasCoordinates && providerDistance === undefined) return [];
         const distance = hasCoordinates
           ? this.calculateDistance(userLat, userLng, latitude!, longitude!)
           : providerDistance!;
