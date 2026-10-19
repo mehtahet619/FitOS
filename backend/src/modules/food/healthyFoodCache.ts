@@ -57,7 +57,7 @@ export async function getCachedHealthyFood<T>(key: string): Promise<T | undefine
  * Coalesces duplicate searches. Upstash provides cross-instance coordination in
  * production; the in-process promise map is a safe fallback for local development.
  */
-export async function runHealthyFoodSearch<T>(key: string, work: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
+export async function runHealthyFoodSearch<T>(key: string, work: () => Promise<T>, shouldCache: (value: T) => boolean = () => true): Promise<{ value: T; cached: boolean }> {
   const cached = await readCache<T>(key);
   if (cached !== undefined) return { value: cached, cached: true };
 
@@ -90,7 +90,7 @@ export async function runHealthyFoodSearch<T>(key: string, work: () => Promise<T
   const task = (async () => {
     try {
       const value = await work();
-      await writeCache(key, value);
+      if (shouldCache(value)) await writeCache(key, value);
       return value;
     } finally {
       if (redis) {
