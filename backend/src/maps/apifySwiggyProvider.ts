@@ -465,7 +465,7 @@ export class ApifySwiggyMapsProvider {
             estProteinG: dish.proteinG,
           }));
 
-        return {
+        return [{
           id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
           name: restaurantName,
           distanceKm: distance,
@@ -481,10 +481,8 @@ export class ApifySwiggyMapsProvider {
           deliveryTime: r.deliveryTime,
           costForTwo: r.costForTwo,
           restaurantUrl: r.url,
-        };
+        }];
       })
-      .filter((place) => place !== null)
-      .map((place) => place as NearbyPlace)
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 10); // Return top 10 closest restaurants
 
