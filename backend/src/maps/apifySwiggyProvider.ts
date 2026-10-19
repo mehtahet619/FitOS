@@ -58,8 +58,10 @@ interface ApifyRestaurant {
   locality?: string;
   deliveryPrice?: number;
   deliveryTime?: string | number;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | string;
+  longitude?: number | string;
+  distance?: string | number;
+  isOpen?: boolean;
   address?: string;
   url?: string;
   restaurantUrl?: string;
@@ -430,13 +432,22 @@ export class ApifySwiggyMapsProvider {
     console.log(`[Apify Swiggy] restaurants after query filtering: ${filtered.length}`);
 
     const places = restaurantsToTransform
-      // Without real coordinates we cannot honestly claim a restaurant is nearby.
-      .filter((r) => r.latitude != null && r.longitude != null && isValidLatLng(Number(r.latitude), Number(r.longitude)))
       .map((r) => {
         const restaurantName = r.name as string;
-        const latitude = Number(r.latitude);
-        const longitude = Number(r.longitude);
-        const distance = this.calculateDistance(userLat, userLng, latitude, longitude);
+        const hasCoordinates =
+          r.latitude != null &&
+          r.longitude != null &&
+          isValidLatLng(Number(r.latitude), Number(r.longitude));
+        const latitude = hasCoordinates ? Number(r.latitude) : undefined;
+        const longitude = hasCoordinates ? Number(r.longitude) : undefined;
+        // The Swiggy actor returns a provider distance such as "3.1 km" but normally
+        // does not return restaurant coordinates. Keep those genuine results rather
+        // than dropping every restaurant or inventing map coordinates.
+        const providerDistance = this.parseDistanceKm(r.distance);
+        if (!hasCoordinates && providerDistance === undefined) return null;
+        const distance = hasCoordinates
+          ? this.calculateDistance(userLat, userLng, latitude!, longitude!)
+          : providerDistance!;
 
         const restaurantDishes = dishes
           .filter((dish) => dish.restaurantId === r.id)
@@ -455,12 +466,12 @@ export class ApifySwiggyMapsProvider {
           }));
 
         return {
-          id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
+          id: r.url || `swiggy-${restaurantName.replace(/\\s+/g, "-")}`,
           name: restaurantName,
           distanceKm: distance,
           rating: Number(r.rating) || 4.0,
           priceRange: this.estimatePriceRange(r.costForTwo ?? r.deliveryPrice),
-          isOpenNow: true, // Assume open; could enhance with real hours
+          isOpenNow: typeof r.isOpen === "boolean" ? r.isOpen : true,
           latitude,
           longitude,
           dishes: restaurantDishes,
@@ -472,11 +483,24 @@ export class ApifySwiggyMapsProvider {
           restaurantUrl: r.url,
         };
       })
+      .filter((place): place is NearbyPlace => place !== null)
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, 10); // Return top 10 closest restaurants
 
     console.log(`[Apify Swiggy] final transformed food suggestions: ${places.length}`);
     return places;
+  }
+
+  /** Parse provider distances such as "3.1 km", "850 m", or numeric kilometres. */
+  private parseDistanceKm(value?: string | number): number | undefined {
+    if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    const normalized = value.trim().toLowerCase().replace(/,/g, "");
+    const match = normalized.match(/[0-9]+(?:\\.[0-9]+)?/);
+    const amount = match ? Number(match[0]) : Number.NaN;
+    if (!Number.isFinite(amount) || amount < 0) return undefined;
+    if ((/\\bm\\b|meter/.test(normalized)) && !/km/.test(normalized)) return amount / 1000;
+    return amount;
   }
 
   /**
