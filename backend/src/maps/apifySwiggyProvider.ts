@@ -499,7 +499,9 @@ export class ApifySwiggyMapsProvider {
     const match = normalized.match(/[0-9]+(?:\.[0-9]+)?/);
     const amount = match ? Number(match[0]) : Number.NaN;
     if (!Number.isFinite(amount) || amount < 0) return undefined;
-    if ((/\bm\b|meter/.test(normalized)) && !/km/.test(normalized)) return amount / 1000;
+    const isMetres = normalized.includes("meter") || normalized.endsWith(" m") || normalized === "m";
+    const isKilometres = normalized.includes("km") || normalized.includes("kilometer") || normalized.includes("kilometre");
+    if (isMetres && !isKilometres) return amount / 1000;
     return amount;
   }
 
