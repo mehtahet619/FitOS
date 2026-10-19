@@ -466,7 +466,7 @@ export class ApifySwiggyMapsProvider {
           }));
 
         return {
-          id: r.url || `swiggy-${restaurantName.replace(/\\s+/g, "-")}`,
+          id: r.url || `swiggy-${restaurantName.replace(/\s+/g, "-")}`,
           name: restaurantName,
           distanceKm: distance,
           rating: Number(r.rating) || 4.0,
@@ -496,7 +496,7 @@ export class ApifySwiggyMapsProvider {
     if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
     if (typeof value !== "string" || !value.trim()) return undefined;
     const normalized = value.trim().toLowerCase().replace(/,/g, "");
-    const match = normalized.match(/[0-9]+(?:\\.[0-9]+)?/);
+    const match = normalized.match(/[0-9]+(?:\.[0-9]+)?/);
     const amount = match ? Number(match[0]) : Number.NaN;
     if (!Number.isFinite(amount) || amount < 0) return undefined;
     if ((/\\bm\\b|meter/.test(normalized)) && !/km/.test(normalized)) return amount / 1000;
