@@ -256,11 +256,25 @@
       }
       results.innerHTML = recommendations.map((item, index) => {
         const url = typeof item.restaurantUrl === "string" && /^https:\/\//i.test(item.restaurantUrl) ? item.restaurantUrl : "";
-        const distance = Number.isFinite(Number(item.distanceKm)) ? Number(item.distanceKm).toFixed(1) + " km away" : "Distance unavailable";
-        const price = Number.isFinite(Number(item.priceInr)) && Number(item.priceInr) > 0 ? "₹" + Math.round(Number(item.priceInr)) : "Price unavailable";
-        const score = Number.isFinite(Number(item.healthScore)) ? Math.round(Number(item.healthScore)) + "/100" : "Score unavailable";
+        const hasDistance = item.distanceKm !== null && item.distanceKm !== undefined && Number.isFinite(Number(item.distanceKm));
+        const distance = hasDistance ? Number(item.distanceKm).toFixed(1) + " km away" : "Distance unavailable";
+        const hasPrice = item.priceInr !== null && item.priceInr !== undefined && Number.isFinite(Number(item.priceInr)) && Number(item.priceInr) > 0;
+        const price = hasPrice ? "₹" + Math.round(Number(item.priceInr)) : "Price unavailable";
+        const hasScore = item.healthScore !== null && item.healthScore !== undefined && Number.isFinite(Number(item.healthScore));
+        const score = hasScore ? Math.round(Number(item.healthScore)) : null;
+        const proteinValue = item.proteinG ?? item.estProteinG;
+        const caloriesValue = item.calories ?? item.estCalories;
+        const hasProtein = proteinValue !== null && proteinValue !== undefined && Number.isFinite(Number(proteinValue));
+        const hasCalories = caloriesValue !== null && caloriesValue !== undefined && Number.isFinite(Number(caloriesValue));
+        const protein = hasProtein ? `~${Number(proteinValue)} g` : "Not listed";
+        const calories = hasCalories ? `~${Number(caloriesValue)} kcal` : "Not listed";
         const reasons = Array.isArray(item.reasons) ? item.reasons.map(esc).join(" · ") : "";
-        return `<article class="food-nearby-entry"><div class="food-result-main"><small>#${index + 1} · Health score ${score} · ${esc(distance)}</small><strong>${esc(item.dishName || item.name || "Menu dish")}</strong><span>${esc(item.restaurantName || "Restaurant")} · ${esc(price)}</span><small>${esc(item.locality || "")}${item.restaurantRating ? " · Rating " + esc(item.restaurantRating) : ""}</small>${reasons ? `<p>${reasons}</p>` : ""}<small>${esc(item.nutritionDisclaimer || "Nutrition data may be estimated; confirm with the restaurant.")}</small>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open restaurant listing</a>` : ""}</div></article>`;
+        const rating = item.restaurantRating !== null && item.restaurantRating !== undefined && Number.isFinite(Number(item.restaurantRating)) ? `★ ${Number(item.restaurantRating).toFixed(1)}` : "";
+        const dishName = esc(item.dishName || item.name || "Menu dish");
+        const restaurantName = esc(item.restaurantName || "Restaurant");
+        const locality = esc(item.locality || "");
+        const confidence = item.nutritionConfidence === "verified" ? "Verified label" : item.nutritionConfidence === "llm_estimated" ? "AI estimate" : "Unverified menu data";
+        return `<article class="food-nearby-card"><div class="food-nearby-card-top"><span class="food-rank">OPTION ${String(index + 1).padStart(2, "0")}</span><span class="food-health-score">${hasScore ? `${score}<small>/100</small>` : "Score n/a"}</span></div><h3>${dishName}</h3><p class="food-nearby-restaurant">${restaurantName}</p><div class="food-nearby-meta"><span>⌖ ${esc(distance)}</span>${rating ? `<span>${esc(rating)}</span>` : ""}<span>${esc(price)}</span></div><div class="food-nearby-nutrition"><div><small>PROTEIN</small><strong>${esc(protein)}</strong></div><div><small>CALORIES</small><strong>${esc(calories)}</strong></div></div><p class="food-nearby-locality">${locality}</p>${reasons ? `<p class="food-nearby-reasons">${reasons}</p>` : ""}<div class="food-nearby-card-footer"><span>${esc(confidence)}</span>${url ? `<a class="food-nearby-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">View menu <span aria-hidden="true">↗</span></a>` : ""}</div><p class="food-nearby-disclaimer">${esc(item.nutritionDisclaimer || "Nutrition may be estimated. Confirm ingredients, serving size and values with the restaurant.")}</p></article>`;
       }).join("");
       setStatus("food-nearby-status", `Location: ${label}. Ranked ${recommendations.length} dishes from ${result.restaurantsFound || "nearby"} restaurants. ${result.ranking || ""}`);
     } catch (error) {
