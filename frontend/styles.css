@@ -1451,3 +1451,26 @@ button:disabled, [aria-disabled="true"] {
   .fitos-consent-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .fitos-consent-actions button { padding-inline: 8px; }
 }
+
+
+/* FitOS app-shell refresh: modern typography, clear hierarchy and less dated dashboard chrome */
+:root { --fitos-green:#286448; --fitos-green-dark:#183d2b; --fitos-surface:#fbfcfa; --fitos-line:#e3e9e3; }
+#main-app { background:var(--bg,#f4f2ec); }
+.screen .header { margin-bottom:22px; }
+.screen .header h1 { font-size:clamp(28px,4vw,40px); line-height:1.08; letter-spacing:-.045em; color:#17231c; }
+.screen .header p { max-width:64ch; color:#68746b; line-height:1.65; }
+#main-app .card,#main-app .food-tool-card { border-color:var(--fitos-line); box-shadow:0 5px 20px rgba(22,37,27,.045); }
+#main-app .btn { min-height:42px; border-radius:11px; font-weight:700; transition:transform .16s ease,background .16s ease,box-shadow .16s ease; }
+#main-app .btn:hover { transform:translateY(-1px); }
+#main-app .btn-mint { background:#286448; border-color:#286448; color:#fff; box-shadow:0 5px 13px rgba(40,100,72,.13); }
+#main-app .btn-mint:hover { background:#1f5038; }
+#bottom-nav { backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-top:1px solid rgba(219,227,219,.9); box-shadow:0 -8px 28px rgba(23,36,27,.06); }
+#bottom-nav .nav-item { transition:color .16s ease,background .16s ease; }
+#bottom-nav .nav-item.active { color:#286448; }
+#bottom-nav .nav-item.active .nav-icon { background:#e6f3ea; border-radius:12px; }
+#screen-diet .food-tracker { border-color:#e1e8e1; border-radius:24px; box-shadow:0 12px 35px rgba(22,37,27,.055); }
+#screen-diet .food-tool-card { border-radius:17px; }
+#screen-diet .food-tracker-heading h2 { color:#17231c; letter-spacing:-.045em; }
+#screen-diet .food-tracker-tabs button { min-height:42px; border-radius:12px; font-weight:700; }
+#screen-diet .food-tracker-tabs button.active { background:#1d3829; border-color:#1d3829; box-shadow:0 5px 14px rgba(29,56,41,.13); }
+@media(max-width:600px) { .screen .header { margin-bottom:16px; } #main-app .btn:hover { transform:none; } }
