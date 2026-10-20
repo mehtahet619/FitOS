@@ -47,15 +47,170 @@
       setStatus("food-camera-status", (error.message || "Product lookup failed.") + hint, true);
     } finally { lookupInFlight = false; }
   }
+  const FOOD_QUERY_CORRECTIONS = {
+    grek: "greek", greeke: "greek", yogrt: "yogurt", yogut: "yogurt",
+    yoghurt: "yogurt", yougurt: "yogurt", protien: "protein", protin: "protein",
+    paneer: "paneer", curd: "curd", dahi: "dahi", oats: "oats",
+  };
+  function normalizeFoodQuery(value) {
+    return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
+      .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim().replace(/\\s+/g, " ");
+  }
+  function correctFoodQuery(value) {
+    const original = normalizeFoodQuery(value);
+    const corrected = original.split(" ").map((word) => FOOD_QUERY_CORRECTIONS[word] || word).join(" ");
+    return { original, corrected, changed: corrected !== original };
+  }
+  function nutritionScore(product) {
+    const n = product.nutrimentsPer100g || {};
+    const components = [];
+    if (num(n.proteinG) !== null) components.push(Math.min(100, num(n.proteinG) * 5));
+    if (num(n.fiberG) !== null) components.push(Math.min(100, num(n.fiberG) * 8));
+    if (num(n.sugarsG) !== null) components.push(Math.max(0, 100 - num(n.sugarsG) * 5));
+    if (num(n.saturatedFatG) !== null) components.push(Math.max(0, 100 - num(n.saturatedFatG) * 10));
+    if (num(n.saltG) !== null) components.push(Math.max(0, 100 - num(n.saltG) * 30));
+    if (!components.length) return null;
+    return Math.round(components.reduce((sum, value) => sum + value, 0) / components.length);
+  }
+  function productRelevance(product, query) {
+    const q = normalizeFoodQuery(query);
+    const name = normalizeFoodQuery(product.name);
+    const brand = normalizeFoodQuery(product.brand);
+    if (!q) return 0;
+    return (name === q ? 100 : name.startsWith(q) ? 65 : name.includes(q) ? 45 : 0) +
+      (brand.includes(q) ? 15 : 0) + q.split(" ").filter((word) => name.includes(word)).length * 8;
+  }
   function renderProductResult(product) {
     const image = product.imageUrl ? `<img src="${esc(product.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const basis = product.nutrimentsPer100g?.basis || "Nutrition basis not specified";
-    return `<article class="food-product-result">${image}<div class="food-result-main"><strong>${esc(product.name)}</strong><small>${esc(product.brand || "Brand not listed")} · ${esc(product.code)} · ${esc(product.quantity || "Package size not listed")}</small><small>${esc(basis)}</small><button type="button" class="btn btn-outline" data-select-product="${esc(product.code)}">Review & log</button></div></article>`;
+    const n = product.nutrimentsPer100g || {};
+    const score = nutritionScore(product);
+    const nutrientSummary = [
+      num(n.proteinG) === null ? null : `Protein ${fmt(n.proteinG, " g")}`,
+      num(n.caloriesKcal) === null ? null : `${fmt(n.caloriesKcal, " kcal")}`,
+      num(n.sugarsG) === null ? null : `Sugar ${fmt(n.sugarsG, " g")}`,
+    ].filter(Boolean).join(" · ");
+    return `<article class="food-product-result">${image}<div class="food-result-main"><strong>${esc(product.name)}</strong><small>${esc(product.brand || "Brand not listed")} · ${esc(product.code)} · ${esc(product.quantity || "Package size not listed")}</small><small>${esc(basis)}</small>${nutrientSummary ? `<small class="food-smart-nutrients">${esc(nutrientSummary)} per 100 g/ml</small>` : ""}${score === null ? '<small class="food-smart-limited">Nutrition data limited · compare the package label</small>' : `<small class="food-smart-score">Nutrition profile score: ${score}/100 · based only on available label fields</small>`}<button type="button" class="btn btn-outline" data-select-product="${esc(product.code)}">Review & log</button></div></article>`;
+  }
+  async function fetchFoodProducts(query) {
+    const result = await api("/nutrition/foods/search?q=" + encodeURIComponent(query));
+    return Array.isArray(result.products) ? result.products : [];
+  }
+  function combinedSearchScore(product, query) {
+    const relevance = productRelevance(product, query);
+    const nutrition = nutritionScore(product);
+    return relevance * 0.7 + (nutrition === null ? 50 : nutrition) * 0.3;
   }
   async function searchProducts(query) {
-    const result = await api("/nutrition/foods/search?q=" + encodeURIComponent(query));
-    $("food-search-results").innerHTML = result.products.length ? result.products.map(renderProductResult).join("") : '<p class="food-empty">No products found. Try a shorter name or enter the package label manually.</p>';
+    const correction = correctFoodQuery(query);
+    const searchedQuery = correction.corrected;
+    const products = await fetchFoodProducts(searchedQuery);
+    products.sort((a, b) =>
+      combinedSearchScore(b, searchedQuery) - combinedSearchScore(a, searchedQuery) ||
+      productRelevance(b, searchedQuery) - productRelevance(a, searchedQuery)
+    );
+    const results = $("food-search-results");
+    const correctionNote = correction.changed
+      ? `<p class="food-smart-correction" role="status">Showing results for <strong>${esc(correction.corrected)}</strong>. <button type="button" class="food-smart-keep-query" id="food-search-keep-original">Search “${esc(correction.original)}” instead</button></p>`
+      : "";
+    results.innerHTML = correctionNote + (products.length
+      ? '<p class="food-smart-recommendation-heading">Best matches, with available nutrition data considered</p>' + products.map(renderProductResult).join("")
+      : '<p class="food-empty">No products found. Try a shorter name, select a suggestion, or enter the package label manually.</p>');
+    $("food-search-keep-original")?.addEventListener("click", async () => {
+      $("food-search-input").value = correction.original;
+      const originalProducts = await fetchFoodProducts(correction.original);
+      originalProducts.sort((a, b) =>
+        combinedSearchScore(b, correction.original) - combinedSearchScore(a, correction.original) ||
+        productRelevance(b, correction.original) - productRelevance(a, correction.original)
+      );
+      results.innerHTML = originalProducts.length ? originalProducts.map(renderProductResult).join("") :
+        '<p class="food-empty">No products found for the original search. Try another spelling or enter the package label manually.</p>';
+    });
   }
+  const foodSearchInput = $("food-search-input");
+  const foodSearchForm = $("food-search-form");
+  const foodSearchResults = $("food-search-results");
+  let suggestionPanel = $("food-search-suggestions");
+  if (!suggestionPanel) {
+    suggestionPanel = document.createElement("div");
+    suggestionPanel.id = "food-search-suggestions";
+    suggestionPanel.className = "food-search-suggestions";
+    suggestionPanel.setAttribute("role", "listbox");
+    suggestionPanel.setAttribute("aria-label", "Food search suggestions");
+    foodSearchForm.insertAdjacentElement("afterend", suggestionPanel);
+  }
+  let suggestionTimer = null;
+  let suggestionRequest = 0;
+  function hideFoodSuggestions() {
+    suggestionPanel.hidden = true;
+    suggestionPanel.replaceChildren();
+    foodSearchInput?.setAttribute("aria-expanded", "false");
+  }
+  function showFoodSuggestions(query, products, corrected) {
+    const seen = new Set();
+    const options = [];
+    if (corrected.changed) options.push({ label: corrected.corrected, detail: "Did you mean?", correction: true });
+    for (const product of products) {
+      const label = String(product.name || "").trim();
+      if (!label || seen.has(label.toLowerCase())) continue;
+      seen.add(label.toLowerCase());
+      options.push({ label, detail: product.brand || "Open Food Facts", code: product.code });
+      if (options.length >= 6) break;
+    }
+    suggestionPanel.innerHTML = options.map((option, index) =>
+      `<button type="button" role="option" aria-selected="false" class="food-search-suggestion" data-suggestion-index="${index}"><span><strong>${esc(option.label)}</strong><small>${esc(option.detail)}</small></span><span aria-hidden="true">↗</span></button>`
+    ).join("") || '<p class="food-search-suggestion-empty">Keep typing to search food products.</p>';
+    suggestionPanel.hidden = false;
+    foodSearchInput?.setAttribute("aria-expanded", "true");
+    suggestionPanel.querySelectorAll("[data-suggestion-index]").forEach((button, index) => {
+      button.addEventListener("click", () => {
+        const option = options[index];
+        foodSearchInput.value = option.label;
+        hideFoodSuggestions();
+        if (option.code && !option.correction) {
+          selectProduct(option.code).catch((error) => {
+            foodSearchResults.insertAdjacentHTML("afterbegin", `<p class="food-empty" role="alert">${esc(error.message)}</p>`);
+          });
+        } else {
+          foodSearchForm.requestSubmit();
+        }
+      });
+    });
+  }
+  foodSearchInput?.setAttribute("autocomplete", "off");
+  foodSearchInput?.setAttribute("role", "combobox");
+  foodSearchInput?.setAttribute("aria-autocomplete", "list");
+  foodSearchInput?.setAttribute("aria-controls", "food-search-suggestions");
+  foodSearchInput?.setAttribute("aria-expanded", "false");
+  foodSearchInput?.addEventListener("input", () => {
+    clearTimeout(suggestionTimer);
+    const query = foodSearchInput.value.trim();
+    if (query.length < 2) return hideFoodSuggestions();
+    suggestionTimer = setTimeout(async () => {
+      const requestId = ++suggestionRequest;
+      const correction = correctFoodQuery(query);
+      try {
+        const products = await fetchFoodProducts(correction.corrected);
+        if (requestId !== suggestionRequest || foodSearchInput.value.trim() !== query) return;
+        showFoodSuggestions(query, products, correction);
+      } catch {
+        if (requestId === suggestionRequest) hideFoodSuggestions();
+      }
+    }, 350);
+  });
+  foodSearchInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideFoodSuggestions();
+    if (event.key === "ArrowDown" && !suggestionPanel.hidden) {
+      event.preventDefault();
+      suggestionPanel.querySelector("button[data-suggestion-index]")?.focus();
+    }
+  });
+  suggestionPanel.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { hideFoodSuggestions(); foodSearchInput.focus(); }
+  });
+  document.addEventListener("click", (event) => {
+    if (!foodSearchForm.contains(event.target) && !suggestionPanel.contains(event.target)) hideFoodSuggestions();
+  });
   async function selectProduct(code) {
     const result = await api("/nutrition/foods/barcode/" + encodeURIComponent(code));
     state.product = result.product; state.pendingManual = false; renderReview(result.product);
@@ -152,6 +307,7 @@
     event.preventDefault();
     event.stopPropagation();
     const query = $("food-search-input").value.trim();
+    hideFoodSuggestions();
     const results = $("food-search-results");
     if (query.length < 2) {
       results.innerHTML = '<p class="food-empty" role="status">Enter at least 2 characters to search.</p>';
