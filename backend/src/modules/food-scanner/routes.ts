@@ -112,37 +112,75 @@ foodScannerRouter.get("/foods/barcode/:code", async (req, res) => {
 foodScannerRouter.get("/foods/search", async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least two characters to search." });
+
+  // All upstream calls stay on the FitOS server. Browsers cannot reliably call
+  // Open Food Facts directly because of cross-origin restrictions.
+  let primaryError = false;
   try {
-    // Use Open Food Facts' dedicated Search-a-licious full-text API instead of
-    // the legacy /cgi/search.pl endpoint, which is subject to global 503 limits.
     const url = new URL(OFF_SEARCH_URL);
     url.searchParams.set("q", q);
     url.searchParams.set("langs", "en");
     url.searchParams.set("page", "1");
-    url.searchParams.set("page_size", "10");
+    url.searchParams.set("page_size", "20");
     url.searchParams.set("fields", OFF_FIELDS);
     const response = await fetch(url.toString(), {
       headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
       signal: AbortSignal.timeout(Math.max(OFF_TIMEOUT_MS, 12000)),
     });
-    if (!response.ok) {
-      console.error("[food-search] Open Food Facts Search-a-licious returned HTTP", response.status);
-      return res.status(502).json({ error: "Open Food Facts search is temporarily unavailable. Please try again shortly." });
+    if (response.ok) {
+      const data = await response.json() as any;
+      const hits = Array.isArray(data?.hits) ? data.hits : [];
+      const products = hits
+        .map((hit: any) => hit?._source ?? hit?.document ?? hit)
+        .filter((p: any) => p?.code && (p?.product_name || p?.product_name_en))
+        .map((p: any) => normalizeProduct({
+          ...p,
+          product_name: p.product_name || p.product_name_en || "",
+        }));
+      if (products.length) return res.json({ products, source: "Open Food Facts", count: products.length });
+    } else {
+      primaryError = true;
+      console.error("[food-search] Search-a-licious returned HTTP", response.status);
     }
-    const data = await response.json() as any;
-    const hits = Array.isArray(data?.hits) ? data.hits : [];
-    const products = hits
-      .map((hit: any) => hit?._source ?? hit?.document ?? hit)
-      .filter((p: any) => p?.code && (p?.product_name || p?.product_name_en))
-      .map((p: any) => normalizeProduct({
-        ...p,
-        product_name: p.product_name || p.product_name_en || "",
-      }));
-    return res.json({ products, source: "Open Food Facts", count: products.length });
   } catch (error) {
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    return res.status(timedOut ? 504 : 502).json({ error: timedOut ? "Open Food Facts search took too long. Please try again." : "Could not reach Open Food Facts search. Please try again shortly." });
+    primaryError = true;
+    console.error("[food-search] Search-a-licious request failed:", error instanceof Error ? error.message : "unknown error");
   }
+
+  // Compatibility fallback for Search-a-licious outages. This request is made
+  // server-side, never from the user's browser.
+  try {
+    const fallbackUrl = new URL(OFF_BASE + "/cgi/search.pl");
+    fallbackUrl.searchParams.set("search_terms", q);
+    fallbackUrl.searchParams.set("search_simple", "1");
+    fallbackUrl.searchParams.set("action", "process");
+    fallbackUrl.searchParams.set("json", "1");
+    fallbackUrl.searchParams.set("page_size", "20");
+    fallbackUrl.searchParams.set("fields", OFF_FIELDS);
+    const fallbackResponse = await fetch(fallbackUrl.toString(), {
+      headers: { "User-Agent": "FitOS/1.0 (food scanner)", Accept: "application/json" },
+      signal: AbortSignal.timeout(Math.max(OFF_TIMEOUT_MS, 12000)),
+    });
+    if (fallbackResponse.ok) {
+      const data = await fallbackResponse.json() as any;
+      const products = (Array.isArray(data?.products) ? data.products : [])
+        .filter((p: any) => p?.code && (p?.product_name || p?.product_name_en))
+        .map((p: any) => normalizeProduct({
+          ...p,
+          product_name: p.product_name || p.product_name_en || "",
+        }));
+      return res.json({ products, source: "Open Food Facts", count: products.length });
+    }
+    console.error("[food-search] legacy fallback returned HTTP", fallbackResponse.status);
+  } catch (error) {
+    console.error("[food-search] legacy fallback failed:", error instanceof Error ? error.message : "unknown error");
+  }
+
+  return res.status(502).json({
+    error: primaryError
+      ? "Open Food Facts search is temporarily unavailable. Please try again shortly."
+      : "No matching products were returned. Try another spelling or a shorter query.",
+  });
 });
 // A "day" is the user's local calendar day. The client sends its UTC offset (Date#getTimezoneOffset, minutes
 // west of UTC) so entries logged just after local midnight do not show up under the previous UTC date.
