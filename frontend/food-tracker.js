@@ -58,13 +58,8 @@
     "almonds", "milk", "buttermilk", "lassi", "cheese", "peanut butter",
     "bread", "eggs", "banana", "apple"
   ];
-  const FOOD_QUERY_CORRECTIONS = {
-    grek: "greek", greeke: "greek",
-    yogrt: "yogurt", yogut: "yogurt", yoghurt: "yogurt", yougurt: "yogurt",
-    protien: "protein", protin: "protein", paneer: "paneer", cholee: "chole",
-    choley: "chole", channa: "chana", chickpea: "chickpeas", dahi: "dahi",
-    oats: "oats", panner: "paneer", panir: "paneer", soya: "soya"
-  };
+  // Candidate vocabulary, not typo pairs: correction is inferred from edit distance and phonetic similarity.
+  // This baseline can be replaced by a catalog-backed index or a trained Siamese model when query data exists.
   function normalizeFoodQuery(value) {
     return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
       .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim().replace(/\\s+/g, " ");
@@ -86,22 +81,36 @@
     }
     return d[left.length][right.length];
   }
+  function phoneticKey(value) {
+    // Lightweight Soundex-style key for Latin-script food names; edit distance remains the primary signal.
+    const word = String(value || "").normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+      .toLocaleLowerCase("en-US").replace(/[^a-z]/g, "");
+    if (!word) return "";
+    const code = { b: "1", f: "1", p: "1", v: "1", c: "2", g: "2", j: "2", k: "2", q: "2", s: "2", x: "2", z: "2", d: "3", t: "3", l: "4", m: "5", n: "5", r: "6" };
+    let out = word[0].toUpperCase(), previous = code[word[0]] || "";
+    for (const char of word.slice(1)) {
+      const digit = code[char] || "";
+      if (digit && digit !== previous) out += digit;
+      previous = digit;
+      if (out.length === 4) break;
+    }
+    return (out + "000").slice(0, 4);
+  }
   function correctFoodQuery(value) {
     const original = normalizeFoodQuery(value);
+    const candidates = [...new Set(FOOD_VOCABULARY.flatMap((phrase) => normalizeFoodQuery(phrase).split(" ")))];
     const correctedWords = original.split(" ").map((word) => {
-      if (FOOD_QUERY_CORRECTIONS[word]) return FOOD_QUERY_CORRECTIONS[word];
-      if (word.length < 4) return word;
-      let best = word, bestDistance = Infinity;
-      for (const candidate of FOOD_VOCABULARY) {
-        for (const token of candidate.split(" ")) {
-          if (Math.abs(token.length - word.length) > 2) continue;
-          const distance = editDistance(word, token);
-          const allowed = word.length >= 8 ? 2 : 1;
-          if (distance <= allowed && distance < bestDistance) {
-            best = token;
-            bestDistance = distance;
-          }
-        }
+      if (word.length < 4 || candidates.includes(word)) return word;
+      let best = word, bestScore = Infinity;
+      for (const candidate of candidates) {
+        if (Math.abs(candidate.length - word.length) > 2) continue;
+        const distance = editDistance(word, candidate);
+        const phoneticMatch = phoneticKey(word) === phoneticKey(candidate);
+        const allowed = word.length >= 8 ? 2 : 1;
+        if (distance > allowed && !phoneticMatch) continue;
+        // Prefer close spellings; phonetics break ties rather than overriding strong lexical evidence.
+        const score = distance - (phoneticMatch ? 0.35 : 0);
+        if (score < bestScore) { best = candidate; bestScore = score; }
       }
       return best;
     });
