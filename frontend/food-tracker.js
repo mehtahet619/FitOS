@@ -108,11 +108,16 @@
         products = await fetchFoodProducts(searchedQuery);
       }
     }
-    products.sort((a, b) => {
-      const relevance = productRelevance(b, searchedQuery) - productRelevance(a, searchedQuery);
-      if (relevance) return relevance;
-      return (nutritionScore(b) ?? -1) - (nutritionScore(a) ?? -1);
-    });
+    const combinedSearchScore = (product, q) => {
+      const relevance = productRelevance(product, q);
+      const nutrition = nutritionScore(product);
+      // Missing nutrition stays unknown, not zero or an automatic penalty.
+      return relevance * 0.7 + (nutrition === null ? 50 : nutrition) * 0.3;
+    };
+    products.sort((a, b) =>
+      combinedSearchScore(b, searchedQuery) - combinedSearchScore(a, searchedQuery) ||
+      productRelevance(b, searchedQuery) - productRelevance(a, searchedQuery)
+    );
     const results = $("food-search-results");
     const correctionNote = correction.changed
       ? `<p class="food-smart-correction" role="status">Showing results for <strong>${esc(correction.corrected)}</strong>. <button type="button" class="food-smart-keep-query" id="food-search-keep-original">Search “${esc(correction.original)}” instead</button></p>`
@@ -123,8 +128,10 @@
     $("food-search-keep-original")?.addEventListener("click", async () => {
       $("food-search-input").value = correction.original;
       const originalProducts = await fetchFoodProducts(correction.original);
-      originalProducts.sort((a, b) => (productRelevance(b, correction.original) - productRelevance(a, correction.original)) ||
-        ((nutritionScore(b) ?? -1) - (nutritionScore(a) ?? -1)));
+      originalProducts.sort((a, b) =>
+        combinedSearchScore(b, correction.original) - combinedSearchScore(a, correction.original) ||
+        productRelevance(b, correction.original) - productRelevance(a, correction.original)
+      );
       results.innerHTML = originalProducts.length ? originalProducts.map(renderProductResult).join("") :
         '<p class="food-empty">No products found for the original search. Try another spelling or enter the package label manually.</p>';
     });
