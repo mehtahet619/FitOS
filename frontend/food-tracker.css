@@ -51,3 +51,46 @@
 #food-nearby-results:empty { display:none; }
 @media(max-width:720px) { #screen-diet .food-nearby-results,#food-nearby-results { grid-template-columns:1fr; gap:11px; } #screen-diet .food-nearby-card { padding:15px; border-radius:15px; } }
 @media(prefers-reduced-motion:reduce) { #screen-diet .food-nearby-card { transition:none; } #screen-diet .food-nearby-card:hover { transform:none; } }
+
+
+/* Smart packaged-food search: autocomplete, corrections, and nutrition-aware ranking. */
+#screen-diet .food-search-suggestions {
+  margin: 8px 0 12px;
+  overflow: hidden;
+  border: 1px solid #e1e7e1;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(24, 35, 28, .08);
+}
+#screen-diet .food-search-suggestions[hidden] { display: none !important; }
+#screen-diet .food-search-suggestion {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid #edf0ec;
+  background: #fff;
+  color: #1b2720;
+  text-align: left;
+  cursor: pointer;
+}
+#screen-diet .food-search-suggestion:last-child { border-bottom: 0; }
+#screen-diet .food-search-suggestion:hover,
+#screen-diet .food-search-suggestion:focus-visible { background: #f1f8f3; outline: 2px solid #b7ddc5; outline-offset: -2px; }
+#screen-diet .food-search-suggestion span:first-child { display: grid; gap: 3px; min-width: 0; }
+#screen-diet .food-search-suggestion strong { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+#screen-diet .food-search-suggestion small { color: #748078; font-size: 12px; }
+#screen-diet .food-search-suggestion-empty { margin: 0; padding: 12px 14px; color: #737d75; font-size: 13px; }
+#screen-diet .food-smart-correction { margin: 10px 0; color: #4c6253; font-size: 13px; line-height: 1.5; }
+#screen-diet .food-smart-keep-query { border: 0; padding: 0; background: transparent; color: #246344; font: inherit; text-decoration: underline; cursor: pointer; }
+#screen-diet .food-smart-recommendation-heading { margin: 14px 0 8px; color: #69756c; font-size: 12px; font-weight: 700; }
+#screen-diet .food-smart-nutrients { color: #334e3d; }
+#screen-diet .food-smart-score { color: #26704b; font-weight: 650; }
+#screen-diet .food-smart-limited { color: #7a6844; }
+#screen-diet #food-search-input[aria-expanded="true"] { border-color: #9ac9a9; }
+@media (prefers-reduced-motion: reduce) {
+  #screen-diet .food-search-suggestion { scroll-behavior: auto; }
+}
