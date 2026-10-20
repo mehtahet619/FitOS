@@ -47,18 +47,65 @@
       setStatus("food-camera-status", (error.message || "Product lookup failed.") + hint, true);
     } finally { lookupInFlight = false; }
   }
+  // FitOS food-search retrieval and typo-tolerance layer.
+  // This is a deterministic lexical baseline; a neural Siamese model and LambdaMART
+  // should only be enabled after FitOS has representative labeled query/click data.
+  const FOOD_VOCABULARY = [
+    "greek yogurt", "yogurt", "curd", "dahi", "paneer", "tofu", "soya chunks",
+    "protein powder", "protein bar", "oats", "muesli", "chole", "chana", "chickpeas",
+    "rajma", "dal", "lentils", "rice", "roti", "chapati", "poha", "upma",
+    "idli", "dosa", "dhokla", "thepla", "khichdi", "sprouts", "peanuts",
+    "almonds", "milk", "buttermilk", "lassi", "cheese", "peanut butter",
+    "bread", "eggs", "banana", "apple"
+  ];
   const FOOD_QUERY_CORRECTIONS = {
-    grek: "greek", greeke: "greek", yogrt: "yogurt", yogut: "yogurt",
-    yoghurt: "yogurt", yougurt: "yogurt", protien: "protein", protin: "protein",
-    paneer: "paneer", curd: "curd", dahi: "dahi", oats: "oats",
+    grek: "greek", greeke: "greek", grek yogrt: "greek yogurt",
+    yogrt: "yogurt", yogut: "yogurt", yoghurt: "yogurt", yougurt: "yogurt",
+    protien: "protein", protin: "protein", paneer: "paneer", cholee: "chole",
+    choley: "chole", channa: "chana", chickpea: "chickpeas", dahi: "dahi",
+    oats: "oats", panner: "paneer", panir: "paneer", soya: "soya"
   };
   function normalizeFoodQuery(value) {
     return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
       .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim().replace(/\\s+/g, " ");
   }
+  function editDistance(a, b) {
+    // Damerau-Levenshtein distance: insertions, deletions, substitutions and adjacent swaps.
+    const left = Array.from(a), right = Array.from(b);
+    const d = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+    for (let i = 0; i <= left.length; i++) d[i][0] = i;
+    for (let j = 0; j <= right.length; j++) d[0][j] = j;
+    for (let i = 1; i <= left.length; i++) {
+      for (let j = 1; j <= right.length; j++) {
+        const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+        if (i > 1 && j > 1 && left[i - 1] === right[j - 2] && left[i - 2] === right[j - 1]) {
+          d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + cost);
+        }
+      }
+    }
+    return d[left.length][right.length];
+  }
   function correctFoodQuery(value) {
     const original = normalizeFoodQuery(value);
-    const corrected = original.split(" ").map((word) => FOOD_QUERY_CORRECTIONS[word] || word).join(" ");
+    const correctedWords = original.split(" ").map((word) => {
+      if (FOOD_QUERY_CORRECTIONS[word]) return FOOD_QUERY_CORRECTIONS[word];
+      if (word.length < 4) return word;
+      let best = word, bestDistance = Infinity;
+      for (const candidate of FOOD_VOCABULARY) {
+        for (const token of candidate.split(" ")) {
+          if (Math.abs(token.length - word.length) > 2) continue;
+          const distance = editDistance(word, token);
+          const allowed = word.length >= 8 ? 2 : 1;
+          if (distance <= allowed && distance < bestDistance) {
+            best = token;
+            bestDistance = distance;
+          }
+        }
+      }
+      return best;
+    });
+    const corrected = correctedWords.join(" ");
     return { original, corrected, changed: corrected !== original };
   }
   function nutritionScore(product) {
@@ -104,28 +151,42 @@
   async function searchProducts(query) {
     const correction = correctFoodQuery(query);
     const searchedQuery = correction.corrected;
-    const fetchedProducts = await fetchFoodProducts(searchedQuery);
+    // Query both the user's spelling and the corrected spelling, then merge by barcode.
+    // This improves recall without depending on one upstream search index response.
+    const queries = [...new Set([searchedQuery, correction.original].filter((item) => item.length >= 2))];
+    const batches = await Promise.all(queries.map(async (term) => {
+      try { return await fetchFoodProducts(term); } catch { return []; }
+    }));
+    const byCode = new Map();
+    for (const product of batches.flat()) {
+      const key = String(product.code || (normalizeFoodQuery(product.name) + "|" + normalizeFoodQuery(product.brand)));
+      if (!byCode.has(key)) byCode.set(key, product);
+    }
+    const fetchedProducts = [...byCode.values()];
     const products = fetchedProducts
-      .map((product) => ({ product, relevance: productRelevance(product, searchedQuery) }))
+      .map((product) => {
+        const relevance = Math.max(productRelevance(product, searchedQuery), productRelevance(product, correction.original));
+        const nutrition = nutritionScore(product);
+        // Retrieval relevance dominates nutrition; nutrition only breaks close matches.
+        const score = relevance * 0.8 + (nutrition === null ? 50 : nutrition) * 0.2;
+        return { product, relevance, score };
+      })
       .filter((item) => item.relevance > 0)
-      .sort((a, b) =>
-        b.relevance - a.relevance ||
-        combinedSearchScore(b.product, searchedQuery) - combinedSearchScore(a.product, searchedQuery)
-      )
+      .sort((a, b) => b.score - a.score || b.relevance - a.relevance)
       .map((item) => item.product);
     const results = $("food-search-results");
     const correctionNote = correction.changed
       ? `<p class="food-smart-correction" role="status">Showing results for <strong>${esc(correction.corrected)}</strong>. <button type="button" class="food-smart-keep-query" id="food-search-keep-original">Search “${esc(correction.original)}” instead</button></p>`
       : "";
     results.innerHTML = correctionNote + (products.length
-      ? '<p class="food-smart-recommendation-heading">Best matches, with available nutrition data considered</p>' + products.map(renderProductResult).join("")
-      : '<p class="food-empty">No products found. Try a shorter name, select a suggestion, or enter the package label manually.</p>');
+      ? '<p class="food-smart-recommendation-heading">Best matches, ranked by name relevance first and available nutrition second</p>' + products.map(renderProductResult).join("")
+      : '<p class="food-empty">No matching products were returned. Try a shorter name or another spelling, or enter the package label manually.</p>');
     $("food-search-keep-original")?.addEventListener("click", async () => {
       $("food-search-input").value = correction.original;
       const originalProducts = await fetchFoodProducts(correction.original);
       originalProducts.sort((a, b) =>
-        combinedSearchScore(b, correction.original) - combinedSearchScore(a, correction.original) ||
-        productRelevance(b, correction.original) - productRelevance(a, correction.original)
+        productRelevance(b, correction.original) - productRelevance(a, correction.original) ||
+        combinedSearchScore(b, correction.original) - combinedSearchScore(a, correction.original)
       );
       results.innerHTML = originalProducts.length ? originalProducts.map(renderProductResult).join("") :
         '<p class="food-empty">No products found for the original search. Try another spelling or enter the package label manually.</p>';
