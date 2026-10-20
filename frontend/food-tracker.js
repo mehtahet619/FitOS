@@ -62,7 +62,7 @@
   // This baseline can be replaced by a catalog-backed index or a trained Siamese model when query data exists.
   function normalizeFoodQuery(value) {
     return String(value || "").normalize("NFKC").toLocaleLowerCase("en-US")
-      .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim().replace(/\\s+/g, " ");
+      .replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
   }
   function editDistance(a, b) {
     // Damerau-Levenshtein distance: insertions, deletions, substitutions and adjacent swaps.
