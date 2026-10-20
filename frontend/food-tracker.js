@@ -92,9 +92,53 @@
     ].filter(Boolean).join(" · ");
     return `<article class="food-product-result">${image}<div class="food-result-main"><strong>${esc(product.name)}</strong><small>${esc(product.brand || "Brand not listed")} · ${esc(product.code)} · ${esc(product.quantity || "Package size not listed")}</small><small>${esc(basis)}</small>${nutrientSummary ? `<small class="food-smart-nutrients">${esc(nutrientSummary)} per 100 g/ml</small>` : ""}${score === null ? '<small class="food-smart-limited">Nutrition data limited · compare the package label</small>' : `<small class="food-smart-score">Nutrition profile score: ${score}/100 · based only on available label fields</small>`}<button type="button" class="btn btn-outline" data-select-product="${esc(product.code)}">Review & log</button></div></article>`;
   }
+  function mapOpenFoodFactsProduct(product) {
+    const n = product.nutriments || {};
+    const value = (...keys) => {
+      for (const key of keys) {
+        const parsed = num(n[key]);
+        if (parsed !== null) return parsed;
+      }
+      return null;
+    };
+    const code = String(product.code || product._id || "").trim();
+    const name = String(product.product_name || product.product_name_en || "").trim();
+    if (!code || !name) return null;
+    return {
+      code,
+      name,
+      brand: String(product.brands || "").split(",")[0].trim(),
+      quantity: product.quantity || "",
+      imageUrl: product.image_front_small_url || product.image_front_url || product.image_url || "",
+      nutrimentsPer100g: {
+        basis: "per 100 g/ml as reported by Open Food Facts",
+        proteinG: value("proteins_100g"),
+        fiberG: value("fiber_100g"),
+        sugarsG: value("sugars_100g"),
+        saturatedFatG: value("saturated-fat_100g"),
+        saltG: value("salt_100g"),
+        caloriesKcal: value("energy-kcal_100g", "energy-kcal_value"),
+      },
+    };
+  }
+  async function fetchOpenFoodFactsProducts(query) {
+    const url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" +
+      encodeURIComponent(query) +
+      "&search_simple=1&action=process&json=1&page_size=12&fields=code,product_name,product_name_en,brands,quantity,image_front_small_url,image_front_url,image_url,nutriments";
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("Open Food Facts search is temporarily unavailable.");
+    const data = await response.json();
+    return (Array.isArray(data.products) ? data.products : [])
+      .map(mapOpenFoodFactsProduct).filter(Boolean);
+  }
   async function fetchFoodProducts(query) {
-    const result = await api("/nutrition/foods/search?q=" + encodeURIComponent(query));
-    return Array.isArray(result.products) ? result.products : [];
+    try {
+      const result = await api("/nutrition/foods/search?q=" + encodeURIComponent(query));
+      if (Array.isArray(result.products) && result.products.length) return result.products;
+    } catch (error) {
+      // Keep search useful if the FitOS proxy is unavailable; Open Food Facts is the existing source.
+    }
+    return fetchOpenFoodFactsProducts(query);
   }
   function combinedSearchScore(product, query) {
     const relevance = productRelevance(product, query);
@@ -193,8 +237,11 @@
         const products = await fetchFoodProducts(correction.corrected);
         if (requestId !== suggestionRequest || foodSearchInput.value.trim() !== query) return;
         showFoodSuggestions(query, products, correction);
-      } catch {
-        if (requestId === suggestionRequest) hideFoodSuggestions();
+      } catch (error) {
+        if (requestId !== suggestionRequest) return;
+        suggestionPanel.innerHTML = '<p class="food-search-suggestion-empty">Suggestions could not load. Tap Search to retry, or check your connection.</p>';
+        suggestionPanel.hidden = false;
+        foodSearchInput?.setAttribute("aria-expanded", "true");
       }
     }, 350);
   });
