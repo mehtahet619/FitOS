@@ -59,7 +59,7 @@
     "bread", "eggs", "banana", "apple"
   ];
   const FOOD_QUERY_CORRECTIONS = {
-    grek: "greek", greeke: "greek", grek yogrt: "greek yogurt",
+    grek: "greek", greeke: "greek",
     yogrt: "yogurt", yogut: "yogurt", yoghurt: "yogurt", yougurt: "yogurt",
     protien: "protein", protin: "protein", paneer: "paneer", cholee: "chole",
     choley: "chole", channa: "chana", chickpea: "chickpeas", dahi: "dahi",
