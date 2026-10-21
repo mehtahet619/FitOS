@@ -109,6 +109,69 @@ foodScannerRouter.get("/foods/barcode/:code", async (req, res) => {
     return res.status(502).json({ error: "Open Food Facts lookup failed. Please try again." });
   }
 });
+// Spoonacular food ingredient search. Keep the API key server-side in SPOONACULAR_API_KEY.
+const SPOONACULAR_TIMEOUT_MS = Number(process.env.SPOONACULAR_TIMEOUT_MS) || 10000;
+function spoonacularNutrient(nutrients: any[], names: string[]): number | null {
+  const match = nutrients.find((item: any) => names.includes(String(item?.name || "").toLowerCase()));
+  return optionalNumber(match?.amount);
+}
+function normalizeSpoonacularFood(raw: any) {
+  const nutrition = Array.isArray(raw?.nutrition?.nutrients) ? raw.nutrition.nutrients : [];
+  const calories = spoonacularNutrient(nutrition, ["calories", "energy"]);
+  return {
+    code: "",
+    externalFoodId: String(raw?.id || ""),
+    name: String(raw?.name || "").trim(),
+    brand: "",
+    quantity: "",
+    servingSize: "100 g",
+    servingQuantityG: 100,
+    imageUrl: typeof raw?.image === "string" && raw.image
+      ? (raw.image.startsWith("http") ? raw.image : "https://spoonacular.com/cdn/ingredients_100x100/" + encodeURIComponent(raw.image))
+      : null,
+    ingredients: "",
+    allergens: "",
+    nutrimentsPer100g: {
+      basis: "Per 100 g as reported by Spoonacular; confirm the food and portion before logging",
+      caloriesKcal: calories,
+      proteinG: spoonacularNutrient(nutrition, ["protein"]),
+      carbsG: spoonacularNutrient(nutrition, ["carbohydrates", "carbs"]),
+      fatG: spoonacularNutrient(nutrition, ["fat", "total fat"]),
+      fiberG: spoonacularNutrient(nutrition, ["fiber"]),
+      saturatedFatG: spoonacularNutrient(nutrition, ["saturated fat"]),
+      sugarsG: spoonacularNutrient(nutrition, ["sugar"]),
+      saltG: null,
+      sodiumMg: spoonacularNutrient(nutrition, ["sodium"]),
+      caffeineMg: null,
+    },
+    source: "Spoonacular",
+    sourceUrl: "https://spoonacular.com/ingredients/" + encodeURIComponent(String(raw?.name || "").replace(/\\s+/g, "-")) + "-" + encodeURIComponent(String(raw?.id || "")),
+    verificationStatus: "third_party_database_check_portion",
+  };
+}
+async function searchSpoonacularFoods(query: string) {
+  const key = String(process.env.SPOONACULAR_API_KEY || "").trim();
+  if (!key) return null;
+  const url = new URL("https://api.spoonacular.com/food/ingredients/search");
+  url.searchParams.set("query", query);
+  url.searchParams.set("number", "10");
+  url.searchParams.set("metaInformation", "true");
+  url.searchParams.set("addChildren", "true");
+  url.searchParams.set("apiKey", key);
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), { signal: AbortSignal.timeout(SPOONACULAR_TIMEOUT_MS) });
+  } catch {
+    throw new OffError("Spoonacular food search could not be reached. Trying the backup food database.");
+  }
+  if (response.status === 402 || response.status === 429) {
+    throw new OffError("Spoonacular quota or rate limit reached. Trying the backup food database.", 503);
+  }
+  if (!response.ok) throw new OffError("Spoonacular food search is temporarily unavailable. Trying the backup food database.");
+  const data = await response.json() as any;
+  const results = Array.isArray(data?.results) ? data.results : [];
+  return results.map(normalizeSpoonacularFood).filter((food: any) => food.name);
+}
 // BonHappetee Food Nutrition API (RapidAPI). Keep the key server-side in BONHAPPETEE_RAPIDAPI_KEY.
 const BONHAPPETEE_HOST = "bonhappetee-food-nutrition-api2.p.rapidapi.com";
 const BONHAPPETEE_TIMEOUT_MS = Number(process.env.BONHAPPETEE_TIMEOUT_MS) || 10000;
@@ -170,15 +233,28 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least two characters to search." });
 
-  // Prefer BonHappetee when its RapidAPI key is configured. Open Food Facts remains a fallback.
+  // Prefer Spoonacular when configured. Provider failures fall through to BonHappetee and then Open Food Facts.
+  if (process.env.SPOONACULAR_API_KEY) {
+    try {
+      const foods = await searchSpoonacularFoods(q);
+      if (foods && foods.length) return res.json({ products: foods, source: "Spoonacular", count: foods.length });
+      if (foods && foods.length === 0) {
+        // An empty Spoonacular result is not definitive for packaged foods or regional dishes;
+        // continue to the backup providers rather than hiding possible matches.
+        console.info("[food-search] Spoonacular returned no matches; trying backup providers.");
+      }
+    } catch (error) {
+      console.error("[food-search] Spoonacular request failed:", error instanceof Error ? error.message : "unknown error");
+    }
+  }
   if (process.env.BONHAPPETEE_RAPIDAPI_KEY) {
     try {
       const foods = await searchBonHappeteeFoods(q);
       if (foods && foods.length) return res.json({ products: foods, source: "BonHappetee Food Nutrition API", count: foods.length });
-      if (foods && foods.length === 0) return res.json({ products: [], source: "BonHappetee Food Nutrition API", count: 0 });
+      if (foods && foods.length === 0) console.info("[food-search] BonHappetee returned no matches; trying Open Food Facts.");
     } catch (error) {
       console.error("[food-search] BonHappetee request failed:", error instanceof Error ? error.message : "unknown error");
-      // A transient provider failure falls through to the existing Open Food Facts search.
+      // Fall through to the existing Open Food Facts search.
     }
   }
 
