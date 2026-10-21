@@ -4,7 +4,7 @@
   const root = $("fitos-food-tracker");
   if (!root || root.dataset.initialized) return;
   root.dataset.initialized = "true";
-  const state = { product: null, scanner: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null };
+  const state = { product: null, scanner: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null, searchProducts: [] };
   const num = (v) => v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt = (v, unit = "") => v === null || v === undefined ? "Not available" : `${Number(v.toFixed ? v.toFixed(1) : v)}${unit}`;
@@ -146,7 +146,7 @@
       num(n.caloriesKcal) === null ? null : `${fmt(n.caloriesKcal, " kcal")}`,
       num(n.sugarsG) === null ? null : `Sugar ${fmt(n.sugarsG, " g")}`,
     ].filter(Boolean).join(" · ");
-    return `<article class="food-product-result">${image}<div class="food-result-main"><strong>${esc(product.name)}</strong><small>${esc(product.brand || "Brand not listed")} · ${esc(product.code || product.externalFoodId || "Food database entry")} · ${esc(product.quantity || product.servingSize || "Portion details not listed")}</small><small>${esc(basis)}</small>${nutrientSummary ? `<small class="food-smart-nutrients">${esc(nutrientSummary)} per 100 g/ml</small>` : ""}${score === null ? '<small class="food-smart-limited">Nutrition data limited · compare the package label</small>' : `<small class="food-smart-score">Nutrition profile score: ${score}/100 · based only on available label fields</small>`}<button type="button" class="btn btn-outline" data-select-product="${esc(product.code)}">Review & log</button></div></article>`;
+    return `<article class="food-product-result">${image}<div class="food-result-main"><strong>${esc(product.name)}</strong><small>${esc(product.brand || "Brand not listed")} · ${esc(product.code || product.externalFoodId || "Food database entry")} · ${esc(product.quantity || product.servingSize || "Portion details not listed")}</small><small>${esc(basis)}</small>${nutrientSummary ? `<small class="food-smart-nutrients">${esc(nutrientSummary)} per 100 g/ml</small>` : ""}${score === null ? '<small class="food-smart-limited">Nutrition data limited · compare the package label</small>' : `<small class="food-smart-score">Nutrition profile score: ${score}/100 · based only on available label fields</small>`}<button type="button" class="btn btn-outline" data-select-product="${esc(product.code || product.externalFoodId || product.name)}">Review & log</button></div></article>`;
   }
   async function fetchFoodProducts(query) {
     const result = await api("/nutrition/foods/search?q=" + encodeURIComponent(query));
