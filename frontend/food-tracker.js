@@ -172,6 +172,7 @@
       if (!byCode.has(key)) byCode.set(key, product);
     }
     const fetchedProducts = [...byCode.values()];
+    state.searchProducts = fetchedProducts;
     const products = fetchedProducts
       .map((product) => {
         const relevance = Math.max(productRelevance(product, searchedQuery), productRelevance(product, correction.original));
@@ -295,9 +296,12 @@
   document.addEventListener("click", (event) => {
     if (!foodSearchForm.contains(event.target) && !suggestionPanel.contains(event.target)) hideFoodSuggestions();
   });
-  async function selectProduct(code) {
-    const result = await api("/nutrition/foods/barcode/" + encodeURIComponent(code));
-    state.product = result.product; state.pendingManual = false; renderReview(result.product);
+  async function selectProduct(identifier) {
+    const product = state.searchProducts.find((item) => String(item.code || item.externalFoodId || item.name) === String(identifier));
+    if (!product) throw new Error("This food result is no longer available. Search again and select it.");
+    state.product = product;
+    state.pendingManual = false;
+    renderReview(product);
     $("food-product-review").scrollIntoView({ behavior: "smooth", block: "start" });
   }
   async function loadNutritionProfile() {
