@@ -109,9 +109,78 @@ foodScannerRouter.get("/foods/barcode/:code", async (req, res) => {
     return res.status(502).json({ error: "Open Food Facts lookup failed. Please try again." });
   }
 });
+// BonHappetee Food Nutrition API (RapidAPI). Keep the key server-side in BONHAPPETEE_RAPIDAPI_KEY.
+const BONHAPPETEE_HOST = "bonhappetee-food-nutrition-api2.p.rapidapi.com";
+const BONHAPPETEE_TIMEOUT_MS = Number(process.env.BONHAPPETEE_TIMEOUT_MS) || 10000;
+function normalizeBonHappeteeFood(raw: any) {
+  const n = raw?.nutrients || {};
+  const optional = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 && number <= 100000 ? number : null;
+  };
+  const servingGrams = optional(raw?.basic_unit_measure);
+  const calories = optional(n.calories);
+  return {
+    code: "",
+    externalFoodId: String(raw?.food_unique_id || raw?.food_id || ""),
+    name: String(raw?.food_name || raw?.common_names || "").trim(),
+    brand: "",
+    quantity: "",
+    servingSize: [raw?.serving_size, raw?.serving_type].filter(Boolean).join(" "),
+    servingQuantityG: servingGrams !== null && servingGrams > 0 ? servingGrams : null,
+    imageUrl: null,
+    ingredients: "",
+    allergens: "",
+    nutrimentsPer100g: {
+      basis: "Per 100 g as reported by BonHappetee; confirm portion size before logging",
+      caloriesKcal: calories,
+      proteinG: optional(n.protein),
+      carbsG: optional(n.carbs),
+      fatG: optional(n.fats),
+      fiberG: null,
+      saturatedFatG: null,
+      sugarsG: null,
+      saltG: null,
+      sodiumMg: null,
+      caffeineMg: null,
+    },
+    source: "BonHappetee Food Nutrition API",
+    sourceUrl: null,
+    verificationStatus: "third_party_database_check_portion",
+  };
+}
+async function searchBonHappeteeFoods(query: string) {
+  const key = String(process.env.BONHAPPETEE_RAPIDAPI_KEY || "").trim();
+  if (!key) return null;
+  const url = new URL("https://" + BONHAPPETEE_HOST + "/searchFood");
+  url.searchParams.set("value", query);
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": BONHAPPETEE_HOST },
+    signal: AbortSignal.timeout(BONHAPPETEE_TIMEOUT_MS),
+  });
+  if (response.status === 429) throw new OffError("BonHappetee API rate limit reached. Please try again shortly.", 503);
+  if (!response.ok) throw new OffError("BonHappetee food search is temporarily unavailable.", 502);
+  const data = await response.json() as any;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(normalizeBonHappeteeFood).filter((food: any) => food.name && food.nutrimentsPer100g.caloriesKcal !== null);
+}
 foodScannerRouter.get("/foods/search", async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least two characters to search." });
+
+  // Prefer BonHappetee when its RapidAPI key is configured. Open Food Facts remains a fallback.
+  if (process.env.BONHAPPETEE_RAPIDAPI_KEY) {
+    try {
+      const foods = await searchBonHappeteeFoods(q);
+      if (foods && foods.length) return res.json({ products: foods, source: "BonHappetee Food Nutrition API", count: foods.length });
+      if (foods && foods.length === 0) return res.json({ products: [], source: "BonHappetee Food Nutrition API", count: 0 });
+    } catch (error) {
+      console.error("[food-search] BonHappetee request failed:", error instanceof Error ? error.message : "unknown error");
+      // A transient provider failure falls through to the existing Open Food Facts search.
+    }
+  }
 
   // All upstream calls stay on the FitOS server. Browsers cannot reliably call
   // Open Food Facts directly because of cross-origin restrictions.
@@ -224,7 +293,7 @@ foodScannerRouter.post("/logs", requireAuth, async (req: AuthedRequest, res) => 
     if (nutrients[key] !== null && (!Number.isFinite(nutrients[key]) || nutrients[key]! < 0 || nutrients[key]! > 10000)) return res.status(400).json({ error: `Invalid value for ${key}.` });
   }
   const code = typeof b.productCode === "string" && PRODUCT_CODE.test(b.productCode) ? b.productCode : null;
-  const source = ["open_food_facts", "manual_label", "manual_entry"].includes(b.source) ? b.source : "manual_entry";
+  const source = ["open_food_facts", "bonhappetee", "manual_label", "manual_entry"].includes(b.source) ? b.source : "manual_entry";
   const sourceUrl = source === "open_food_facts" && code ? OFF_PUBLIC_BASE + "/product/" + encodeURIComponent(code) : null;
   const now = nowIso();
   // Prevent accidental repeat submissions of the same product within 10 seconds.
