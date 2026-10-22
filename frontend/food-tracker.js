@@ -222,6 +222,11 @@
     foodSearchInput?.setAttribute("aria-expanded", "false");
   }
   function showFoodSuggestions(query, products, corrected) {
+    // Keep the selectable suggestion objects in sync with the current search response.
+    // Previously selectProduct() only searched state.searchProducts, which was populated
+    // by the full Search form, not by autocomplete. Tapping a valid suggestion therefore
+    // produced the misleading "result is no longer available" error.
+    state.searchProducts = Array.isArray(products) ? products : [];
     const seen = new Set();
     const options = [];
     if (corrected.changed) options.push({ label: corrected.corrected, detail: "Did you mean?", correction: true });
