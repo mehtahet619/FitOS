@@ -496,6 +496,14 @@ CREATE TABLE IF NOT EXISTS GrowImpactPartnerUpdate (
 CREATE INDEX IF NOT EXISTS idx_grow_impact_partner_update_reward ON GrowImpactPartnerUpdate(rewardId, verifiedAt);
 
 
+-- Anonymous landing-page price guesses. One per browser-generated guest id.
+CREATE TABLE IF NOT EXISTS PricingGuessGuest (
+  guestId TEXT PRIMARY KEY,
+  price INTEGER NOT NULL CHECK (price >= 1 AND price <= 100000),
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pricing_guess_guest_created_at ON PricingGuessGuest(createdAt);
+
 -- One durable price guess per account. The primary key enforces uniqueness under concurrent requests.
 CREATE TABLE IF NOT EXISTS PricingGuess (
   userId TEXT PRIMARY KEY REFERENCES User(id) ON DELETE CASCADE,

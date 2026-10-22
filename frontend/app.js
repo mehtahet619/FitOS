@@ -210,9 +210,13 @@ async function routeCurrent() {
     showScreen(path === "/" ? "screen-landing" : "screen-intro");
     return;
   }
-  if (path === "/" || path === "/login" || path === "/register") {
-    if (AuthState.status === "AUTHENTICATED") { if (path !== "/homepage") navigate("/homepage", true); return; }
-    if (path === "/") { showScreen("screen-landing"); return; }
+  if (path === "/") {
+    // The marketing homepage is public even when a user is signed in.
+    showScreen("screen-landing");
+    return;
+  }
+  if (path === "/login" || path === "/register") {
+    if (AuthState.status === "AUTHENTICATED") { navigate("/homepage", true); return; }
     State.isRegisterMode = path === "/register";
     updateAuthMode(); showScreen("screen-auth"); return;
   }
