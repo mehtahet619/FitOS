@@ -200,14 +200,17 @@ export class ApifySwiggyMapsProvider {
         console.log("Menu extraction input:", JSON.stringify(menuInput, null, 2));
         console.log("Starting menu scraping...");
         const menuResults = await this.getRestaurantMenus(restaurantIds);
-        console.log("Raw menu records:", menuResults.length);
+        // Some actor runs embed real menu records in restaurant results instead of a separate menu dataset.
+        const embeddedMenuResults = this.extractEmbeddedMenuItems(restaurants);
+        const allMenuResults = [...menuResults, ...embeddedMenuResults];
+        console.log("Raw menu records:", menuResults.length, "embedded:", embeddedMenuResults.length);
         console.log("========== RAW MENU RESULTS ==========");
-        console.log("Raw menu record count:", menuResults.length);
-        console.log("Raw menu sample:", JSON.stringify(menuResults.slice(0, 10), null, 2));
-        console.log("Menu record keys:", Object.keys(menuResults[0] || {}));
+        console.log("Raw menu record count:", allMenuResults.length);
+        console.log("Raw menu sample:", JSON.stringify(allMenuResults.slice(0, 10), null, 2));
+        console.log("Menu record keys:", Object.keys(allMenuResults[0] || {}));
         this.lastDiagnostics.stage = "dish_normalization";
-        this.lastDiagnostics.rawMenuRecordsFound = menuResults.length;
-        const dishes = this.normalizeDishes(menuResults, restaurants);
+        this.lastDiagnostics.rawMenuRecordsFound = allMenuResults.length;
+        const dishes = this.normalizeDishes(allMenuResults, restaurants);
         console.log("Normalized dishes:", dishes.length);
         console.log("Valid dishes:", dishes.length);
         console.log("Sample dishes:", dishes.slice(0, 5));
@@ -343,6 +346,45 @@ export class ApifySwiggyMapsProvider {
         } as ApifyRestaurant;
       })
       .filter((restaurant) => Boolean(restaurant.id && restaurant.name));
+  }
+
+  /** Extract real dish records nested in restaurant-search responses. */
+  private extractEmbeddedMenuItems(restaurants: ApifyRestaurant[]): ApifyRestaurant[] {
+    const output: ApifyRestaurant[] = [];
+    const queueItems = (value: unknown, restaurant: ApifyRestaurant): void => {
+      if (Array.isArray(value)) {
+        for (const entry of value) queueItems(entry, restaurant);
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      const item = value as Record<string, unknown>;
+      const name = this.firstString(item, ["name", "dishName", "itemName", "title", "item_name"]);
+      if (name) output.push({
+        ...item,
+        restaurantId: this.firstString(item, ["restaurantId", "restaurant_id", "restaurantID"]) || restaurant.id || restaurant.restaurantId,
+        restaurantName: this.firstString(item, ["restaurantName", "restaurant_name"]) || restaurant.name || restaurant.restaurantName,
+        restaurantUrl: this.firstString(item, ["restaurantUrl", "restaurantURL", "url"]) || restaurant.url || restaurant.restaurantUrl,
+      } as ApifyRestaurant);
+      for (const key of ["items", "menus", "menuItems", "dishes", "products", "menu", "categories"]) {
+        if (item[key] !== undefined) queueItems(item[key], restaurant);
+      }
+    };
+    for (const restaurant of restaurants) {
+      const raw = restaurant as ApifyRestaurant & Record<string, unknown>;
+      for (const key of ["menus", "menuItems", "dishes", "menu"]) {
+        if (raw[key] !== undefined) queueItems(raw[key], restaurant);
+      }
+    }
+    const seen = new Set<string>();
+    return output.filter((item) => {
+      const row = item as Record<string, unknown>;
+      const name = this.firstString(row, ["name", "dishName", "itemName", "title", "item_name"]);
+      const restaurantId = this.firstString(row, ["restaurantId", "restaurant_id", "restaurantID"]) || "";
+      const key = `${restaurantId.toLowerCase()}::${(name || "").toLowerCase()}`;
+      if (!name || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private normalizeDishes(records: ApifyRestaurant[], restaurants: ApifyRestaurant[]): FoodDish[] {
