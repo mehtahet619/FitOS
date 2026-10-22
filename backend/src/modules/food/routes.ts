@@ -35,8 +35,12 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   const places = result.places.filter((p) => {
     const hasCoordinates = Number.isFinite(p.latitude) && Number.isFinite(p.longitude) &&
       p.latitude! >= -90 && p.latitude! <= 90 && p.longitude! >= -180 && p.longitude! <= 180;
-    // Swiggy search results contain real distance values but not coordinates.
-    return hasCoordinates || (Number.isFinite(p.distanceKm) && p.distanceKm >= 0);
+    // Keep only genuinely nearby places. Use GPS-derived distance when coordinates
+    // are available; otherwise use the provider's returned distance, never a guess.
+    const distanceKm = hasCoordinates
+      ? haversineKm(latitude, longitude, p.latitude!, p.longitude!)
+      : p.distanceKm;
+    return Number.isFinite(distanceKm) && distanceKm! >= 0 && distanceKm! <= 10;
   });
   const profile = req.userId ? await db.get<any>(`SELECT primaryGoal, dietaryPref, allergies, foodLikes, dailyBudget, weightKg FROM UserProfile WHERE userId = ?`, req.userId) : undefined;
   const vegetarianOnly = /vegetarian|vegan|^veg$/i.test(String(profile?.dietaryPref || "").trim());
