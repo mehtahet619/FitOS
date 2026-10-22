@@ -36,7 +36,7 @@
     if (!/^(?:\d{8}|\d{12,14})$/.test(code)) throw new Error("Barcode must contain 8, 12, 13, or 14 digits.");
     if (lookupInFlight) return;
     lookupInFlight = true;
-    setStatus("food-camera-status", "Looking up product in Open Food Facts…");
+    setStatus("food-camera-status", "Looking up product…");
     try {
       const result = await api("/nutrition/foods/barcode/" + encodeURIComponent(code));
       state.product = result.product; state.pendingManual = false; renderReview(result.product);
@@ -239,7 +239,7 @@
       const label = String(product.name || "").trim();
       if (!label || seen.has(label.toLowerCase())) continue;
       seen.add(label.toLowerCase());
-      options.push({ label, detail: product.brand || product.source || "Food database", code: product.code });
+      options.push({ label, detail: product.brand || "Food item", code: product.code });
       if (options.length >= 6) break;
     }
     suggestionPanel.innerHTML = options.map((option, index) =>
@@ -341,7 +341,7 @@
     container.innerHTML = `<h3>Confirm food before logging</h3>
       <p><strong>${esc(product.name)}</strong> · ${esc(product.brand || "Brand not listed")}</p>
       ${product.imageUrl ? `<img src="${esc(product.imageUrl)}" alt="" width="84" loading="lazy" referrerpolicy="no-referrer">` : ""}
-      <p class="food-data-note">Source: ${esc(product.source || "Manual label")} · ${esc(n.basis || "Values from user-entered label")} · ${esc(product.verificationStatus || "manual_label")}. Values missing from the source stay blank.</p>
+      <p class="food-data-note">${esc(n.basis || "Values from the food record or your entered label")}. Values not available stay blank. Please verify them against the package label when possible.</p>
       <div class="food-review-grid">
         <label>Serving amount (g/ml)<input id="food-review-serving" type="number" min="1" max="10000" value="${product.servingQuantityG || 100}" required></label>
         <label>Serving unit<select id="food-review-unit"><option value="g">g</option><option value="ml">ml</option></select></label>
@@ -378,7 +378,7 @@
       carbsG: field("food-review-carbs") === null ? null : round2(field("food-review-carbs") * scale),
       fatG: field("food-review-fat") === null ? null : round2(field("food-review-fat") * scale),
       fiberG: field("food-review-fiber") === null ? null : round2(field("food-review-fiber") * scale),
-      source: state.pendingManual ? "manual_label" : (product.source === "BonHappetee Food Nutrition API" ? "bonhappetee" : "open_food_facts")
+      source: state.pendingManual ? "manual_label" : (product.source === "Spoonacular" ? "spoonacular" : product.source === "BonHappetee Food Nutrition API" ? "bonhappetee" : "open_food_facts")
     };
     try {
       $("food-confirm-log").disabled = true;
@@ -408,7 +408,7 @@
     }
     const button = $("food-search-form").querySelector('button[type="submit"]');
     if (button) button.disabled = true;
-    results.innerHTML = '<p class="food-empty" role="status">Searching Open Food Facts…</p>';
+    results.innerHTML = '<p class="food-empty" role="status">Searching foods…</p>';
     try {
       await searchProducts(query);
     } catch (error) {
