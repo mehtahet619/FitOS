@@ -125,13 +125,15 @@ app.use(limiter);
 
 // Price guesses are persisted in the shared database so all visitors and backend
 // instances see the same total. The unique userId key guarantees one guess per account.
-async function getPriceGuessSummary(userId?: string) {
+const GUEST_ID_PATTERN = /^[a-zA-Z0-9-]{16,80}$/;
+
+async function getPriceGuessSummary(userId?: string, guestId?: string) {
   const aggregate = await db.get<{ average: number | string | null; count: number | string }>(
-    "SELECT AVG(price) AS average, COUNT(*) AS count FROM PricingGuess"
+    "SELECT AVG(price) AS average, COUNT(*) AS count FROM (SELECT price FROM PricingGuess UNION ALL SELECT price FROM PricingGuessGuest)"
   );
   const ownGuess = userId
     ? await db.get<{ price: number }>("SELECT price FROM PricingGuess WHERE userId = ?", userId)
-    : undefined;
+    : guestId ? await db.get<{ price: number }>("SELECT price FROM PricingGuessGuest WHERE guestId = ?", guestId) : undefined;
   const count = Number(aggregate?.count ?? 0);
   const averageValue = aggregate?.average == null ? null : Number(aggregate.average);
   return {
@@ -144,40 +146,45 @@ async function getPriceGuessSummary(userId?: string) {
 
 app.get("/pricing-guesses", async (req, res) => {
   const identity = await readIdentity(req);
+  const guestId = typeof req.query.guestId === "string" && GUEST_ID_PATTERN.test(req.query.guestId) ? req.query.guestId : undefined;
   res.setHeader("Cache-Control", "no-store");
-  res.json({ ...(await getPriceGuessSummary(identity?.userId)), authenticated: Boolean(identity?.userId) });
+  res.json({ ...(await getPriceGuessSummary(identity?.userId, guestId)), authenticated: Boolean(identity?.userId) });
 });
 
-app.post("/pricing-guesses", requireAuth, async (req: AuthedRequest, res) => {
+app.post("/pricing-guesses", async (req: Request, res: Response) => {
   const price = req.body?.price;
   if (!Number.isSafeInteger(price) || price < 1 || price > 100000) {
     return res.status(400).json({ error: "Enter a whole price between ₹1 and ₹1,00,000." });
   }
-  if (!req.userId) return res.status(401).json({ error: "Log in to submit your one price guess." });
+  const identity = await readIdentity(req);
+  const guestId = typeof req.body?.guestId === "string" && GUEST_ID_PATTERN.test(req.body.guestId) ? req.body.guestId : undefined;
+  if (!identity?.userId && !guestId) {
+    return res.status(400).json({ error: "A guest identifier is required. Refresh the page and try again." });
+  }
 
   try {
-    await db.run(
-      "INSERT INTO PricingGuess (userId, price, createdAt) VALUES (?, ?, ?)",
-      req.userId,
-      price,
-      new Date().toISOString()
-    );
+    if (identity?.userId) {
+      await db.run("INSERT INTO PricingGuess (userId, price, createdAt) VALUES (?, ?, ?)", identity.userId, price, new Date().toISOString());
+    } else {
+      await db.run("INSERT INTO PricingGuessGuest (guestId, price, createdAt) VALUES (?, ?, ?)", guestId, price, new Date().toISOString());
+    }
   } catch (error) {
-    // The primary key is userId. A concurrent duplicate request can never count twice.
-    const existing = await db.get<{ price: number }>(
-      "SELECT price FROM PricingGuess WHERE userId = ?",
-      req.userId
-    );
+    const existing = identity?.userId
+      ? await db.get<{ price: number }>("SELECT price FROM PricingGuess WHERE userId = ?", identity.userId)
+      : await db.get<{ price: number }>("SELECT price FROM PricingGuessGuest WHERE guestId = ?", guestId);
     if (existing) {
       return res.status(409).json({
-        error: "You've already submitted your guess. Each account gets one guess.",
-        ...(await getPriceGuessSummary(req.userId)),
+        error: "You've already submitted a guess from this account or browser.",
+        ...(await getPriceGuessSummary(identity?.userId, guestId)),
+        authenticated: Boolean(identity?.userId),
       });
     }
     throw error;
   }
-
-  return res.status(201).json(await getPriceGuessSummary(req.userId));
+  return res.status(201).json({
+    ...(await getPriceGuessSummary(identity?.userId, guestId)),
+    authenticated: Boolean(identity?.userId),
+  });
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
