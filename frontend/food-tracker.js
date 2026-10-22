@@ -541,11 +541,32 @@
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
     );
   });
-  $("food-nearby-manual-form").addEventListener("submit", (event) => {
+  $("food-nearby-manual-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const query = $("food-nearby-query").value.trim();
     if (!query) return setStatus("food-nearby-status", "Enter a place name or use GPS.", true);
-    setStatus("food-nearby-status", "Text-address search is not connected to a geocoder yet. Use GPS for live nearby ranking.", true);
+    const submit = $("food-nearby-manual-form").querySelector('button[type="submit"]');
+    if (submit) { submit.disabled = true; submit.textContent = "Locating…"; }
+    setStatus("food-nearby-status", "Finding the location, then checking real nearby menus…");
+    try {
+      const url = new URL("https://nominatim.openstreetmap.org/search");
+      url.searchParams.set("format", "jsonv2");
+      url.searchParams.set("limit", "1");
+      url.searchParams.set("q", query);
+      const response = await fetch(url.toString(), { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error("The location search service is temporarily unavailable. Try GPS or another place name.");
+      const matches = await response.json();
+      const match = Array.isArray(matches) ? matches[0] : null;
+      const latitude = Number(match?.lat), longitude = Number(match?.lon);
+      if (!match || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error("We couldn't locate that place. Try a more specific area and city, or use GPS.");
+      }
+      await nearbyWithCoords(latitude, longitude, match.display_name || query);
+    } catch (error) {
+      setStatus("food-nearby-status", error?.message || "Couldn't find that location. Try GPS or another place name.", true);
+    } finally {
+      if (submit) { submit.disabled = false; submit.textContent = "Search"; }
+    }
   });
   root.addEventListener("click", (event) => {
     const link = event.target.closest("a");
