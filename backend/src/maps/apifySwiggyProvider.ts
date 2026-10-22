@@ -308,17 +308,40 @@ export class ApifySwiggyMapsProvider {
 
   private normalizeRestaurants(records: ApifyRestaurant[]): ApifyRestaurant[] {
     return records
-      .map((restaurant) => ({
-        ...restaurant,
-        id: restaurant.id || restaurant.restaurantId || restaurant.restaurantUrl || restaurant.url || restaurant.LinkrestaurantUrl,
-        name: restaurant.name || restaurant.restaurantName || restaurant.Restaurantname,
-        rating: restaurant.rating ?? restaurant.avgRating ?? restaurant.Ratingrating ?? 4,
-        cuisines: restaurant.cuisines || restaurant.Cuisinescuisines,
-        locality: restaurant.locality || restaurant.Localitylocality,
-        costForTwo: restaurant.costForTwo ?? restaurant.CostforTwo ?? restaurant["Cost for twocostForTwo"],
-        deliveryTime: restaurant.deliveryTime || restaurant.DeliverydeliveryTime,
-        url: restaurant.url || restaurant.restaurantUrl || restaurant.LinkrestaurantUrl,
-      }))
+      .map((restaurant) => {
+        const raw = restaurant as ApifyRestaurant & Record<string, unknown>;
+        const nested = (raw.restaurant && typeof raw.restaurant === "object"
+          ? raw.restaurant
+          : {}) as Record<string, unknown>;
+        const firstText = (...values: unknown[]): string | undefined => {
+          for (const value of values) {
+            if (typeof value === "string" && value.trim()) return value.trim();
+            if (typeof value === "number" && Number.isFinite(value)) return String(value);
+          }
+          return undefined;
+        };
+        const id = firstText(
+          raw.id, raw.restaurantId, raw.restaurant_id, raw.restaurantID,
+          raw.resId, raw.res_id, nested.id, nested.restaurantId, nested.restaurant_id,
+          raw.restaurantUrl, raw.url, raw.LinkrestaurantUrl,
+        );
+        const name = firstText(
+          raw.name, raw.restaurantName, raw.Restaurantname, raw.restaurant_name,
+          nested.name, nested.restaurantName,
+        );
+        return {
+          ...restaurant,
+          id,
+          restaurantId: firstText(raw.restaurantId, raw.restaurant_id, raw.restaurantID, raw.resId, raw.res_id, nested.id, nested.restaurant_id) || id,
+          name,
+          rating: raw.rating ?? raw.avgRating ?? raw.Ratingrating ?? raw.ratingValue ?? 0,
+          cuisines: firstText(raw.cuisines, raw.Cuisinescuisines, raw.cuisine, nested.cuisines),
+          locality: firstText(raw.locality, raw.Localitylocality, raw.address, nested.locality),
+          costForTwo: raw.costForTwo ?? raw.CostforTwo ?? raw["Cost for twocostForTwo"],
+          deliveryTime: raw.deliveryTime ?? raw.DeliverydeliveryTime,
+          url: firstText(raw.url, raw.restaurantUrl, raw.LinkrestaurantUrl, raw.link),
+        } as ApifyRestaurant;
+      })
       .filter((restaurant) => Boolean(restaurant.id && restaurant.name));
   }
 
@@ -357,7 +380,7 @@ export class ApifySwiggyMapsProvider {
           category,
           description,
           priceInr: price,
-          isVeg: typeof (item.isVeg ?? item.veg ?? item.vegetarian) === "boolean" ? Boolean(item.isVeg ?? item.veg ?? item.vegetarian) : undefined,
+          isVeg: this.normalizeVegetarianFlag(item.isVeg ?? item.is_veg ?? item.veg ?? item.vegetarian ?? item.vegOnly ?? item.veg_only),
           inStock,
           imageUrl: this.firstString(item, ["imageUrl", "image", "image_url"]),
           calories: this.firstNumber(item, ["calories", "caloriesKcal", "energyKcal"]),
@@ -368,6 +391,20 @@ export class ApifySwiggyMapsProvider {
       })
       .filter((dish) => dish !== null) as FoodDish[];
     return normalized;
+  }
+
+  private normalizeVegetarianFlag(value: unknown): boolean | undefined {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (value === 1) return true;
+      if (value === 0) return false;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes", "y", "veg", "vegetarian", "pure veg"].includes(normalized)) return true;
+      if (["false", "0", "no", "n", "non-veg", "non veg", "nonvegetarian", "non-vegetarian"].includes(normalized)) return false;
+    }
+    return undefined;
   }
 
   private firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
