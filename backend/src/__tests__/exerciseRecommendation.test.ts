@@ -442,4 +442,55 @@ describe("bundled CSV exercise recommendations", () => {
       /Math\.random|fetch\(|https?:\/\//i,
     );
   });
+
+  it("never fills a workout with superficial variations of the same movement", () => {
+    const variationService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("shoulders-variants.csv", () =>
+        [
+          "exercise,machine,muscle",
+          "Overhead Press,Barbell,Shoulders",
+          "Eccentric Emphasis Overhead Press,Barbell,Shoulders",
+          "Wide Grip Overhead Press,Barbell,Shoulders",
+          "Dumbbell Lateral Raise,Dumbbell,Shoulders",
+          "Rear Delt Fly,Cable Machine,Shoulders",
+        ].join("\n"),
+      ),
+    );
+
+    const result = variationService.getRecommendedExercises({
+      targetMuscles: ["Shoulders"],
+      sessionDurationMinutes: 60,
+      availableEquipment: [],
+      equipmentMode: "FULL_GYM",
+    });
+
+    expect(result.exercises).toHaveLength(3);
+    expect(new Set(result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise))).size).toBe(3);
+    expect(result.exercises.map((exercise) => exercise.exercise)).not.toContain("Eccentric Emphasis Overhead Press");
+    expect(result.exercises.map((exercise) => exercise.exercise)).not.toContain("Wide Grip Overhead Press");
+  });
+
+  it("returns fewer exercises rather than repeating a movement when only variants exist", () => {
+    const variantsOnlyService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("overhead-only.csv", () =>
+        [
+          "exercise,machine,muscle",
+          "Overhead Press,Barbell,Shoulders",
+          "Eccentric Emphasis Overhead Press,Barbell,Shoulders",
+          "Wide Grip Overhead Press,Barbell,Shoulders",
+        ].join("\n"),
+      ),
+    );
+
+    const result = variantsOnlyService.getRecommendedExercises({
+      targetMuscles: ["Shoulders"],
+      sessionDurationMinutes: 60,
+      availableEquipment: [],
+      equipmentMode: "FULL_GYM",
+    });
+
+    expect(result.exercises).toHaveLength(1);
+    expect(result.availableCount).toBe(1);
+    expect(result.limitedByDataset).toBe(true);
+  });
 });
