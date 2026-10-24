@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
 import { normalizeExerciseValue } from "./exerciseCsvRepository";
 import { canonicalMuscleKey } from "./muscleTaxonomy";
-import { exerciseRecommendationService } from "./exerciseRecommendation";
+import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
 import { getAiExerciseFallback, type ExerciseFallbackEquipment } from "./exerciseAiFallback";
 
 export interface GeneratedExercise {
@@ -275,7 +275,7 @@ export async function generateWorkout(
       count: missingCount,
       equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
       excludedExerciseNames: result.exercises.map((exercise) => exercise.exercise),
-      excludedFamilyKeys: result.exercises.map((exercise) => exercise.exercise),
+      excludedFamilyKeys: result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise)),
     })
     : [];
   const selectedExercises = [...result.exercises, ...aiExercises];
