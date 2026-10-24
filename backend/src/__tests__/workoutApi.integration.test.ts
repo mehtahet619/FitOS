@@ -35,8 +35,8 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
           return aliases.length ? aliases.map((alias) => ({ id: equipment.id, name: equipment.name, alias: alias.alias })) : [{ id: equipment.id, name: equipment.name, alias: null }];
         }) as unknown as T[];
       }
-      if (sql.includes("SELECT e.name, ea.alias FROM Equipment")) {
-        return state.equipment.filter((equipment) => params.includes(equipment.id)).flatMap((equipment) => {
+      if (/SELECT e\.name,\s*ea\.alias FROM Equipment/.test(sql)) {
+        return state.equipment.filter((equipment) => equipment.name !== "No Equipment" && (params.length === 0 || params.includes(equipment.id))).flatMap((equipment) => {
           const aliases = state.equipmentAliases.filter((alias) => alias.equipmentId === equipment.id);
           return aliases.length ? aliases.map((alias) => ({ name: equipment.name, alias: alias.alias })) : [{ name: equipment.name, alias: null }];
         }) as unknown as T[];

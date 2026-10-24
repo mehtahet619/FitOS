@@ -79,7 +79,7 @@ const familyEquipmentWords = new Set([
  * such as "pullover" are retained.
  */
 export function exerciseFamilyKey(exerciseName: string): string {
-  let normalized = normalizeExerciseLookupName(exerciseName);
+  let normalized = normalizeExerciseValue(exerciseName);
   for (const phrase of familyVariationPhrases) normalized = normalized.replace(phrase, " ");
   normalized = normalized
     .replace(/\bpull down\b/g, "pulldown")
