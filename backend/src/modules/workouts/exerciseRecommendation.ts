@@ -160,15 +160,22 @@ function selectWithCoverage(
       return left.row.sourceIndex - right.row.sourceIndex;
     });
 
-    // Prefer a genuinely new movement family whenever one remains. Reuse a
-    // family only after all available families have been selected.
+    // A session must not fill its slots with superficial variations of the
+    // same movement (for example, standard, eccentric-emphasis and wide-grip
+    // overhead presses). If no new family remains, stop and let the caller use
+    // a genuinely different fallback or show fewer exercises.
     const firstNewFamily = remaining.findIndex((candidate) => !selectedFamilies.has(candidate.familyKey));
-    const [next] = remaining.splice(firstNewFamily >= 0 ? firstNewFamily : 0, 1);
+    if (firstNewFamily < 0) break;
+    const [next] = remaining.splice(firstNewFamily, 1);
     selected.push({ ...next.row, primaryMuscle: next.matchingMuscles[0] });
     selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
     next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
     usedMachines.add(normalizeExerciseValue(next.row.machine));
+    // Remove every remaining variant of the selected movement family.
+    for (let index = remaining.length - 1; index >= 0; index -= 1) {
+      if (remaining[index].familyKey === next.familyKey) remaining.splice(index, 1);
+    }
   }
   return selected;
 }
@@ -327,11 +334,12 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
 
     const candidates = [...uniqueCandidates.values()];
     const exercises = selectWithCoverage(candidates, requestedCount);
+    const distinctFamilyCount = new Set(candidates.map((candidate) => candidate.familyKey)).size;
     return {
       exercises,
       requestedCount,
-      availableCount: candidates.length,
-      limitedByDataset: candidates.length < requestedCount,
+      availableCount: distinctFamilyCount,
+      limitedByDataset: distinctFamilyCount < requestedCount,
     };
   }
 }
