@@ -182,6 +182,33 @@ describe("bundled CSV exercise recommendations", () => {
     expect(recommend("session-1")).not.toEqual(recommend("session-2"));
   });
 
+  it("never reuses previous workout movement families when alternatives are available", () => {
+    const rotationService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("rotation.csv", () => [
+        "exercise,machine,muscle",
+        "Chest Press A,Machine,Chest",
+        "Chest Press B,Machine,Chest",
+        "Chest Press C,Machine,Chest",
+        "Chest Press D,Machine,Chest",
+        "Chest Press E,Machine,Chest",
+        "Chest Press F,Machine,Chest",
+      ].join("\n")),
+    );
+    const previous = ["Chest Press A", "Chest Press B", "Chest Press C"];
+    const result = rotationService.getRecommendedExercises({
+      targetMuscles: ["Chest"],
+      sessionDurationMinutes: 60,
+      availableEquipment: [],
+      equipmentMode: "FULL_GYM",
+      excludedExerciseNames: previous,
+      excludedExerciseFamilyKeys: previous.map(exerciseFamilyKey),
+      selectionSeed: "regeneration-2",
+    });
+    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises.map((exercise) => exercise.exercise).some((name) => previous.includes(name))).toBe(false);
+    expect(new Set(result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise))).size).toBe(3);
+  });
+
   it("normalizes equipment and superficial lat-pulldown variations into deterministic families", () => {
     const pulldownFamily = exerciseFamilyKey("Lat Pulldown");
     for (const variation of [
