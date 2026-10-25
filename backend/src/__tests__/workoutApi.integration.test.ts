@@ -649,6 +649,7 @@ describe("workout API CSV flow", () => {
       "Lat Pulldown,Lat Pulldown,Back",
       "Dumbbell Row,Dumbbells,Back",
       "Cable Row,Cable Machine,Back",
+      "Deadlift,Barbell,Back",
       "Bench Press,Barbell,Chest",
     ].join("\n");
     const service = new CsvExerciseRecommendationService(new CsvExerciseRepository("legacy-refresh.csv", () => sampleCsv));
