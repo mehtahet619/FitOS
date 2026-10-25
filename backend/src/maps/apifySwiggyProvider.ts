@@ -332,11 +332,22 @@ export class ApifySwiggyMapsProvider {
           raw.name, raw.restaurantName, raw.Restaurantname, raw.restaurant_name,
           nested.name, nested.restaurantName,
         );
+        // Apify actor dataset versions use different keys for coordinates and
+        // distance. Normalize known aliases before the nearby-distance filter.
+        const latitude = raw.latitude ?? raw.lat ?? raw.Latitude ?? nested.latitude ?? nested.lat;
+        const longitude = raw.longitude ?? raw.lng ?? raw.lon ?? raw.Longitude ??
+          nested.longitude ?? nested.lng ?? nested.lon;
+        const distance = raw.distance ?? raw.distanceKm ?? raw.distance_km ?? raw.Distance ??
+          raw.distanceText ?? raw.distance_text ?? raw.distanceFromUser ?? raw.distance_from_user ??
+          nested.distance ?? nested.distanceKm ?? nested.distance_km;
         return {
           ...restaurant,
           id,
           restaurantId: firstText(raw.restaurantId, raw.restaurant_id, raw.restaurantID, raw.resId, raw.res_id, nested.id, nested.restaurant_id) || id,
           name,
+          latitude: latitude == null ? undefined : Number(latitude),
+          longitude: longitude == null ? undefined : Number(longitude),
+          distance: typeof distance === "string" || typeof distance === "number" ? distance : undefined,
           rating: raw.rating ?? raw.avgRating ?? raw.Ratingrating ?? raw.ratingValue ?? 0,
           cuisines: firstText(raw.cuisines, raw.Cuisinescuisines, raw.cuisine, nested.cuisines),
           locality: firstText(raw.locality, raw.Localitylocality, raw.address, nested.locality),
