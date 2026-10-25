@@ -426,6 +426,19 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     }
   }
 
+  // When rebuilding a pending workout, exclude every movement family from the
+  // previous version. This is the hard guarantee against returning the same
+  // exercise trio again; seed variation alone cannot guarantee that.
+  const previousWorkoutExercises = existingWorkout
+    ? await db.all<{ name: string }>(
+      `SELECT e.name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
+       WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
+      existingWorkout.id
+    )
+    : [];
+  const excludedExerciseNames = previousWorkoutExercises.map((exercise) => exercise.name);
+  const excludedExerciseFamilyKeys = previousWorkoutExercises.map((exercise) => exerciseFamilyKey(exercise.name));
+
   const recentlyTrained = await getRecentlyTrainedMuscles(db, userId);
   const recentMuscleSet = new Set(recentlyTrained.map((r) => r.muscle));
   const overlap = requiredUnit.muscles.filter((m) => recentMuscleSet.has(m));
@@ -441,6 +454,9 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     equipmentMode,
     scannedEquipmentIds,
     userEquipmentIds: userEquipmentOverrideIds,
+    excludedExerciseNames,
+    excludedExerciseFamilyKeys,
+    selectionSeed: `${userId}:${state.cycleId}:${currentPlanStepIndex}:${Date.now()}`,
   });
   const { exercises } = generation;
   const availableEquipmentForLog = equipmentMode === "FULL_GYM"

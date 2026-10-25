@@ -243,7 +243,7 @@ export async function generateWorkout(
   userId: string,
   focus: string,
   durationMin: number,
-  options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[]; userEquipmentIds?: string[] }
+  options?: { lockToMuscles?: string[]; equipmentMode?: EquipmentMode; scannedEquipmentIds?: string[]; userEquipmentIds?: string[]; excludedExerciseNames?: string[]; excludedExerciseFamilyKeys?: string[]; selectionSeed?: string }
 ): Promise<{ focus: string; exercises: GeneratedExercise[]; requestedExerciseCount: number; availableExerciseCount: number; limitedByDataset: boolean }> {
   const unitMuscles = options?.lockToMuscles?.length ? options.lockToMuscles : musclesForFocus(focus);
   const equipmentMode = options?.equipmentMode ?? "USER_EQUIPMENT";
@@ -266,6 +266,11 @@ export async function generateWorkout(
     sessionDurationMinutes: durationMin,
     availableEquipment,
     equipmentMode,
+    excludedExerciseNames: options?.excludedExerciseNames,
+    excludedExerciseFamilyKeys: options?.excludedExerciseFamilyKeys,
+    // Only route-level workout regeneration opts into rotation. Direct callers
+    // without a seed retain deterministic ordering for compatibility and tests.
+    selectionSeed: options?.selectionSeed,
   });
   const missingCount = Math.max(0, result.requestedCount - result.exercises.length);
   const aiExercises = missingCount > 0
@@ -274,8 +279,8 @@ export async function generateWorkout(
       sessionDurationMinutes: durationMin,
       count: missingCount,
       equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
-      excludedExerciseNames: result.exercises.map((exercise) => exercise.exercise),
-      excludedFamilyKeys: result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise)),
+      excludedExerciseNames: [...(options?.excludedExerciseNames ?? []), ...result.exercises.map((exercise) => exercise.exercise)],
+      excludedFamilyKeys: [...(options?.excludedExerciseFamilyKeys ?? []), ...result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise))],
     })
     : [];
   // Treat CSV and AI fallback results as one candidate pool. A fallback must not
