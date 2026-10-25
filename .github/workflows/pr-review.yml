@@ -142,7 +142,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   auto-merge:
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.danger.result == 'success'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.user.login == 'mehtahet619' && needs.danger.result == 'success'
     needs: [lint, typecheck, test, build, codeql, secretlint, danger]
     runs-on: ubuntu-latest
     permissions:
