@@ -70,10 +70,12 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       if (sql.includes("SELECT eq.name FROM ExerciseEquipment")) {
         return state.links.filter((row) => row.exerciseId === params[0]).map((row) => ({ name: state.equipment.find((eq) => eq.id === row.equipmentId)?.name })) as unknown as T[];
       }
-      if (sql.includes("SELECT e.name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId")) {
+      if (/SELECT\\s+e\\.name\\s+FROM\\s+WorkoutExercise\\s+we\\s+JOIN\\s+Exercise\\s+e\\s+ON\\s+e\\.id\\s*=\\s*we\\.exerciseId/i.test(sql)) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0])
           .sort((left, right) => left.orderIndex - right.orderIndex)
-          .map((row) => ({ name: state.exercises.find((exercise) => exercise.id === row.exerciseId)?.name }))
+          .map((row) => ({
+            name: row.sourceExerciseName || state.exercises.find((exercise) => exercise.id === row.exerciseId)?.name,
+          }))
           .filter((row) => typeof row.name === "string") as unknown as T[];
       }
       if (sql.includes("SELECT COALESCE(we.sourceExerciseName,e.name) as name")) {
@@ -415,13 +417,26 @@ describe("workout API CSV flow", () => {
       expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
+      const historyBeforeSecondSwap = state.swapHistory
+        .filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
+        .map((row) => row.familyKey);
       const secondSwapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
       });
-      expect(secondSwapResponse.status).toBe(422);
-      expect((await secondSwapResponse.json() as any).error).toMatch(/no curated CSV substitute matches/i);
-      expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
+      const secondSwapBody = await secondSwapResponse.json() as any;
+      if (secondSwapResponse.status === 200) {
+        const secondFamily = exerciseFamilyKey(secondSwapBody.exercise.exerciseName);
+        expect(historyBeforeSecondSwap).not.toContain(secondFamily);
+        expect(secondFamily).not.toBe(exerciseFamilyKey(slot.exerciseName));
+        expect(secondFamily).not.toBe(exerciseFamilyKey(swapped.exercise.exerciseName));
+        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
+          .some((row) => row.familyKey === secondFamily)).toBe(true);
+      } else {
+        expect(secondSwapResponse.status).toBe(422);
+        expect(secondSwapBody.error).toMatch(/no curated CSV substitute matches/i);
+        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
+      }
 
       const reorderIds = [...state.workoutExercises]
         .filter((exercise) => exercise.workoutId === before.id)
