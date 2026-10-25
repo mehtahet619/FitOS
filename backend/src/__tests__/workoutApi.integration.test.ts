@@ -704,7 +704,10 @@ describe("workout API CSV flow", () => {
       completeWorkout: async () => ({}),
       PLAN_LABELS: {},
     }));
-    vi.doMock("../modules/workouts/exerciseRecommendation", () => ({ exerciseRecommendationService: service }));
+    vi.doMock("../modules/workouts/exerciseRecommendation", async (importOriginal) => ({
+      ...await importOriginal<typeof import("../modules/workouts/exerciseRecommendation")>(),
+      exerciseRecommendationService: service,
+    }));
 
     const { workoutRouter } = await import("../modules/workouts/routes.js");
     const app = express();
