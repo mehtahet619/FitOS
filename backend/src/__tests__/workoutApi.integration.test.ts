@@ -70,6 +70,12 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       if (sql.includes("SELECT eq.name FROM ExerciseEquipment")) {
         return state.links.filter((row) => row.exerciseId === params[0]).map((row) => ({ name: state.equipment.find((eq) => eq.id === row.equipmentId)?.name })) as unknown as T[];
       }
+      if (sql.includes("SELECT e.name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId")) {
+        return state.workoutExercises.filter((row) => row.workoutId === params[0])
+          .sort((left, right) => left.orderIndex - right.orderIndex)
+          .map((row) => ({ name: state.exercises.find((exercise) => exercise.id === row.exerciseId)?.name }))
+          .filter((row) => typeof row.name === "string") as unknown as T[];
+      }
       if (sql.includes("SELECT COALESCE(we.sourceExerciseName,e.name) as name")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => ({ name: row.sourceExerciseName || state.exercises.find((ex) => ex.id === row.exerciseId)?.name })) as unknown as T[];
       }
@@ -445,7 +451,8 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "dumbel row", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       const typoRow = await typoRowResponse.json() as any;
-      expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Row", "Dumbbell Rows"]));
+      // The fixture catalog's canonical row name is "Dumbbell Rows".
+      expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Rows"]));
       // The UI cancellation path hides these suggestions without issuing a confirmation request.
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
       const aiNewNearMatchResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
