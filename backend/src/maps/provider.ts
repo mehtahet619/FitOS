@@ -83,8 +83,11 @@ export function getMapsProvider(): MapsProvider {
   const apiKey = process.env.APIFY_API_KEY;
   // Prefer live search when credentials exist, even if an old deployment still
   // has MAPS_PROVIDER=mock. Without credentials, never fabricate listings.
-  const provider = configuredProvider === "apify_swiggy" ||
-    (Boolean(apiKey) && (!configuredProvider || configuredProvider === "mock"))
+  // Apify is the only implemented live places provider. If its key is present,
+  // prefer it over stale/unsupported values such as "google_places" (which is
+  // documented but not implemented here); otherwise a configured key silently
+  // falls back to the empty mock provider and Food Nearby can never return dishes.
+  const provider = configuredProvider === "apify_swiggy" || Boolean(apiKey)
     ? "apify_swiggy" : configuredProvider || "mock";
   if (provider === "apify_swiggy") {
     if (!apiKey) {
