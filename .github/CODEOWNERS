@@ -6,3 +6,6 @@
 /**/payments/ @mehtahet619
 /render.yaml @mehtahet619
 /.github/workflows/ @mehtahet619
+
+# Require Het Mehta as code owner for all changes; GitHub branch protection must enforce this review.
+* @mehtahet619
