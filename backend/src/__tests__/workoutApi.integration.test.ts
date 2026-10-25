@@ -70,6 +70,14 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       if (sql.includes("SELECT eq.name FROM ExerciseEquipment")) {
         return state.links.filter((row) => row.exerciseId === params[0]).map((row) => ({ name: state.equipment.find((eq) => eq.id === row.equipmentId)?.name })) as unknown as T[];
       }
+      if (/SELECT\s+e\.name\s+FROM\s+WorkoutExercise\s+we\s+JOIN\s+Exercise\s+e\s+ON\s+e\.id\s*=\s*we\.exerciseId/i.test(sql)) {
+        return state.workoutExercises.filter((row) => row.workoutId === params[0])
+          .sort((left, right) => left.orderIndex - right.orderIndex)
+          .map((row) => ({
+            name: row.sourceExerciseName || state.exercises.find((exercise) => exercise.id === row.exerciseId)?.name,
+          }))
+          .filter((row) => typeof row.name === "string") as unknown as T[];
+      }
       if (sql.includes("SELECT COALESCE(we.sourceExerciseName,e.name) as name")) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0]).map((row) => ({ name: row.sourceExerciseName || state.exercises.find((ex) => ex.id === row.exerciseId)?.name })) as unknown as T[];
       }
@@ -358,7 +366,24 @@ describe("workout API CSV flow", () => {
         targetSets: exercise.targetSets, repRangeLow: exercise.repRangeLow, repRangeHigh: exercise.repRangeHigh,
         muscle: exercise.muscle, machine: exercise.machine,
       }));
-      const slot = before.exercises[1];
+      // Choose a slot that actually has a valid, unused CSV movement family.
+      // Randomized generation can legitimately place Deadlift in index 1, but
+      // this fixture has no distinct-family substitute for Deadlift.
+      const usedExerciseNames = before.exercises.map((exercise: any) => exercise.exerciseName);
+      const usedFamilyKeys = usedExerciseNames.map((name: string) => exerciseFamilyKey(name));
+      const slot = before.exercises.find((exercise: any) =>
+        service.getSwapAlternatives(
+          exercise.exerciseName,
+          exercise.machine,
+          exercise.primaryMuscle || exercise.muscle,
+          usedExerciseNames,
+          usedFamilyKeys,
+        ).some((alternative) =>
+          selectedEquipment.includes(alternative.machine)
+          && !usedFamilyKeys.includes(exerciseFamilyKey(alternative.exercise)),
+        ),
+      );
+      expect(slot, "fixture should contain a workout slot with a valid unused CSV substitute").toBeDefined();
 
       const swapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -379,26 +404,50 @@ describe("workout API CSV flow", () => {
       const after = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(after.exercises).toHaveLength(4);
       expect(after.durationMin).toBe(before.durationMin);
-      expect(after.exercises[0].exerciseName).toBe(original[0].exerciseName);
-      expect(after.exercises[2].exerciseName).toBe(original[2].exerciseName);
-      expect(after.exercises[1]).toMatchObject({
-        workoutExerciseId: slot.workoutExerciseId,
-        exerciseName: swapped.exercise.exerciseName,
-        muscle: original[1].muscle,
-        targetSets: original[1].targetSets,
-        repRangeLow: original[1].repRangeLow,
-        repRangeHigh: original[1].repRangeHigh,
-      });
+
+      // The endpoint may choose any eligible slot above; assert by stable slot
+      // ID rather than assuming the selected slot is always at index 1.
+      const afterBySlotId = new Map(after.exercises.map((exercise: any) => [exercise.workoutExerciseId, exercise]));
+      for (const previous of original) {
+        const current = afterBySlotId.get(previous.workoutExerciseId) as any;
+        expect(current, `slot ${previous.workoutExerciseId} should still exist`).toBeDefined();
+        if (previous.workoutExerciseId === slot.workoutExerciseId) {
+          expect(current.exerciseName).toBe(swapped.exercise.exerciseName);
+          expect(current.muscle).toBe(previous.muscle);
+          expect(current.targetSets).toBe(previous.targetSets);
+          expect(current.repRangeLow).toBe(previous.repRangeLow);
+          expect(current.repRangeHigh).toBe(previous.repRangeHigh);
+        } else {
+          expect(current.exerciseName).toBe(previous.exerciseName);
+          expect(current.machine).toBe(previous.machine);
+          expect(current.targetSets).toBe(previous.targetSets);
+          expect(current.repRangeLow).toBe(previous.repRangeLow);
+          expect(current.repRangeHigh).toBe(previous.repRangeHigh);
+        }
+      }
       expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
+      const historyBeforeSecondSwap = state.swapHistory
+        .filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
+        .map((row) => row.familyKey);
       const secondSwapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
       });
-      expect(secondSwapResponse.status).toBe(422);
-      expect((await secondSwapResponse.json() as any).error).toMatch(/no curated CSV substitute matches/i);
-      expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
+      const secondSwapBody = await secondSwapResponse.json() as any;
+      if (secondSwapResponse.status === 200) {
+        const secondFamily = exerciseFamilyKey(secondSwapBody.exercise.exerciseName);
+        expect(historyBeforeSecondSwap).not.toContain(secondFamily);
+        expect(secondFamily).not.toBe(exerciseFamilyKey(slot.exerciseName));
+        expect(secondFamily).not.toBe(exerciseFamilyKey(swapped.exercise.exerciseName));
+        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
+          .some((row) => row.familyKey === secondFamily)).toBe(true);
+      } else {
+        expect(secondSwapResponse.status).toBe(422);
+        expect(secondSwapBody.error).toMatch(/no curated CSV substitute matches/i);
+        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
+      }
 
       const reorderIds = [...state.workoutExercises]
         .filter((exercise) => exercise.workoutId === before.id)
@@ -445,7 +494,8 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "dumbel row", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       const typoRow = await typoRowResponse.json() as any;
-      expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Row", "Dumbbell Rows"]));
+      // The fixture catalog's canonical row name is "Dumbbell Rows".
+      expect(typoRow.suggestions.map((candidate: any) => candidate.name)).toEqual(expect.arrayContaining(["Dumbbell Rows"]));
       // The UI cancellation path hides these suggestions without issuing a confirmation request.
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)).toEqual(originalEditedExercise);
       const aiNewNearMatchResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
