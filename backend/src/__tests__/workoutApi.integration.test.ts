@@ -404,16 +404,27 @@ describe("workout API CSV flow", () => {
       const after = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(after.exercises).toHaveLength(4);
       expect(after.durationMin).toBe(before.durationMin);
-      expect(after.exercises[0].exerciseName).toBe(original[0].exerciseName);
-      expect(after.exercises[2].exerciseName).toBe(original[2].exerciseName);
-      expect(after.exercises[1]).toMatchObject({
-        workoutExerciseId: slot.workoutExerciseId,
-        exerciseName: swapped.exercise.exerciseName,
-        muscle: original[1].muscle,
-        targetSets: original[1].targetSets,
-        repRangeLow: original[1].repRangeLow,
-        repRangeHigh: original[1].repRangeHigh,
-      });
+
+      // The endpoint may choose any eligible slot above; assert by stable slot
+      // ID rather than assuming the selected slot is always at index 1.
+      const afterBySlotId = new Map(after.exercises.map((exercise: any) => [exercise.workoutExerciseId, exercise]));
+      for (const previous of original) {
+        const current = afterBySlotId.get(previous.workoutExerciseId) as any;
+        expect(current, `slot ${previous.workoutExerciseId} should still exist`).toBeDefined();
+        if (previous.workoutExerciseId === slot.workoutExerciseId) {
+          expect(current.exerciseName).toBe(swapped.exercise.exerciseName);
+          expect(current.muscle).toBe(previous.muscle);
+          expect(current.targetSets).toBe(previous.targetSets);
+          expect(current.repRangeLow).toBe(previous.repRangeLow);
+          expect(current.repRangeHigh).toBe(previous.repRangeHigh);
+        } else {
+          expect(current.exerciseName).toBe(previous.exerciseName);
+          expect(current.machine).toBe(previous.machine);
+          expect(current.targetSets).toBe(previous.targetSets);
+          expect(current.repRangeLow).toBe(previous.repRangeLow);
+          expect(current.repRangeHigh).toBe(previous.repRangeHigh);
+        }
+      }
       expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
