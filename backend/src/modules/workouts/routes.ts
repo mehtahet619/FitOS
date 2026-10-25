@@ -839,13 +839,20 @@ function editMuscles(exercise: { primaryMuscle?: string; secondaryMuscles?: stri
     .filter((muscle): muscle is string => Boolean(muscle?.trim()));
 }
 
-function resolveExerciseByName<T extends { name: string }>(name: string, exercises: T[]): T | undefined {
+function resolveExerciseByName<T extends { id?: string; name: string }>(name: string, exercises: T[]): T | undefined {
   const exactKey = normalizeExerciseValue(name);
-  const exact = exercises.find((exercise) => normalizeExerciseValue(exercise.name) === exactKey);
-  if (exact) return exact;
+  const exact = exercises.filter((exercise) => normalizeExerciseValue(exercise.name) === exactKey);
+  if (exact.length) {
+    // Prefer a stable catalogue row over a generated CSV fallback with the same name.
+    return exact.find((exercise) => !(exercise.id ?? "").startsWith("csv-exercise-")) ?? exact[0];
+  }
   const lookupKey = normalizeExerciseLookupName(name);
   const equivalent = exercises.filter((exercise) => normalizeExerciseLookupName(exercise.name) === lookupKey);
-  return equivalent.length === 1 ? equivalent[0] : undefined;
+  if (equivalent.length === 1) return equivalent[0];
+  if (equivalent.length > 1) {
+    return equivalent.find((exercise) => !(exercise.id ?? "").startsWith("csv-exercise-"));
+  }
+  return undefined;
 }
 
 workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
