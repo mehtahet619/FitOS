@@ -70,7 +70,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       if (sql.includes("SELECT eq.name FROM ExerciseEquipment")) {
         return state.links.filter((row) => row.exerciseId === params[0]).map((row) => ({ name: state.equipment.find((eq) => eq.id === row.equipmentId)?.name })) as unknown as T[];
       }
-      if (/SELECT\\s+e\\.name\\s+FROM\\s+WorkoutExercise\\s+we\\s+JOIN\\s+Exercise\\s+e\\s+ON\\s+e\\.id\\s*=\\s*we\\.exerciseId/i.test(sql)) {
+      if (/SELECT\s+e\.name\s+FROM\s+WorkoutExercise\s+we\s+JOIN\s+Exercise\s+e\s+ON\s+e\.id\s*=\s*we\.exerciseId/i.test(sql)) {
         return state.workoutExercises.filter((row) => row.workoutId === params[0])
           .sort((left, right) => left.orderIndex - right.orderIndex)
           .map((row) => ({
