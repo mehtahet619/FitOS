@@ -19,6 +19,8 @@ export interface ExerciseRecommendationInput {
   /** Equipment names and aliases from the existing FitOS equipment catalog. */
   availableEquipment: Iterable<string>;
   equipmentMode: RecommendationEquipmentMode;
+  /** Changes tie-breaking between workout generations so users do not get the same first exercises every time. */
+  selectionSeed?: string;
 }
 
 export interface RecommendedExercise extends CsvExercise {
@@ -129,12 +131,24 @@ type Candidate = { row: CsvExercise; matchingMuscles: string[]; targetKeys: Set<
 function selectWithCoverage(
   candidates: Candidate[],
   count: number,
+  selectionSeed = "default",
 ): RecommendedExercise[] {
   const selected: RecommendedExercise[] = [];
   const selectedFamilies = new Set<string>();
   const coveredTargets = new Set<string>();
   const coveredCategories = new Set<string>();
   const usedMachines = new Set<string>();
+  const tieBreakRank = new Map(candidates.map((candidate) => {
+    // FNV-1a-style hash gives stable ordering within one generation while
+    // varying the order across sessions/users when selectionSeed changes.
+    const value = `${selectionSeed}:${candidate.row.sourceIndex}:${candidate.row.exercise}`;
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return [candidate, hash >>> 0] as const;
+  }));
   const remaining = [...candidates];
 
   while (selected.length < count && remaining.length > 0) {
@@ -157,7 +171,7 @@ function selectWithCoverage(
       const leftNewMachine = usedMachines.has(normalizeExerciseValue(left.row.machine)) ? 0 : 1;
       const rightNewMachine = usedMachines.has(normalizeExerciseValue(right.row.machine)) ? 0 : 1;
       if (leftNewMachine !== rightNewMachine) return rightNewMachine - leftNewMachine;
-      return left.row.sourceIndex - right.row.sourceIndex;
+      return (tieBreakRank.get(left) ?? 0) - (tieBreakRank.get(right) ?? 0);
     });
 
     // A session must not fill its slots with superficial variations of the
@@ -333,7 +347,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     }
 
     const candidates = [...uniqueCandidates.values()];
-    const exercises = selectWithCoverage(candidates, requestedCount);
+    const exercises = selectWithCoverage(candidates, requestedCount, input.selectionSeed ?? "default");
     const distinctFamilyCount = new Set(candidates.map((candidate) => candidate.familyKey)).size;
     return {
       exercises,
