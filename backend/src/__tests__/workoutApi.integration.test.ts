@@ -364,7 +364,24 @@ describe("workout API CSV flow", () => {
         targetSets: exercise.targetSets, repRangeLow: exercise.repRangeLow, repRangeHigh: exercise.repRangeHigh,
         muscle: exercise.muscle, machine: exercise.machine,
       }));
-      const slot = before.exercises[1];
+      // Choose a slot that actually has a valid, unused CSV movement family.
+      // Randomized generation can legitimately place Deadlift in index 1, but
+      // this fixture has no distinct-family substitute for Deadlift.
+      const usedExerciseNames = before.exercises.map((exercise: any) => exercise.exerciseName);
+      const usedFamilyKeys = usedExerciseNames.map((name: string) => exerciseFamilyKey(name));
+      const slot = before.exercises.find((exercise: any) =>
+        service.getSwapAlternatives(
+          exercise.exerciseName,
+          exercise.machine,
+          exercise.primaryMuscle || exercise.muscle,
+          usedExerciseNames,
+          usedFamilyKeys,
+        ).some((alternative) =>
+          selectedEquipment.includes(alternative.machine)
+          && !usedFamilyKeys.includes(exerciseFamilyKey(alternative.exercise)),
+        ),
+      );
+      expect(slot, "fixture should contain a workout slot with a valid unused CSV substitute").toBeDefined();
 
       const swapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
