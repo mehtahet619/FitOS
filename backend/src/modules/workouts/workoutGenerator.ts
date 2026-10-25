@@ -278,7 +278,18 @@ export async function generateWorkout(
       excludedFamilyKeys: result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise)),
     })
     : [];
-  const selectedExercises = [...result.exercises, ...aiExercises];
+  // Treat CSV and AI fallback results as one candidate pool. A fallback must not
+  // reintroduce a movement family already selected from the CSV catalogue.
+  const seenMovementFamilies = new Set<string>();
+  const selectedExercises = [...result.exercises, ...aiExercises].filter((exercise) => {
+    const familyKey = exerciseFamilyKey(exercise.exercise);
+    if (seenMovementFamilies.has(familyKey)) {
+      console.warn(`[workouts/generate] dropping duplicate movement family "${familyKey}" (${exercise.exercise})`);
+      return false;
+    }
+    seenMovementFamilies.add(familyKey);
+    return true;
+  });
   const exerciseIds = await ensureExerciseRows(database, selectedExercises);
   const generated = await Promise.all(selectedExercises.map(async (exercise): Promise<GeneratedExercise> => {
     const exerciseRecord = exerciseIds.get(exercise.sourceIndex);

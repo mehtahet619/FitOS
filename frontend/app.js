@@ -131,7 +131,7 @@ const AuthState = {
 let authBootGeneration = 0;
 window.AuthState = AuthState;
 
-const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/history": "history", "/profile": "profile", "/settings": "settings" };
+const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/gym": "gym", "/vision": "vision", "/history": "history", "/profile": "profile", "/settings": "settings" };
 const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
 const routeMetadata = {
   "/": ["AI Workout Planner Based on Gym Equipment | FitOS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FitOS."],
@@ -147,6 +147,8 @@ const routeMetadata = {
   "/workouts": ["Your workouts | FitOS", "View and manage your FitOS workout plan."],
   "/nutrition": ["Food and nutrition planner | FitOS", "Explore meal planning and nearby food discovery in FitOS."],
   "/equipment": ["Gym equipment planner | FitOS", "Review equipment and build workouts for your gym setup."],
+  "/gym": ["Gym check-in | FitOS", "Check in to your gym and review gym attendance in FitOS."],
+  "/vision": ["Workout vision coach | FitOS", "Use the camera-based workout vision tools in FitOS."],
   "/history": ["Workout history | FitOS", "Review your logged FitOS training history."],
   "/profile": ["Your profile and training goals | FitOS", "Manage your FitOS fitness profile, goals, and equipment."],
   "/settings": ["FitOS settings | FitOS", "Manage your FitOS profile and preferences."],
@@ -584,7 +586,7 @@ document.addEventListener("click", async (event) => {
 
 function switchTab(tab, updateUrl = true) {
   if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
-  const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", gym: "/today", vision: "/today" };
+  const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", gym: "/gym", vision: "/vision" };
   if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
   if (tab === "history") { void showHistory(); return; }
   showScreen("screen-" + tab);
