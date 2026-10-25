@@ -171,6 +171,8 @@ function selectWithCoverage(
       const leftNewMachine = usedMachines.has(normalizeExerciseValue(left.row.machine)) ? 0 : 1;
       const rightNewMachine = usedMachines.has(normalizeExerciseValue(right.row.machine)) ? 0 : 1;
       if (leftNewMachine !== rightNewMachine) return rightNewMachine - leftNewMachine;
+      // Preserve historical/source ordering for callers that do not opt into rotation.
+      if (selectionSeed === "default") return left.row.sourceIndex - right.row.sourceIndex;
       return (tieBreakRank.get(left) ?? 0) - (tieBreakRank.get(right) ?? 0);
     });
 
