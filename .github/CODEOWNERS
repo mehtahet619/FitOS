@@ -1,8 +1,14 @@
-# Sensitive paths always require a human review.
+# Require the repository owner to review every proposed change.
+# This only takes effect when branch protection/rulesets require CODEOWNER approval.
+* @mehtahet619
+
+# Explicitly document security-sensitive paths as owner-controlled.
+.github/CODEOWNERS @mehtahet619
+.github/workflows/ @mehtahet619
+.github/actions/ @mehtahet619
 /backend/src/db/ @mehtahet619
 /backend/src/common/auth.ts @mehtahet619
 /**/auth/ @mehtahet619
 /**/payment/ @mehtahet619
 /**/payments/ @mehtahet619
 /render.yaml @mehtahet619
-/.github/workflows/ @mehtahet619
