@@ -266,6 +266,10 @@ export async function generateWorkout(
     sessionDurationMinutes: durationMin,
     availableEquipment,
     equipmentMode,
+    // Vary tie-breaking per generation. The recommender still prioritizes muscle
+    // coverage and equipment compatibility, but does not always pick the same
+    // earliest CSV rows when several candidates score equally.
+    selectionSeed: `${userId}:${Date.now()}:${Math.random()}`,
   });
   const missingCount = Math.max(0, result.requestedCount - result.exercises.length);
   const aiExercises = missingCount > 0
