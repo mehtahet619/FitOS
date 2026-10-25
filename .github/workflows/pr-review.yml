@@ -195,3 +195,40 @@ jobs:
           echo "Manual review override by $COMMENT_AUTHOR for PR #$PR_NUMBER" >> "$GITHUB_STEP_SUMMARY"
           gh pr comment "$PR_NUMBER" --body "Review override recorded for @$COMMENT_AUTHOR. This is a maintainer-approved exception; automated checks remain visible in the PR."
           gh pr merge "$PR_NUMBER" --squash --admin
+
+
+  security-policy:
+    if: github.event_name == 'pull_request'
+    name: security-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block unapproved changes to CI and security enforcement files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          protected_change=false
+          while IFS= read -r file; do
+            case "$file" in
+              .github/workflows/*|.github/CODEOWNERS|.github/review-policy.yml|scripts/is-sensitive-path.mjs|scripts/is-maintainer.mjs|dangerfile.ts)
+                echo "Protected CI/security file changed: $file"
+                protected_change=true
+                ;;
+            esac
+          done <<< "$changed"
+
+          if [[ "$protected_change" == true && "$PR_AUTHOR" != "mehtahet619" ]]; then
+            echo "::error::Changes to CI/workflow/security-policy files are blocked for non-owner PRs."
+            exit 1
+          fi
+          echo "Security policy check passed."

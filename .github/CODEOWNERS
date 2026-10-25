@@ -5,7 +5,14 @@
 /**/payment/ @mehtahet619
 /**/payments/ @mehtahet619
 /render.yaml @mehtahet619
-/.github/workflows/ @mehtahet619
 
-# Require Het Mehta as code owner for all changes; GitHub branch protection must enforce this review.
+# Security enforcement files require owner review.
+/.github/workflows/ @mehtahet619
+/.github/CODEOWNERS @mehtahet619
+/.github/review-policy.yml @mehtahet619
+/scripts/is-sensitive-path.mjs @mehtahet619
+/scripts/is-maintainer.mjs @mehtahet619
+/dangerfile.ts @mehtahet619
+
+# Require Het Mehta as code owner for all changes; GitHub ruleset must enforce this review.
 * @mehtahet619
