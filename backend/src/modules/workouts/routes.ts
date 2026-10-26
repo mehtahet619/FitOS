@@ -459,6 +459,22 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     selectionSeed: `${userId}:${state.cycleId}:${currentPlanStepIndex}:${Date.now()}`,
   });
   const { exercises } = generation;
+  const mismatchedExercises = exercises.filter((exercise) =>
+    !requiredUnit.muscles.some((target) => primaryMuscleMatchesTarget(target, exercise.primaryMuscle)),
+  );
+  if (mismatchedExercises.length > 0) {
+    console.error(JSON.stringify({
+      event: "workout_generation_rejected_muscle_mismatch",
+      targetMuscles: requiredUnit.muscles,
+      mismatchedExercises: mismatchedExercises.map(({ exerciseName, primaryMuscle, muscle }) => ({ exerciseName, primaryMuscle, muscle })),
+    }));
+    return res.status(422).json({
+      code: "WORKOUT_MUSCLE_TARGET_MISMATCH",
+      error: "FitOS rejected the generated workout because one or more exercises do not match the current plan's target muscles. No workout was saved. Please retry after the exercise catalog or AI provider is corrected.",
+      targetMuscles: requiredUnit.muscles,
+      rejectedExercises: mismatchedExercises.map(({ exerciseName, primaryMuscle }) => ({ exerciseName, primaryMuscle })),
+    });
+  }
   const availableEquipmentForLog = equipmentMode === "FULL_GYM"
     ? ["FULL_GYM"]
     : equipmentMode === "SCANNED"
