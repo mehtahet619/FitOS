@@ -328,11 +328,11 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
-      // Apply the same explicit group relationships as edit validation:
-      // a Back target can include Lats and Upper Back, but not Biceps merely
-      // because both may appear on a pull-day exercise.
-      const matchingMuscles = row.muscleCategories.filter((muscle) =>
-        [...targetKeys].some((target) => muscleCategoryMatchesTarget(target, muscle)),
+      // Match only the exercise's canonical primary muscle. muscleCategories
+      // can also contain secondary/assisting muscles; using those here incorrectly
+      // promotes Chest Press or Pike Push-Up into a Shoulder workout.
+      const matchingMuscles = input.targetMuscles.filter((target) =>
+        muscleCategoryMatchesTarget(target, row.primaryMuscle),
       );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
