@@ -347,7 +347,31 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       userId, state.cycleId, currentPlanStepIndex
     );
   }
-  if (existingWorkout && !parsed.data.replaceExisting) {
+  // Never reuse a cached workout whose primary muscles conflict with the plan step.
+  // This catches stale workouts created before stricter muscle validation was applied.
+  let existingWorkoutHasTargetMismatch = false;
+  if (existingWorkout) {
+    const cachedMuscles = await db.all<{ primaryMuscle: string | null; sourcePrimaryMuscle: string | null }>(
+      `SELECT e.primaryMuscle, we.sourcePrimaryMuscle
+       FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
+       WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
+      existingWorkout.id,
+    );
+    existingWorkoutHasTargetMismatch = cachedMuscles.some((exercise) => {
+      const primary = exercise.sourcePrimaryMuscle || exercise.primaryMuscle;
+      return !requiredUnit.muscles.some((target) => primaryMuscleMatchesTarget(target, primary));
+    });
+    if (existingWorkoutHasTargetMismatch) {
+      console.warn(JSON.stringify({
+        event: "cached_workout_target_mismatch",
+        workoutId: existingWorkout.id,
+        planTargetMuscles: requiredUnit.muscles,
+        cachedPrimaryMuscles: cachedMuscles.map((exercise) => exercise.sourcePrimaryMuscle || exercise.primaryMuscle),
+        action: "regenerate_pending_workout",
+      }));
+    }
+  }
+  if (existingWorkout && !parsed.data.replaceExisting && !existingWorkoutHasTargetMismatch) {
 // Return the existing workout with its exercises
   const existingExercises = await db.all<any>(
     `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
@@ -459,6 +483,22 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     selectionSeed: `${userId}:${state.cycleId}:${currentPlanStepIndex}:${Date.now()}`,
   });
   const { exercises } = generation;
+  const mismatchedExercises = exercises.filter((exercise) =>
+    !requiredUnit.muscles.some((target) => primaryMuscleMatchesTarget(target, exercise.primaryMuscle)),
+  );
+  if (mismatchedExercises.length > 0) {
+    console.error(JSON.stringify({
+      event: "workout_generation_rejected_muscle_mismatch",
+      targetMuscles: requiredUnit.muscles,
+      mismatchedExercises: mismatchedExercises.map(({ exerciseName, primaryMuscle, muscle }) => ({ exerciseName, primaryMuscle, muscle })),
+    }));
+    return res.status(422).json({
+      code: "WORKOUT_MUSCLE_TARGET_MISMATCH",
+      error: "FitOS rejected the generated workout because one or more exercises do not match the current plan's target muscles. No workout was saved. Please retry after the exercise catalog or AI provider is corrected.",
+      targetMuscles: requiredUnit.muscles,
+      rejectedExercises: mismatchedExercises.map(({ exerciseName, primaryMuscle }) => ({ exerciseName, primaryMuscle })),
+    });
+  }
   const availableEquipmentForLog = equipmentMode === "FULL_GYM"
     ? ["FULL_GYM"]
     : equipmentMode === "SCANNED"
