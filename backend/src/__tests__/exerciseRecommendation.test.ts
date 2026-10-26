@@ -396,7 +396,7 @@ describe("bundled CSV exercise recommendations", () => {
         'Chest Press,Machine,"Chest, Shoulders"',
         'Pike Push-Up,Bodyweight,"Triceps, Shoulders"',
         'Shoulder Press,Dumbbells,Shoulders',
-      ].join("\\n")),
+      ].join("\n")),
     );
 
     const result = strictService.getRecommendedExercises({
