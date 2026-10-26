@@ -183,7 +183,9 @@ function selectWithCoverage(
     const firstNewFamily = remaining.findIndex((candidate) => !selectedFamilies.has(candidate.familyKey));
     if (firstNewFamily < 0) break;
     const [next] = remaining.splice(firstNewFamily, 1);
-    selected.push({ ...next.row, primaryMuscle: next.matchingMuscles[0] });
+    // Preserve the CSV's canonical primary muscle. Never overwrite it with
+    // a matching secondary category from the target workout.
+    selected.push({ ...next.row, primaryMuscle: next.row.primaryMuscle });
     selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
     next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
@@ -328,11 +330,12 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
-      // Apply the same explicit group relationships as edit validation:
-      // a Back target can include Lats and Upper Back, but not Biceps merely
-      // because both may appear on a pull-day exercise.
-      const matchingMuscles = row.muscleCategories.filter((muscle) =>
-        [...targetKeys].some((target) => muscleCategoryMatchesTarget(target, muscle)),
+      // Match the workout target against the exercise's ACTUAL primary muscle.
+      // muscleCategories includes secondary/assisting muscles, so using it here
+      // incorrectly promoted Chest Press (primary chest) to a Shoulder exercise
+      // and Pike Push-Up (primary triceps) to a Shoulder exercise.
+      const matchingMuscles = input.targetMuscles.filter((target) =>
+        muscleCategoryMatchesTarget(target, row.primaryMuscle),
       );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
