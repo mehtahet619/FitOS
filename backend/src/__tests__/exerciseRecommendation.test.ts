@@ -388,6 +388,31 @@ describe("bundled CSV exercise recommendations", () => {
     ).toBe(true);
   });
 
+  it("never promotes a chest or triceps primary exercise to a shoulder target via secondary muscles", () => {
+    const strictService = new CsvExerciseRecommendationService(
+      new CsvExerciseRepository("primary-muscle-only.csv", () => [
+        "exercise,machine,muscle",
+        'Dumbbell Lateral Raise,Dumbbells,Shoulders',
+        'Chest Press,Machine,"Chest, Shoulders"',
+        'Pike Push-Up,Bodyweight,"Triceps, Shoulders"',
+        'Shoulder Press,Dumbbells,Shoulders',
+      ].join("\\n")),
+    );
+
+    const result = strictService.getRecommendedExercises({
+      targetMuscles: ["Shoulders"],
+      sessionDurationMinutes: 60,
+      availableEquipment: [],
+      equipmentMode: "FULL_GYM",
+    });
+
+    expect(result.exercises.map((exercise) => exercise.exercise)).toEqual([
+      "Dumbbell Lateral Raise",
+      "Shoulder Press",
+    ]);
+    expect(result.exercises.every((exercise) => exercise.primaryMuscle === "Shoulders")).toBe(true);
+  });
+
   it("returns fewer than requested when the CSV has too few matching candidates", () => {
     const shortRepository =
       new CsvExerciseRepository("short.csv", () =>
