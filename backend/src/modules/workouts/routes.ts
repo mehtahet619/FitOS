@@ -347,31 +347,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
       userId, state.cycleId, currentPlanStepIndex
     );
   }
-  // Never reuse a cached workout whose primary muscles conflict with the plan step.
-  // This catches stale workouts created before stricter muscle validation was applied.
-  let existingWorkoutHasTargetMismatch = false;
-  if (existingWorkout) {
-    const cachedMuscles = await db.all<{ primaryMuscle: string | null; sourcePrimaryMuscle: string | null }>(
-      `SELECT e.primaryMuscle, we.sourcePrimaryMuscle
-       FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId
-       WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
-      existingWorkout.id,
-    );
-    existingWorkoutHasTargetMismatch = cachedMuscles.some((exercise) => {
-      const primary = exercise.sourcePrimaryMuscle || exercise.primaryMuscle;
-      return !requiredUnit.muscles.some((target) => primaryMuscleMatchesTarget(target, primary));
-    });
-    if (existingWorkoutHasTargetMismatch) {
-      console.warn(JSON.stringify({
-        event: "cached_workout_target_mismatch",
-        workoutId: existingWorkout.id,
-        planTargetMuscles: requiredUnit.muscles,
-        cachedPrimaryMuscles: cachedMuscles.map((exercise) => exercise.sourcePrimaryMuscle || exercise.primaryMuscle),
-        action: "regenerate_pending_workout",
-      }));
-    }
-  }
-  if (existingWorkout && !parsed.data.replaceExisting && !existingWorkoutHasTargetMismatch) {
+  if (existingWorkout && !parsed.data.replaceExisting) {
 // Return the existing workout with its exercises
   const existingExercises = await db.all<any>(
     `SELECT we.*, e.name, e.primaryMuscle, e.instructions, e.defaultSets, e.repRangeLow, e.repRangeHigh
