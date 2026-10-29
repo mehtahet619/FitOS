@@ -153,8 +153,8 @@ function selectWithCoverage(
 
   while (selected.length < count && remaining.length > 0) {
     remaining.sort((left, right) => {
-      const exactCategoryMatches = (candidate: typeof left) => candidate.matchingMuscles
-        .filter((muscle) => candidate.targetKeys.has(normalizeExerciseValue(muscle)) && !coveredTargets.has(normalizeExerciseValue(muscle))).length;
+      const exactCategoryMatches = (candidate: typeof left) => candidate.row.muscleCategories
+        .filter((muscle) => candidate.targetKeys.has(normalizeExerciseValue(muscle))).length;
       const leftExactMatches = exactCategoryMatches(left);
       const rightExactMatches = exactCategoryMatches(right);
       if (leftExactMatches !== rightExactMatches) return rightExactMatches - leftExactMatches;
@@ -183,7 +183,16 @@ function selectWithCoverage(
     const firstNewFamily = remaining.findIndex((candidate) => !selectedFamilies.has(candidate.familyKey));
     if (firstNewFamily < 0) break;
     const [next] = remaining.splice(firstNewFamily, 1);
-    selected.push({ ...next.row, primaryMuscle: next.matchingMuscles[0] });
+    // Keep primaryMuscle stable when a caller sends casing/whitespace variants
+    // of the same target (for example "Back" and "  bAcK  "). The workout
+    // target is the plan focus; CSV categories determine eligibility and ranking.
+    const primaryMuscle = next.matchingMuscles[0]
+      .normalize("NFKC")
+      .trim()
+      .toLocaleLowerCase("en-US")
+      .replace(/\\s+/g, " ")
+      .replace(/(^|\\s)\\p{L}/gu, (letter) => letter.toLocaleUpperCase("en-US"));
+    selected.push({ ...next.row, primaryMuscle });
     selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
     next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
