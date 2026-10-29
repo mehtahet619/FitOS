@@ -160,14 +160,9 @@ function selectWithCoverage(
       if (leftExactMatches !== rightExactMatches) return rightExactMatches - leftExactMatches;
       const newTargetCoverage = (candidate: typeof left) => candidate.matchingMuscles
         .filter((muscle) => !coveredTargets.has(normalizeExerciseValue(muscle))).length;
-      const newCategoryCoverage = (candidate: typeof left) => candidate.row.muscleCategories
-        .filter((muscle) => !coveredCategories.has(normalizeExerciseValue(muscle))).length;
       const leftTargets = newTargetCoverage(left);
       const rightTargets = newTargetCoverage(right);
       if (leftTargets !== rightTargets) return rightTargets - leftTargets;
-      const leftCategories = newCategoryCoverage(left);
-      const rightCategories = newCategoryCoverage(right);
-      if (leftCategories !== rightCategories) return rightCategories - leftCategories;
       const leftNewMachine = usedMachines.has(normalizeExerciseValue(left.row.machine)) ? 0 : 1;
       const rightNewMachine = usedMachines.has(normalizeExerciseValue(right.row.machine)) ? 0 : 1;
       if (leftNewMachine !== rightNewMachine) return rightNewMachine - leftNewMachine;
@@ -337,12 +332,11 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
-      // The CSV "muscle" cell is a list of workout-relevant categories, not a
-      // separate primary-muscle field. Match against every listed category so
-      // targets such as Upper Back and multi-target PPL sessions are not lost;
-      // exact category matches are ranked ahead of related group matches below.
+      // Use the first CSV category as the exercise's primary workout muscle.
+      // Secondary/assisting categories must not make a carry or leg exercise
+      // eligible for a Back-only session just because it also lists Traps/Core.
       const matchingMuscles = input.targetMuscles.filter((target) =>
-        row.muscleCategories.some((category) => muscleCategoryMatchesTarget(target, category)),
+        muscleCategoryMatchesTarget(target, row.muscleCategories[0] ?? row.muscle),
       );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
