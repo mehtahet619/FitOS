@@ -303,3 +303,24 @@ Before production deployment:
 - [Roboflow Serverless Inference API](https://docs.roboflow.com/api-reference/serverless-api)
 - [Apify Documentation](https://docs.apify.com/)
 - [Apify JavaScript SDK](https://www.npmjs.com/package/apify-client)
+
+
+## All Gym Equipment Workflow — live browser webcam
+
+The current saved workflow is:
+
+- Workspace: `het-mehta`
+- Workflow slug: `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic`
+- Input: `image`
+- Output: `predictions` (the workflow's own JSON output)
+- Endpoint: `https://serverless.roboflow.com/het-mehta/workflows/all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic`
+
+Enable it in the backend environment with `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE=true` and the existing `ROBOFLOW_API_KEY`. The new flag takes precedence over the existing SAM3 workflow. Do not put the API key in frontend JavaScript. The existing browser Gym scan gets camera access with `getUserMedia`, samples one frame at a time, and posts each frame to the authenticated `POST /equipment/detect` route. Roboflow calls happen on the backend, with a 30-second timeout and up to two retries for transient errors. Unknown classes are ignored unless they map to canonical FitOS equipment or a curated alias.
+
+The browser camera requires HTTPS or localhost and explicit camera permission. This is live sampled-frame inference through the Workflow HTTP endpoint, not a persistent WebRTC session. It requires no manual image uploads. Smoke test (run from `backend/`, with `ROBOFLOW_API_KEY` set):
+
+```bash
+npx ts-node scripts/smoke-gym-equipment-workflow.ts
+```
+
+The smoke test checks the workflow's declared `predictions` output shape using a public sample gym image. Confirm detection quality with the actual gym webcam scene; a successful request may legitimately return zero detections for an unsuitable sample.
