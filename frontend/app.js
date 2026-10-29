@@ -2866,7 +2866,7 @@ function renderGymScan(equipment, plan) {
       </div>
       <div class="btn-row" style="margin-bottom:16px;">
         <button class="btn btn-primary" id="gym-scan-start">📷 Start Scan</button>
-        <button class="btn btn-outline" id="gym-scan-cancel" style="display:none;">Cancel</button>
+        <button class="btn btn-outline" id="gym-scan-cancel" style="display:none;">Stop &amp; Review</button>
       </div>
       <div id="gym-scan-results" style="display:none; margin-top:16px;"></div>
     </div>
@@ -2900,6 +2900,7 @@ function renderGymScan(equipment, plan) {
   const generateBtn = $("gym-scan-generate");
   let stream = null;
   let detecting = false;
+  let latestDetections = [];
 
   startBtn.addEventListener("click", async () => {
     if (detecting) return;
@@ -2913,10 +2914,12 @@ function renderGymScan(equipment, plan) {
       startBtn.style.display = "none";
       cancelBtn.style.display = "inline-flex";
       detecting = true;
+      latestDetections = [];
       resultsDiv.style.display = "none";
       resultsDiv.innerHTML = "";
 
-      // Start detection loop
+      // Start sampled-frame inference. The loop awaits each request, so only one
+      // frame is in flight at a time.
       detectLoop();
     } catch (e) {
       feedback.textContent = "Camera permission denied";
@@ -2927,10 +2930,18 @@ function renderGymScan(equipment, plan) {
   cancelBtn.addEventListener("click", () => {
     detecting = false;
     if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    video.srcObject = null;
     video.style.display = "none";
     feedback.style.display = "none";
     startBtn.style.display = "inline-flex";
     cancelBtn.style.display = "none";
+    if (latestDetections.length > 0) {
+      renderDetectionResults(latestDetections, []);
+    } else {
+      resultsDiv.style.display = "block";
+      resultsDiv.textContent = "No equipment was confidently recognized. Start another live scan and point the camera at the equipment."; 
+    }
   });
 
   async function detectLoop() {
@@ -2956,15 +2967,30 @@ function renderGymScan(equipment, plan) {
       
       try {
         const result = await Api.post("/equipment/detect", { imageBase64: base64 });
-        if (result.configured && result.detections.length > 0) {
-          renderDetectionResults(result.detections, result.suggestedExercises);
+        if (!result.configured) {
+          feedback.textContent = result.message || "Equipment detection is not configured on the backend.";
+        } else {
+          latestDetections = Array.isArray(result.detections) ? result.detections : [];
+          const unique = new Map();
+          latestDetections.forEach(d => {
+            const existing = unique.get(d.equipmentName);
+            if (!existing || d.confidence > existing.confidence) unique.set(d.equipmentName, d);
+          });
+          feedback.textContent = unique.size
+            ? `Live detection: ${unique.size} equipment types recognized. Move the camera to scan more, then tap Stop & Review.`
+            : "Live scan running. No known equipment recognized yet; adjust the camera angle or lighting.";
+          resultsDiv.style.display = "block";
+          resultsDiv.textContent = unique.size
+            ? "Currently detected: " + Array.from(unique.keys()).join(", ")
+            : "Waiting for equipment detections…";
         }
       } catch (e) {
+        feedback.textContent = e.message || "Live equipment detection failed. Check the connection and try again.";
         console.error("Detection error:", e);
       }
     }
-    
-    if (detecting) requestAnimationFrame(detectLoop);
+    // Pace requests and avoid accumulating stale webcam frames.
+    if (detecting) setTimeout(detectLoop, 350);
   }
 
   function renderDetectionResults(detections, suggestedExercises) {
@@ -3053,12 +3079,23 @@ function renderGymScan(equipment, plan) {
       }
     });
     
-    rescanBtn.addEventListener("click", () => {
+    rescanBtn.addEventListener("click", async () => {
       resultsDiv.style.display = "none";
-      detecting = true;
-      feedback.style.display = "flex";
-      feedback.textContent = "Scanning... point camera at equipment";
-      detectLoop();
+      latestDetections = [];
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+        video.style.display = "block";
+        feedback.style.display = "flex";
+        feedback.textContent = "Live scan running... point camera at equipment";
+        startBtn.style.display = "none";
+        cancelBtn.style.display = "inline-flex";
+        detecting = true;
+        detectLoop();
+      } catch (e) {
+        feedback.textContent = "Could not start the camera. Check browser camera permission and try again.";
+        feedback.style.display = "flex";
+      }
     });
   }
 
