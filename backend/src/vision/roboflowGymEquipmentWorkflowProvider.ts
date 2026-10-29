@@ -7,6 +7,7 @@
  */
 import type { EquipmentDetection, EquipmentVisionProvider } from "./equipmentVisionProvider";
 import { deduplicateOverlappingDetections } from "./detectionUtils";
+import { db } from "../db/client.js";
 
 const WORKSPACE = "het-mehta";
 const WORKFLOW = "all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic";
@@ -142,7 +143,6 @@ function extractPredictions(output: JsonRecord): Prediction[] {
 async function getLabelMap(): Promise<Record<string, string>> {
   // Query existing canonical equipment and curated aliases. Never invent a
   // database equipment name or expose a model class as an unsupported item.
-  const { db } = await import("../db/client");
   const [equipment, aliases] = await Promise.all([
     db.all<{ name: string }>(`SELECT name FROM Equipment WHERE name != 'No Equipment'`),
     db.all<{ alias: string; name: string }>(
