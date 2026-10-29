@@ -2937,11 +2937,21 @@ function renderGymScan(equipment, plan) {
     if (!detecting) return;
     
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      // Sample a resized frame rather than uploading full-resolution camera
+      // images. This loop awaits each inference before requesting the next frame,
+      // so slow Roboflow responses never create a queue of stale frames.
+      const scale = Math.min(1, 960 / video.videoWidth);
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext("2d").drawImage(video, 0, 0);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        feedback.textContent = "Could not prepare a camera frame. Please try again.";
+        if (detecting) setTimeout(detectLoop, 500);
+        return;
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
       const base64 = dataUrl.split(",")[1];
       
       try {
