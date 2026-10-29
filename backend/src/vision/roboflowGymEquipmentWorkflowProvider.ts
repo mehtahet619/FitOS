@@ -149,7 +149,7 @@ async function getLabelMap(): Promise<Record<string, string>> {
       `SELECT ea.alias, e.name FROM EquipmentAlias ea JOIN Equipment e ON e.id = ea.equipmentId`
     ).catch(() => []),
   ]);
-  const canonical = new Map(equipment.map((item) => [normalize(item.name), item.name]));
+  const canonical = new Map(equipment.map((item) => [normalize(item.name), item.name] as const));
   const map: Record<string, string> = {};
   for (const item of equipment) map[normalize(item.name)] = item.name;
   for (const alias of aliases) map[normalize(alias.alias)] = alias.name;
