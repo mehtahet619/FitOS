@@ -337,11 +337,12 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
     ].map((familyKey) => normalizeExerciseValue(familyKey)).filter(Boolean));
     const uniqueCandidates = new Map<string, Candidate>();
     for (const row of this.repository.getAll()) {
-      // Match only the exercise's canonical primary muscle. muscleCategories
-      // can also contain secondary/assisting muscles; using those here incorrectly
-      // promotes Chest Press or Pike Push-Up into a Shoulder workout.
+      // The CSV "muscle" cell is a list of workout-relevant categories, not a
+      // separate primary-muscle field. Match against every listed category so
+      // targets such as Upper Back and multi-target PPL sessions are not lost;
+      // exact category matches are ranked ahead of related group matches below.
       const matchingMuscles = input.targetMuscles.filter((target) =>
-        muscleCategoryMatchesTarget(target, row.muscleCategories[0] ?? row.muscle),
+        row.muscleCategories.some((category) => muscleCategoryMatchesTarget(target, category)),
       );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
