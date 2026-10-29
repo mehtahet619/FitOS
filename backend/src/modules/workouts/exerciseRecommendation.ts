@@ -190,8 +190,8 @@ function selectWithCoverage(
       .normalize("NFKC")
       .trim()
       .toLocaleLowerCase("en-US")
-      .replace(/\\s+/g, " ")
-      .replace(/(^|\\s)\\p{L}/gu, (letter) => letter.toLocaleUpperCase("en-US"));
+      .replace(/\s+/g, " ")
+      .replace(/(^|\s)\p{L}/gu, (letter) => letter.toLocaleUpperCase("en-US"));
     selected.push({ ...next.row, primaryMuscle });
     selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
