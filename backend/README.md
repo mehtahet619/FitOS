@@ -259,3 +259,35 @@ ROBOFLOW_API_KEY="your_key"
 ```
 
 Public models available at https://universe.roboflow.com/search?q=class%3Adumbbell
+
+
+## People-counting Roboflow Workflow (image-only)
+
+A separate client is available at `src/vision/peopleCountingWorkflowProvider.ts` for the published workflow:
+
+- Workspace: `het-mehta`
+- Workflow slug: `people-counting-vpeople-counting-nxg8y-k3wzi-1-rfdetr-small-t1-logic`
+- Input: `image` (`url` or base64)
+- Output observed from the saved definition and live run: `predictions`, containing image dimensions and a `predictions` array with boxes, class labels, and confidence values.
+
+This is an image inference client, not a live webcam/RTSP/video-stream integration. It is independent of the existing equipment detection provider and does not add or change an HTTP route.
+
+Set `ROBOFLOW_API_KEY` in the backend environment. The key is sent in the `Authorization: Bearer` header and is never included in the request body. Do not commit the key. Example from backend code:
+
+```ts
+import { runPeopleCountingWorkflow } from "./vision/peopleCountingWorkflowProvider";
+
+const output = await runPeopleCountingWorkflow({
+  type: "base64",
+  value: imageBase64, // raw base64, without a data-URL prefix
+});
+const result = output.predictions; // preserve the workflow's own output shape
+```
+
+Run the live smoke test from `backend/` after setting `ROBOFLOW_API_KEY`:
+
+```bash
+npx ts-node scripts/smoke-people-counting-workflow.ts
+```
+
+The smoke test makes a real Roboflow inference request using a public sample image. It checks that the workflow returns its declared output. Network access and valid Roboflow credentials are required.
