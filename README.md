@@ -138,7 +138,7 @@ detection, never a fake one. To turn it on:
 4. Restart the backend. The "📷 Scan with camera" button in onboarding and
    "📷 Scan my equipment" on the Workout tab will now return real detections.
 
-## Installing as an app (PWA)
+## Live gym equipment detection (Roboflow Workflow)\n\nThe Gym scan camera can continuously sample frames from the browser webcam and send them to FitOS for inference. To use the published All Gym Equipment workflow, set `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE="true"` and `ROBOFLOW_API_KEY` in the backend environment. The Roboflow key stays server-side; no image upload is required. The browser must run on HTTPS (or localhost) and the user must grant camera permission. See `backend/README.md` for workflow details and the smoke-test command.\n\n## Installing as an app (PWA)
 
 The frontend is a installable Progressive Web App — no app-store build
 needed:
