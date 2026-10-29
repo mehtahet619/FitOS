@@ -332,7 +332,7 @@ export class CsvExerciseRecommendationService implements ExerciseRecommendationS
       // can also contain secondary/assisting muscles; using those here incorrectly
       // promotes Chest Press or Pike Push-Up into a Shoulder workout.
       const matchingMuscles = input.targetMuscles.filter((target) =>
-        muscleCategoryMatchesTarget(target, row.primaryMuscle),
+        muscleCategoryMatchesTarget(target, row.targetedMuscle),
       );
       if (matchingMuscles.length === 0) continue;
       if (input.equipmentMode !== "FULL_GYM" && !availableEquipment.has(normalizeExerciseValue(row.machine))) continue;
