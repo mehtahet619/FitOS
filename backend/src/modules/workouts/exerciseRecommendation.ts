@@ -136,7 +136,6 @@ function selectWithCoverage(
   const selected: RecommendedExercise[] = [];
   const selectedFamilies = new Set<string>();
   const coveredTargets = new Set<string>();
-  const coveredCategories = new Set<string>();
   const usedMachines = new Set<string>();
   const tieBreakRank = new Map(candidates.map((candidate) => {
     // FNV-1a-style hash gives stable ordering within one generation while
@@ -190,7 +189,6 @@ function selectWithCoverage(
     selected.push({ ...next.row, primaryMuscle });
     selectedFamilies.add(next.familyKey);
     next.matchingMuscles.forEach((muscle) => coveredTargets.add(normalizeExerciseValue(muscle)));
-    next.row.muscleCategories.forEach((muscle) => coveredCategories.add(normalizeExerciseValue(muscle)));
     usedMachines.add(normalizeExerciseValue(next.row.machine));
     // Remove every remaining variant of the selected movement family.
     for (let index = remaining.length - 1; index >= 0; index -= 1) {
