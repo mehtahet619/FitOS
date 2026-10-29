@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { db } from "../db/client";
 import { RoboflowWorkflowProvider } from "./roboflowWorkflowProvider";
+import { RoboflowGymEquipmentWorkflowProvider } from "./roboflowGymEquipmentWorkflowProvider";
 import { deduplicateOverlappingDetections } from "./detectionUtils";
 
 export interface EquipmentDetection {
@@ -190,12 +191,15 @@ const roboflowWorkflowEnabled = () =>
   Boolean(process.env.ROBOFLOW_API_KEY?.trim());
 
 export function initializeEquipmentVisionProvider(): Promise<void> {
-  return roboflowWorkflowEnabled() || getEquipmentModeConfig().mode === "FULL_GYM"
+  return process.env.ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE?.toLowerCase() === "true" || roboflowWorkflowEnabled() || getEquipmentModeConfig().mode === "FULL_GYM"
     ? Promise.resolve()
     : localProvider.initialize();
 }
 
 export function getEquipmentVisionProvider(): EquipmentVisionProvider {
+  if (process.env.ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE?.toLowerCase() === "true") {
+    return new RoboflowGymEquipmentWorkflowProvider();
+  }
   if (getEquipmentModeConfig().mode === "FULL_GYM") return new FullGymEquipmentProvider();
   if (roboflowWorkflowEnabled()) {
     const apiKey = process.env.ROBOFLOW_API_KEY;
