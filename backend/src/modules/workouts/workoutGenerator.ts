@@ -95,7 +95,7 @@ async function getFallbackEquipment(
     return [{ name: "Bodyweight", aliases: [] }];
   }
   const rows = await database.all<{ name: string; alias: string | null }>(
-    `SELECT e.name,ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id
+    `SELECT e.name, ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id
      WHERE e.name != 'No Equipment'${equipmentMode === "FULL_GYM" ? "" : ` AND e.id IN (${[...availableEquipmentIds].map(() => "?").join(",")})`}`,
     ...(equipmentMode === "FULL_GYM" ? [] : [...availableEquipmentIds]),
   );
