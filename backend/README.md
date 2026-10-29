@@ -64,7 +64,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email delivery through Resend's HTTPS API. |
 | `AI_PROVIDER` | `template` (default, no key needed) — see `src/ai/provider.ts` to add a real one. |
 | `MAPS_PROVIDER` | `mock` (default, returns honest empty results) or `apify_swiggy` — see **Food Discovery** below. |
-| `ROBOFLOW_WORKFLOW_MODE` | `true` for serverless workflows (recommended), `false` or unset for legacy hosted models — see **Equipment Vision** below. |
+| `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE` | `true` to use the All Gym Equipment YOLOv8n Workflow for sampled live webcam frames. Takes precedence over the older SAM3 workflow flag. |\n| `ROBOFLOW_WORKFLOW_MODE` | `true` to use the existing SAM3 serverless workflow when the gym-equipment flag is off. |
 | `ROBOFLOW_API_KEY` | Your Roboflow workspace API key. Get from https://app.roboflow.com/settings/api |
 | `APIFY_API_KEY` | Your Apify account API token. Get from https://apify.com — required for Swiggy integration. |
 
@@ -170,7 +170,7 @@ cp runs/detect/train/weights/best.pt backend/models/best.pt
 Detection only determines available equipment; target muscles and exercise
 selection remain owned by the existing workout-plan and CSV flow.
 
-### Roboflow SAM3 Workflow (opt-in)
+### All Gym Equipment Workflow (live webcam frames)\n\nFitOS can use the published `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic` workflow for live browser-camera detection. The workflow definition declares one `image` input and a `predictions` JSON output. The browser requests camera access and samples frames sequentially through the existing authenticated `POST /equipment/detect` route; each frame is sent to Roboflow from the backend. No Roboflow key is exposed to the browser and users do not need to upload photos. This is sampled live-frame inference over the Workflow HTTP endpoint, not a persistent WebRTC session.\n\nEnable it in `backend/.env` or the backend hosting environment:\n\n```env\nROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE="true"\nROBOFLOW_API_KEY="your_api_key_here"\nEQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"\n```\n\nThe gym-equipment flag takes precedence over `ROBOFLOW_WORKFLOW_MODE`; the existing SAM3 provider remains available by leaving the new flag `false`. Frame requests are sequential, use a 30-second timeout, and retry transient failures at most twice. Results are mapped to canonical equipment already in the FitOS database; unknown model classes are ignored.\n\nSmoke test from `backend/` (requires `ROBOFLOW_API_KEY`):\n\n```bash\nnpx ts-node scripts/smoke-gym-equipment-workflow.ts\n```\n\nThe smoke test checks the declared output structure using a public sample gym image. A zero-detection result can still mean the endpoint ran successfully; validate with your own camera scene.\n\n### Roboflow SAM3 Workflow (opt-in)
 
 Integrates the Roboflow serverless workflow for real-time gym equipment detection from images.
 
