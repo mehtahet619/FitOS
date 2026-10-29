@@ -225,3 +225,8 @@ TiDB/MySQL (use the corresponding `:prod` script after building).
   but because wiring a real Google Places key or Anthropic/OpenAI key is a
   config change (`.env`), not a code change — see `src/maps/provider.ts`
   and `src/ai/provider.ts`.
+
+
+## Roboflow people counting (image input)
+
+The backend includes a separate, image-only client for the published Roboflow workflow `people-counting-vpeople-counting-nxg8y-k3wzi-1-rfdetr-small-t1-logic`. Configure `ROBOFLOW_API_KEY` in `backend/.env`; requests authenticate with a Bearer header. See `backend/README.md` for the usage example and live smoke-test command. This integration does not process live video streams and does not replace FitOS equipment detection.
