@@ -55,7 +55,11 @@ const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   "Full Body C": ["chest", "back", "quads", "hamstrings", "glutes", "shoulders", "core"],
 };
 export function musclesForFocus(focus: string): string[] {
-  return (FOCUS_TO_MUSCLES[focus] ?? FOCUS_TO_MUSCLES["Full Body"]).map(canonicalMuscleKey);
+  const configuredTargets = FOCUS_TO_MUSCLES[focus];
+  if (!configuredTargets) {
+    throw new Error(`Unsupported workout focus "${focus}". Refusing to silently generate a Full Body workout for an unknown split.`);
+  }
+  return configuredTargets.map(canonicalMuscleKey);
 }
 
 /**
