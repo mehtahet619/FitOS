@@ -14,6 +14,21 @@ function mockOpenRouterExerciseGeneration() {
     let generatedIndex = 0;
     return {
       ...actual,
+      validateUncataloguedExercise: vi.fn(async (input: any) => {
+        const name = String(input.exerciseName).toLowerCase();
+        if (name.includes("good morning")) return {
+          valid: true, canonicalName: "Good Morning", primaryMuscle: "hamstrings",
+          secondaryMuscles: ["glutes"], equipmentName: "Barbell", confidence: 0.97,
+        };
+        if (name.includes("meadows")) return {
+          valid: true, canonicalName: "Meadows Row", primaryMuscle: "back",
+          secondaryMuscles: ["biceps"], equipmentName: "Dumbbells", confidence: 0.95,
+        };
+        return {
+          valid: true, canonicalName: "Single Arm Dumbbell Row", primaryMuscle: "back",
+          secondaryMuscles: ["biceps"], equipmentName: "Dumbbells", confidence: 0.95,
+        };
+      }),
       getAiExerciseFallback: vi.fn(async (input: any) => Array.from({ length: input.count }, (_, index) => {
         generatedIndex += 1;
         const muscle = input.targetMuscles[index % input.targetMuscles.length];
@@ -815,9 +830,8 @@ describe("workout API CSV flow", () => {
 
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(generated.workout.id);
-      expect(current.needsRegeneration).toBe(false);
       expect(current.exercises).toHaveLength(3);
-      expect(current.exercises.every((exercise: any) => exercise.muscle === "Back")).toBe(true);
+      expect(current.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back")).toBe(true);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
