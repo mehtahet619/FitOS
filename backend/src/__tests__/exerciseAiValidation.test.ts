@@ -48,18 +48,18 @@ describe("uncatalogued exercise AI validation", () => {
 
   it("rejects model outputs that cannot map to FitOS muscles and equipment", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
-    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-test-key");
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
-      json: async () => ({ content: [{ type: "text", text: JSON.stringify({
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({
         valid: true,
         canonicalName: "Good Morning",
         primaryMuscle: "unknown muscle",
         secondaryMuscles: [],
         equipmentName: "unknown equipment",
         confidence: 0.99,
-      }) }] }),
+      }) } }] }),
     })));
 
     const result = await validateUncataloguedExercise({
@@ -71,7 +71,7 @@ describe("uncatalogued exercise AI validation", () => {
     expect(result).toMatchObject({ valid: false, confidence: 0.99 });
   });
 
-  it("falls through to Anthropic when OpenRouter cannot validate the exercise", async () => {
+  it("does not fall through to other providers when OpenRouter rejects an exercise", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-test-key");
@@ -99,10 +99,9 @@ describe("uncatalogued exercise AI validation", () => {
       equipment: ["Dumbbells"],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("https://openrouter.ai/api/v1/chat/completions");
-    expect(fetchMock.mock.calls[1][0]).toBe("https://api.anthropic.com/v1/messages");
-    expect(result).toMatchObject({ valid: true, canonicalName: "Meadows Row", primaryMuscle: "back" });
+    expect(result).toMatchObject({ valid: false, confidence: 0.9 });
   });
 
   it("returns no result when no validation provider is configured", async () => {
