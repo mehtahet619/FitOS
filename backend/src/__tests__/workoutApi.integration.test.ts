@@ -8,6 +8,36 @@ import { CANONICAL_EQUIPMENT } from "../modules/equipment/catalog";
 
 type Row = Record<string, any>;
 
+function mockOpenRouterExerciseGeneration() {
+  vi.doMock("../modules/workouts/exerciseAiFallback", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../modules/workouts/exerciseAiFallback")>();
+    let generatedIndex = 0;
+    return {
+      ...actual,
+      getAiExerciseFallback: vi.fn(async (input: any) => Array.from({ length: input.count }, (_, index) => {
+        generatedIndex += 1;
+        const muscle = input.targetMuscles[index % input.targetMuscles.length];
+        const machine = input.equipment.find((item: any) => item.name !== "No Equipment")?.name ?? "Bodyweight";
+        return {
+          sourceIndex: -generatedIndex,
+          exercise: `${muscle} AI Movement ${generatedIndex}`,
+          machine,
+          muscle,
+          primaryMuscle: muscle,
+          muscleCategories: [muscle],
+          timeTakenOneSet: "25-45 sec",
+          targetedMuscle: muscle,
+          targetedMuscles: [muscle],
+          instructions: "Use controlled form and a comfortable full range of motion.",
+          sets: 3,
+          repRangeLow: 8,
+          repRangeHigh: 12,
+        };
+      })),
+    };
+  });
+}
+
 function makeDatabase(plan: Row, sessionMinutes = 60) {
   const state: {
     exercises: Row[];
@@ -209,7 +239,7 @@ describe("workout API CSV flow", () => {
     vi.resetModules();
   });
 
-  it("persists canonical CSV names and swaps only the requested slot without changing its programming", async () => {
+  it("persists OpenRouter-generated names and swaps only the requested slot without changing its programming", async () => {
     const sampleCsv = [
       "exercise,machine,muscle,time_taken_1_set,targeted_muscle",
       'Barbell Row,Barbell,Back,20-40 sec,"Latissimus Dorsi, Rhomboid Major"',
@@ -309,6 +339,7 @@ describe("workout API CSV flow", () => {
       },
     }));
 
+    mockOpenRouterExerciseGeneration();
     const { workoutRouter } = await import("../modules/workouts/routes.js");
     const { equipmentRouter } = await import("../modules/equipment/routes.js");
     const app = express();
@@ -345,11 +376,10 @@ describe("workout API CSV flow", () => {
       });
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
-      const csvNames = new Set(sampleCsv.split("\n").slice(1).map((line) => line.split(",")[0]));
       expect(generated.exercises).toHaveLength(4);
-      expect(generated.availableExerciseCount).toBeGreaterThan(4);
+      expect(generated.availableExerciseCount).toBe(4);
       expect(new Set(generated.exercises.map((exercise: any) => exerciseFamilyKey(exercise.exerciseName))).size).toBe(generated.exercises.length);
-      expect(generated.exercises.every((exercise: any) => csvNames.has(exercise.exerciseName))).toBe(true);
+      expect(generated.exercises.every((exercise: any) => exercise.instructions.length > 0)).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
       expect(generated.workout.cycleId).toBe("current-cycle");
       expect(generated.exercises.every((exercise: any) => exercise.exerciseName && exercise.machine && exercise.muscle === "Back")).toBe(true);
@@ -398,8 +428,8 @@ describe("workout API CSV flow", () => {
       expect(swapped.workoutExerciseId).toBe(slot.workoutExerciseId);
       expect(swapped.exercise.exerciseName).not.toBe(slot.exerciseName);
       expect(exerciseFamilyKey(swapped.exercise.exerciseName)).not.toBe(exerciseFamilyKey(slot.exerciseName));
-      expect(swapped.exercise.targetedMuscle).toBe("Latissimus Dorsi, Rhomboid Major");
-      expect(swapped.exercise.timeTakenOneSet).toBe("20-40 sec");
+      expect(swapped.exercise.targetedMuscle).toBe("Back");
+      expect(swapped.exercise.timeTakenOneSet).toBe("25-45 sec");
       expect(selectedEquipment).toContain(swapped.exercise.machine);
       expect(before.exercises.filter((exercise: any) => exercise.workoutExerciseId !== slot.workoutExerciseId).some(
         (exercise: any) => exercise.exerciseName === swapped.exercise.exerciseName,
@@ -696,7 +726,7 @@ describe("workout API CSV flow", () => {
     }
   });
 
-  it("replaces a same-step legacy workout with the CSV result while preserving logged sets", async () => {
+  it("replaces a same-step legacy workout with OpenRouter results while preserving logged sets", async () => {
     const sampleCsv = [
       "exercise,machine,muscle",
       "Barbell Row,Barbell,Back",
