@@ -454,6 +454,7 @@ html, body {
   cursor: pointer;
 }
 .chip.active { background: var(--mint); border-color: var(--mint); }
+.chip.active::before { content: "✓"; display: inline-block; margin-right: 6px; font-weight: 900; }
 .equipment-picker-card { margin-top: 12px; }
 .equipment-picker-options { margin: 14px 0 10px; }
 .equipment-picker-options .chip { min-height: 38px; }
