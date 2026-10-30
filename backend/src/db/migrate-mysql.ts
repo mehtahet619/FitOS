@@ -267,6 +267,21 @@ async function main(): Promise<void> {
     await executeMySqlStatement(database, `ALTER TABLE NutritionRecommendation ADD COLUMN IF NOT EXISTS source VARCHAR(2000) NOT NULL DEFAULT 'general-nutrition'`);
     await executeMySqlStatement(database, `ALTER TABLE Equipment ADD COLUMN IF NOT EXISTS normalizedName TEXT, ADD COLUMN IF NOT EXISTS category TEXT`);
     await executeMySqlStatement(database, `ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT, ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
+    await executeMySqlStatement(database, `
+      CREATE TABLE IF NOT EXISTS GymEquipmentFeedback (
+        id VARCHAR(191) PRIMARY KEY,
+        userId VARCHAR(191) NOT NULL,
+        predictedLabel VARCHAR(255) NOT NULL,
+        correctedLabel VARCHAR(255) NULL,
+        verdict VARCHAR(20) NOT NULL,
+        confidence DOUBLE NOT NULL,
+        imageBase64 LONGTEXT NOT NULL,
+        createdAt VARCHAR(40) NOT NULL,
+        INDEX idx_gym_equipment_feedback_user (userId, createdAt),
+        INDEX idx_gym_equipment_feedback_verdict (verdict, createdAt),
+        CONSTRAINT fk_gym_equipment_feedback_user FOREIGN KEY (userId) REFERENCES `User`(id) ON DELETE CASCADE
+      )
+    `);
 
     const rows = await database.all<QueryResultRow>("SHOW TABLES");
     const tableNames = rows.flatMap((row) => Object.values(row).filter((value): value is string => typeof value === "string"));
