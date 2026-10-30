@@ -2822,7 +2822,6 @@ function renderGymTour(equipment, plan, savedProfile) {
       video.srcObject = stream;
       running = true;
       paused = false;
-      evidence.clear();
       $("gym-tour-pause").addEventListener("click", () => {
         paused = !paused;
         $("gym-tour-pause").textContent = paused ? "Resume" : "Pause";
