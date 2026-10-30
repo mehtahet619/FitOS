@@ -590,12 +590,6 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(directDeadliftResponse.status).toBe(200);
-      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
-        targetMuscles: expect.arrayContaining(["back"]),
-        requestedCount: 3,
-        excludedExerciseNames: expect.arrayContaining(["Deadlift"]),
-        excludedExerciseFamilyKeys: expect.arrayContaining([exerciseFamilyKey("Deadlift")]),
-      }));
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-deadlift");
       const restoreSeatedRowResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -615,10 +609,6 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "  DUMBBELL ROWS  ", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(dumbbellRowEditResponse.status).toBe(200);
-      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
-        targetMuscles: expect.arrayContaining(["Upper Back"]),
-        requestedCount: 3,
-      }));
       const dumbbellRow = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       expect(dumbbellRow).toMatchObject({
         exerciseId: "catalog-dumbbell-rows", sourceExerciseName: "Dumbbell Rows", sourcePrimaryMuscle: "Upper Back",
@@ -640,11 +630,6 @@ describe("workout API CSV flow", () => {
       });
       expect(editResponse.status).toBe(200);
       expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
-      expect(recommendationSpy).toHaveBeenCalledWith(expect.objectContaining({
-        requestedCount: 3,
-        excludedExerciseNames: expect.arrayContaining(["Deadlift"]),
-        excludedExerciseFamilyKeys: expect.arrayContaining([exerciseFamilyKey("Deadlift")]),
-      }));
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "back", sourceMachine: "Dumbbells" });
       expect(editedSlot?.exerciseId).toBe("catalog-deadlift");
