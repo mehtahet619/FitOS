@@ -346,6 +346,58 @@ function showScreen(id) {
   }
 }
 
+function showGymChoiceModal() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "gym-choice-overlay";
+    overlay.innerHTML = `
+      <section class="gym-choice-modal" role="dialog" aria-modal="true" aria-labelledby="gym-choice-title" aria-describedby="gym-choice-description">
+        <div class="gym-choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3V10.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 10h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <p class="gym-choice-eyebrow">YOUR DAILY GYM CHECK-IN</p>
+        <h2 id="gym-choice-title">Same gym today?</h2>
+        <p id="gym-choice-description">Are you using the same gym and equipment as your last session?</p>
+        <div class="gym-choice-summary">
+          <span class="gym-choice-summary-dot"></span>
+          Your saved equipment is ready to use in today's workout.
+        </div>
+        <div class="gym-choice-actions">
+          <button type="button" class="gym-choice-yes">Yes, use my saved gym</button>
+          <button type="button" class="gym-choice-no">No, update my equipment</button>
+        </div>
+      </section>`;
+    document.body.appendChild(overlay);
+    document.body.classList.add("gym-choice-open");
+    const yes = overlay.querySelector(".gym-choice-yes");
+    const no = overlay.querySelector(".gym-choice-no");
+    let settled = false;
+    const finish = (sameGym) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("gym-choice-open");
+      overlay.classList.add("is-closing");
+      window.setTimeout(() => overlay.remove(), 160);
+      resolve(sameGym);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        no.click();
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        (document.activeElement === yes ? no : yes).focus();
+      }
+    };
+    yes.addEventListener("click", () => finish(true));
+    no.addEventListener("click", () => finish(false));
+    document.addEventListener("keydown", onKeyDown);
+    requestAnimationFrame(() => yes.focus());
+  });
+}
+
 async function handleGymChoiceAfterLogin() {
   if (AuthState.status !== "AUTHENTICATED" || AuthState.profileComplete !== true) return;
   const today = getLocalDateKey();
@@ -358,7 +410,7 @@ async function handleGymChoiceAfterLogin() {
       return;
     }
     if (profile.lastConfirmedDate === today) return;
-    const sameGym = window.confirm("Are you using the same gym and equipment today?\\n\\nOK = Yes, use saved equipment and go to Workout.\\nCancel = No, go to Gym Scan to update your equipment.");
+    const sameGym = await showGymChoiceModal();
     if (sameGym) {
       await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
       sessionStorage.setItem("gymChoiceHandledDate", today);
