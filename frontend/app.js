@@ -1232,6 +1232,14 @@ async function loadWorkout() {
       workout = null;
     }
 
+    // A successful gym check-in is the daily attendance signal for this flow.
+    // Once attendance is recorded, show the same green daily-complete state and
+    // do not ask the user to generate another workout for that attendance day.
+    if (gymStatus?.checkedIn) {
+      await renderGenerateWorkoutPrompt({ ...plan, dailyWorkoutLocked: true });
+      return;
+    }
+
     if (workout) {
       if (workout.needsRegeneration && workout.canRegenerate) {
         renderLegacyWorkoutRefresh(workout, plan);
