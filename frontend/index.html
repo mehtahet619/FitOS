@@ -205,7 +205,7 @@
         <div class="faq-intro"><p class="eyebrow eyebrow-light">Good questions</p><h2 id="faq-title">A few things<br /><span>to know.</span></h2><p>Clear expectations make a better plan.</p></div>
         <div class="faq-list">
           <details><summary>Does FitOS work if my gym has different equipment?</summary><p>Yes. Add the machines and weights you can use to your equipment list. Workout sessions use that list with your selected goals, split, and available time; you can update it when your setup changes.</p></details>
-          <details><summary>Does Live Scan know when a machine is occupied?</summary><p>No. Equipment recognition, when its vision provider is available, identifies equipment in an image. FitOS does not determine whether a person is using a machine or whether a station is free.</p></details>
+          <details><summary>Can Live Scan analyze machine availability and gym crowd levels?</summary><p>Yes. FitOS Live Scan now includes a separate Crowd Analysis section powered by your Roboflow people-counting workflow. It estimates how many people are visible and shows a live crowd level alongside equipment recognition. Crowd counting is separate from equipment detection; it does not claim a specific machine is occupied unless that machine-level association is independently detected.</p></details>
           <details><summary>Are nearby food and nutrition details verified?</summary><p>Nearby suggestions require location access and a working places provider. If no nearby listings are returned, FitOS can still create a general meal plan. Menu availability changes, and nutrition values may be estimates; confirm details with the restaurant.</p></details>
           <details><summary>Can I change my training plan later?</summary><p>Yes. Update your profile, training split, equipment, or session duration as your needs change. Workout selection follows your saved settings and history, and logged sets can help guide progression.</p></details>
           <details><summary>Is FitOS a medical or nutrition service?</summary><p>No. FitOS provides fitness and general nutrition planning, not diagnosis or treatment. For medical conditions or individualized dietary care, consult a qualified health professional.</p></details>
@@ -460,6 +460,17 @@
         <div id="equipment-recognition-status">Waiting for a frame…</div>
         <div id="equipment-recognition-results"></div>
         <div id="equipment-recommendations"></div>
+      </div>
+
+      <div class="card" id="crowd-analysis-card">
+        <div class="card-label">Crowd analysis</div>
+        <p class="card-sub">A separate live view powered by Roboflow people counting. It estimates the number of people visible in the camera frame.</p>
+        <div class="card-grid-2">
+          <div><div class="card-sub">People detected</div><div class="card-value" id="crowd-people-count">—</div></div>
+          <div><div class="card-sub">Crowd level</div><div class="card-value" id="crowd-level">Waiting</div></div>
+        </div>
+        <div id="crowd-analysis-status" class="card-sub" aria-live="polite">Starts automatically when Live Scan camera starts.</div>
+        <div id="crowd-analysis-results"></div>
       </div>
 
       <button class="btn btn-mint" id="vision-start-btn" style="margin-bottom:14px;">Start Camera</button>
