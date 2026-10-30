@@ -325,6 +325,9 @@ function showScreen(id) {
       return;
     }
     AuthState.authenticated(data.user);
+    await routeCurrent();
+    await handleGymChoiceAfterLogin();
+    return;
     if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
     if (["/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
@@ -342,6 +345,32 @@ function showScreen(id) {
     $("auth-retry-session").addEventListener("click", () => { void boot(); });
   } finally {
     if (generation === authBootGeneration) $("auth-submit").disabled = false;
+  }
+}
+
+async function handleGymChoiceAfterLogin() {
+  if (AuthState.status !== "AUTHENTICATED" || AuthState.profileComplete !== true) return;
+  const today = getLocalDateKey();
+  if (sessionStorage.getItem("gymChoiceHandledDate") === today) return;
+  try {
+    const profile = await Api.get("/equipment/gym-profile");
+    if (!profile?.gymTourCompleted) {
+      sessionStorage.setItem("gymChoiceHandledDate", today);
+      navigate("/equipment");
+      return;
+    }
+    if (profile.lastConfirmedDate === today) return;
+    const sameGym = window.confirm("Are you using the same gym and equipment today?\\n\\nOK = Yes, use saved equipment and go to Workout.\\nCancel = No, go to Gym Scan to update your equipment.");
+    if (sameGym) {
+      await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
+      sessionStorage.setItem("gymChoiceHandledDate", today);
+      navigate("/workout");
+    } else {
+      sessionStorage.setItem("gymChoiceHandledDate", today);
+      navigate("/equipment");
+    }
+  } catch (error) {
+    console.error("[GymProfile] Could not resolve today's gym choice:", error);
   }
 }
 
@@ -1367,6 +1396,18 @@ async function renderGenerateWorkoutPrompt(plan) {
   $("workout-focus-label").textContent = labelText;
   const el = $("workout-content");
 
+  if (plan?.dailyWorkoutLocked) {
+    el.innerHTML = `
+      ${plan?.activePlan ? renderActivePlanCard(plan) : ""}
+      <section class="card" style="text-align:center;">
+        <div class="card-label">Today's workout is complete ✓</div>
+        <h2 style="margin:12px 0 8px;">Great work today!</h2>
+        <p class="card-sub">You've completed your workout for today. Please come back tomorrow for your next session. Your next workout in the plan is saved.</p>
+      </section>`;
+    if (plan?.activePlan) wirePlanActions(plan);
+    return;
+  }
+
   if (!plan?.activePlan) {
     el.innerHTML = renderPlanStructurePrompt();
     wirePlanSelection();
@@ -1386,10 +1427,10 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   card.className = "card equipment-picker-card";
   const heading = document.createElement("div");
   heading.className = "card-label";
-  heading.textContent = "Step 2: What equipment can you use today?";
-  const description = document.createElement("div");
+  heading.textContent = "Today's workout";
+  const description = document.createElement("p");
   description.className = "card-sub";
-  description.textContent = `Choose the machines and equipment available for ${plan.nextWorkout.label}. FitOS will only recommend exercises you can do with these choices.`;
+  description.textContent = "FitOS will automatically use the equipment saved in your Gym Scan profile. To add or remove equipment, use the Scan tab. You won't need to select machines again for each workout.";
   const durationField = document.createElement("div");
   durationField.className = "field";
   const durationLabel = document.createElement("label");
@@ -1404,90 +1445,37 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   durationInput.placeholder = "Choose today's duration";
   durationInput.required = true;
   durationField.append(durationLabel, durationInput);
-  const chipGroup = document.createElement("div");
-  chipGroup.className = "chip-group equipment-picker-options";
-  const selectionSummary = document.createElement("div");
-  selectionSummary.className = "card-sub equipment-selection-summary";
   const feedback = document.createElement("div");
   const buildButton = document.createElement("button");
   buildButton.type = "button";
   buildButton.className = "btn btn-primary";
-  buildButton.textContent = "Show my exercises";
-  buildButton.disabled = true;
-  selectionSummary.textContent = "Loading your equipment...";
-  card.append(heading, description, durationField, chipGroup, selectionSummary, feedback, buildButton);
+  buildButton.textContent = "Build today's workout";
+  card.append(heading, description, durationField, feedback, buildButton);
   parent.appendChild(card);
 
-  let equipment;
-  let selected;
+  let gymProfile;
   try {
-    const [catalog, saved] = await Promise.all([
-      Api.get("/equipment"),
-      Api.get("/equipment/user/equipment"),
-    ]);
-    const savedEquipment = Array.isArray(saved) ? saved : [];
-    const savedNames = new Set(savedEquipment.map((item) => item.name).filter((name) => name && name !== "No Equipment"));
-    const catalogItems = (Array.isArray(catalog) ? catalog : []).filter((item) => item.name !== "No Equipment");
-    const catalogNames = new Set(catalogItems.map((item) => item.name));
-    equipment = [...catalogItems, ...savedEquipment.filter((item) => !catalogNames.has(item.name))];
-    selected = savedNames;
+    gymProfile = await Api.get("/equipment/gym-profile");
   } catch (error) {
-    selectionSummary.textContent = "Equipment could not be loaded.";
     feedback.className = "banner banner-error";
-    feedback.textContent = error.message || "Could not load your equipment list.";
+    feedback.textContent = error.message || "Could not load your saved gym profile.";
     buildButton.disabled = true;
-    const retryButton = document.createElement("button");
-    retryButton.type = "button";
-    retryButton.className = "btn btn-outline";
-    retryButton.textContent = "Retry loading equipment";
-    retryButton.addEventListener("click", () => {
-      retryButton.disabled = true;
-      retryButton.textContent = "Retrying…";
-      void loadWorkout();
-    });
-    card.appendChild(retryButton);
     return;
   }
-
-  const bodyweightButton = document.createElement("button");
-  bodyweightButton.type = "button";
-  bodyweightButton.className = "chip";
-  bodyweightButton.textContent = "Bodyweight only";
-  bodyweightButton.addEventListener("click", () => {
-    selected.clear();
-    paintSelection();
-  });
-  chipGroup.appendChild(bodyweightButton);
-
-  const optionButtons = [];
-  equipment.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip";
-    button.textContent = item.name;
-    button.addEventListener("click", () => {
-      if (selected.has(item.name)) selected.delete(item.name);
-      else selected.add(item.name);
-      paintSelection();
-    });
-    optionButtons.push({ button, name: item.name });
-    chipGroup.appendChild(button);
-  });
-
-  function paintSelection() {
-    optionButtons.forEach(({ button, name }) => {
-      const active = selected.has(name);
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
-    bodyweightButton.classList.toggle("active", selected.size === 0);
-    bodyweightButton.setAttribute("aria-pressed", String(selected.size === 0));
-    selectionSummary.textContent = selected.size
-      ? `${selected.size} item${selected.size === 1 ? "" : "s"} selected`
-      : "No machines selected - FitOS will build a bodyweight workout.";
+  if (!gymProfile?.gymTourCompleted) {
+    feedback.className = "banner banner-info";
+    feedback.textContent = "Set up your gym equipment once in the Scan tab before generating a workout.";
+    buildButton.textContent = "Go to Gym Scan";
+    buildButton.addEventListener("click", () => navigate("/equipment"));
+    return;
   }
-  paintSelection();
-  buildButton.disabled = false;
+  const equipmentCount = Array.isArray(gymProfile.equipment) ? gymProfile.equipment.length : 0;
+  const equipmentSummary = document.createElement("div");
+  equipmentSummary.className = "banner banner-success";
+  equipmentSummary.textContent = equipmentCount
+    ? `Using your saved gym profile · ${equipmentCount} equipment items`
+    : "Using your saved gym profile · bodyweight exercises only";
+  card.insertBefore(equipmentSummary, durationField);
 
   buildButton.addEventListener("click", async () => {
     if (!isWorkoutDurationValid(durationInput)) {
@@ -1498,13 +1486,11 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
     buildButton.textContent = "Building your workout...";
     feedback.className = "";
     feedback.textContent = "";
-    let failedDuring = "generating your workout";
     try {
       const generated = await Api.post("/workouts/generate", {
         focus: plan.nextWorkout.label,
         durationMinutes: durationInput.valueAsNumber,
         equipmentMode: "USER_EQUIPMENT",
-        availableEquipmentNames: Array.from(selected),
       }, { timeoutMs: 30000 });
       renderGeneratedWorkout(generated, plan);
     } catch (error) {
@@ -1514,9 +1500,13 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
         return;
       }
       feedback.className = "banner banner-error";
-      feedback.textContent = `${failedDuring}: ${error.message || "Could not build a workout from this equipment."}`;
+      feedback.textContent = error.message || "Could not build today's workout.";
       buildButton.disabled = false;
-      buildButton.textContent = "Show my exercises";
+      buildButton.textContent = "Build today's workout";
+      if (error?.status === 429 || error?.code === "DAILY_WORKOUT_LIMIT_REACHED") {
+        feedback.textContent = "You've completed today's workout. Please come back tomorrow.";
+        buildButton.disabled = true;
+      }
     }
   });
 }
@@ -2710,7 +2700,7 @@ function renderGymTour(equipment, plan, savedProfile) {
     const profileReady = profile?.gymTourCompleted === true;
     const known = Array.isArray(profile?.equipment) ? profile.equipment : [];
     const today = getLocalDateKey();
-    const needsSameGymCheck = profileReady && profile.lastConfirmedDate !== today;
+
     const escaped = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
     el.innerHTML = `
       <div class="card">
@@ -2718,10 +2708,7 @@ function renderGymTour(equipment, plan, savedProfile) {
         <p class="card-sub">${profileReady ? "Your saved equipment is used for workouts at this gym." : "Record the whole gym once so FitOS can build your equipment profile."}</p>
         ${profileReady ? `
           <div class="banner banner-success">Gym equipment saved${profile.lastScanAt ? ` · scanned ${new Date(profile.lastScanAt).toLocaleDateString()}` : ""}</div>
-          ${needsSameGymCheck ? `
-            <div class="card-sub" style="margin:12px 0 8px;">Are you using the same gym and equipment today?</div>
-            <div class="btn-row"><button class="btn btn-mint" id="same-gym-yes">Yes, same gym</button><button class="btn btn-outline" id="same-gym-no">No, different gym</button></div>
-          ` : `<div class="card-sub" style="margin-top:10px;">Your saved gym equipment is active for today. We won't ask again today.</div>`}
+          <div class="card-sub" style="margin-top:10px;">Your saved equipment is managed here and used automatically in the Workout tab.</div>
           <button class="btn btn-outline" id="gym-tour-rescan" style="margin-top:10px;">Scan / update gym equipment</button>
           <div class="chip-group" style="margin-top:14px;">${known.map((name) => `<span class="pill">${escaped(name)}</span>`).join("") || "No equipment saved yet."}</div>
         ` : `
@@ -2797,25 +2784,6 @@ function renderGymTour(equipment, plan, savedProfile) {
       }
     });
     if (profileReady) {
-      if (needsSameGymCheck) {
-        $("same-gym-yes").addEventListener("click", async () => {
-          const button = $("same-gym-yes");
-          button.disabled = true;
-          try {
-            const confirmed = await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
-            profile.lastConfirmedDate = confirmed.lastConfirmedDate;
-            render();
-          } catch (error) {
-            button.disabled = false;
-            $("gym-tour-workspace").innerHTML = `<div class="banner banner-error">${escaped(error.message || "Could not save gym confirmation.")}</div>`;
-          }
-        });
-        $("same-gym-no").addEventListener("click", () => {
-          profile = { gymTourCompleted: false, equipment: [] };
-          render();
-          startTour();
-        });
-      }
       $("gym-tour-rescan").addEventListener("click", () => {
         profile = { gymTourCompleted: false, equipment: [] };
         render();
