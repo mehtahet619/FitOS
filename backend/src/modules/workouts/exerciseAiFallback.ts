@@ -153,28 +153,21 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     ],
   };
   const system = "You are a conservative exercise catalog assistant. Follow the supplied constraints exactly and return valid JSON only.";
-  const body = provider.name !== "Anthropic"
-    ? {
-      model: provider.model,
-      temperature: 0.1,
-      max_tokens: 1200,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(prompt) },
-      ],
-    }
-    : {
-      model: provider.model,
-      max_tokens: 1200,
-      system,
-      messages: [{ role: "user", content: JSON.stringify(prompt) }],
-    };
+  const body = {
+    model: provider.model,
+    temperature: 0.1,
+    max_tokens: 1600,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(prompt) },
+    ],
+  };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(provider.name !== "Anthropic"
-      ? { Authorization: `Bearer ${provider.apiKey}` }
-      : { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" }),
+    Authorization: `Bearer ${provider.apiKey}`,
+    "HTTP-Referer": "https://fitos.app",
+    "X-Title": "FitOS",
   };
   const response = await fetch(provider.url, {
     method: "POST",
@@ -184,9 +177,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload = await response.json() as any;
-  const content = provider.name !== "Anthropic"
-    ? payload.choices?.[0]?.message?.content
-    : payload.content?.find((block: any) => block.type === "text")?.text;
+  const content = payload.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new Error("Provider returned no text content.");
   return content;
 }
@@ -207,40 +198,30 @@ async function callExerciseValidator(provider: ProviderConfig, input: AiExercise
     ],
   };
   const system = "You validate conventional resistance-training movements conservatively. Do not invent exercises, muscles, or equipment. Return valid JSON only.";
-  const body = provider.name !== "Anthropic"
-    ? {
-      model: provider.model,
-      temperature: 0,
-      max_tokens: 500,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(prompt) },
-      ],
-    }
-    : {
-      model: provider.model,
-      temperature: 0,
-      max_tokens: 500,
-      system,
-      messages: [{ role: "user", content: JSON.stringify(prompt) }],
-    };
+  const body = {
+    model: provider.model,
+    temperature: 0,
+    max_tokens: 500,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify(prompt) },
+    ],
+  };
   const response = await fetch(provider.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(provider.name !== "Anthropic"
-        ? { Authorization: `Bearer ${provider.apiKey}` }
-        : { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" }),
+      Authorization: `Bearer ${provider.apiKey}`,
+      "HTTP-Referer": "https://fitos.app",
+      "X-Title": "FitOS",
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(7_000),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload = await response.json() as any;
-  const content = provider.name !== "Anthropic"
-    ? payload.choices?.[0]?.message?.content
-    : payload.content?.find((block: any) => block.type === "text")?.text;
+  const content = payload.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new Error("Provider returned no text content.");
   return content;
 }
@@ -250,10 +231,7 @@ export async function validateUncataloguedExercise(
   input: AiExerciseValidationInput,
 ): Promise<AiExerciseValidation | null> {
   const configured = configuredProviders();
-  const providers = [
-    ...configured.filter((provider) => provider.name === "OpenRouter" || provider.name === "Anthropic"),
-    ...configured.filter((provider) => provider.name === "OpenAI"),
-  ];
+  const providers = configured;
   const muscleByKey = new Map(input.muscles.map((muscle) => [normalizeExerciseValue(muscle), muscle]));
   const equipmentByKey = new Map(input.equipment.map((equipment) => [normalizeExerciseValue(equipment), equipment]));
   const configuredThreshold = Number(process.env.EXERCISE_CATALOG_VALIDATION_THRESHOLD);
