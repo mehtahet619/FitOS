@@ -56,7 +56,7 @@ equipmentRouter.post("/user/equipment", requireAuth, async (req: AuthedRequest, 
     userId
   );
   const timestamp = nowIso();
-  const currentProfile = await db.get<{ id: string; createdAt: string }>(
+  const currentProfile = await db.get<{ id: string; createdAt: string; lastScanAt: string | null }>(
     `SELECT id, createdAt, lastScanAt FROM GymEquipmentProfile WHERE userId = ?`, userId
   );
   await db.run(
