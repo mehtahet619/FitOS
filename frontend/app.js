@@ -2814,7 +2814,7 @@ function renderGymTour(equipment, plan, savedProfile) {
 
   const finishTour = async (workspace) => {
     stopStream();
-    const reliable = [...evidence.entries()].filter(([, item]) => item.frames >= 2 && item.confidence >= 0.5);
+    const reliable = [...evidence.entries()].filter(([, item]) => item.frames >= 2 && item.confidence >= 0);
     workspace.innerHTML = `
       <div class="card">
         <div class="card-label">Gym tour analyzed</div>
