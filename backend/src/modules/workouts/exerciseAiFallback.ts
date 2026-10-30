@@ -134,7 +134,14 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
     if (result.length >= input.count) break;
   }
 
-  if (result.length < input.count) throw new Error(`Provider returned only ${result.length} valid of ${input.count} requested exercises.`);
+  if (result.length < input.count) throw new Error(`OpenRouter returned only ${result.length} valid of ${input.count} requested exercises.`);
+  if (input.targetMuscles.length >= 5) {
+    const covered = new Set(result.flatMap((exercise) => exercise.muscleCategories).map(normalizeExerciseValue));
+    const missingTargets = input.targetMuscles.filter((muscle) => !covered.has(normalizeExerciseValue(muscle)));
+    if (missingTargets.length) {
+      throw new Error(`OpenRouter workout did not cover all full-body targets: ${missingTargets.join(", ")}.`);
+    }
+  }
   return result;
 }
 
