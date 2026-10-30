@@ -268,6 +268,7 @@ async function main(): Promise<void> {
     await executeMySqlStatement(database, `ALTER TABLE Equipment ADD COLUMN IF NOT EXISTS normalizedName TEXT, ADD COLUMN IF NOT EXISTS category TEXT`);
     await executeMySqlStatement(database, `ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT, ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
     await executeMySqlStatement(database, `ALTER TABLE GymEquipmentFeedback MODIFY COLUMN imageBase64 LONGTEXT NOT NULL`);
+    await executeMySqlStatement(database, `ALTER TABLE GymEquipmentProfile ADD COLUMN IF NOT EXISTS lastConfirmedDate VARCHAR(32) NULL`);
 
     const rows = await database.all<QueryResultRow>("SHOW TABLES");
     const tableNames = rows.flatMap((row) => Object.values(row).filter((value): value is string => typeof value === "string"));
