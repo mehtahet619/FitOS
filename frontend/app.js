@@ -1429,29 +1429,32 @@ function renderActivePlanCard(plan) {
     ? `<div class="card-sub">Remaining workouts: ${plan.remainingWorkouts.map((u) => u.label).join(" · ")}</div>`
     : `<div class="card-sub">Remaining workouts: none</div>`;
   const nextLine = nextWod
-    ? `<div class="card-value" style="margin-top:10px; margin-bottom:6px;">Next workout: ${nextWod.label}</div>
+    ? `<div class="workout-next-plan-title">Next workout: <strong>${nextWod.label}</strong></div>
        <div class="card-sub">Target muscles: ${nextWod.muscles.join(", ")}</div>`
-    : `<div class="card-value" style="margin-top:10px;">Next workout: new cycle — plan switching unlocked</div>`;
+    : `<div class="workout-next-plan-title">Next workout: <strong>new cycle</strong></div>
+       <div class="card-sub">Plan switching unlocked</div>`;
 
   return `
-    <div class="card">
+    <section class="card workout-plan-card">
       <div class="card-label">Active Plan: ${plan.activePlan?.structureLabel || plan.activePlan}${lockBadge}</div>
-      <div class="card-sub" style="margin-bottom:8px;">
+      <div class="card-sub workout-cycle-line">
         Cycle <code style="font-size:11px;">${plan.cycleId}</code> · ${cycleLabel}
       </div>
       ${renderCircularProgress(plan)}
       ${completedList}
       ${remainingList}
+    </section>
+    <section class="card workout-next-plan-card">
       ${nextLine}
-      <div class="card-sub" style="margin-top:6px;">Plan switching: ${plan.planSwitchAllowed ? "UNLOCKED" : "LOCKED"}</div>
+      <div class="card-sub workout-plan-lock-line">Plan switching: ${plan.planSwitchAllowed ? "UNLOCKED" : "LOCKED"}</div>
       ${plan.recentlyTrainedMuscles?.length
-        ? `<div class="card-sub" style="margin-top:8px;">Recently trained (last 48h): ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
+        ? `<div class="card-sub workout-recent-line">Recently trained (last 48h): ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
         : ""}
       ${plan.decision?.warning
         ? `<div class="banner banner-info" style="margin-top:10px;">⚠️ ${plan.decision.warning}</div>`
         : ""}
       <div style="margin-top:14px;">${actionButtons}</div>
-    </div>
+    </section>
   `;
 }
 
@@ -1465,9 +1468,10 @@ async function renderGenerateWorkoutPrompt(plan) {
   if (plan?.dailyWorkoutLocked) {
     el.innerHTML = `
       ${plan?.activePlan ? renderActivePlanCard(plan) : ""}
-      <section class="card" style="text-align:center;">
-        <div class="card-label">Today's workout is complete ✓</div>
-        <h2 style="margin:12px 0 8px;">Great work today!</h2>
+      <section class="card workout-day-complete-card">
+        <div class="workout-day-complete-mark">✓</div>
+        <div class="card-label">Today's workout is complete <span>✓</span></div>
+        <h2>Great work today!</h2>
         <p class="card-sub">You've completed your workout for today. Please come back tomorrow for your next session. Your next workout in the plan is saved.</p>
       </section>`;
     if (plan?.activePlan) wirePlanActions(plan);
