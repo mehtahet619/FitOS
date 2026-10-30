@@ -33,7 +33,7 @@ import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider
 import { exerciseFamilyKey, type RecommendedExercise } from "./exerciseAiFallback";
 
 function normalizeExerciseValue(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 function normalizeExerciseLookupName(value: string): string {
   return normalizeExerciseValue(value).replace(/s$/, "");
@@ -45,7 +45,7 @@ import { resolveExerciseVideo } from "../exercises/exerciseVideoProvider";
 
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
-const CSV_WORKOUT_GENERATOR_VERSION = "csv-v1";
+const AI_WORKOUT_GENERATOR_VERSION = "openrouter-v1";
 
 function belongsToCurrentPlanStep(workout: any, state: any, planStepIndex: number): boolean {
   if (!workout || !state) return false;
@@ -394,7 +394,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     workout: { id: existingWorkout.id, focus: existingWorkout.focus, durationMin: existingWorkout.durationMin, status: existingWorkout.status },
     generatorVersion: existingWorkout.generatorVersion ?? null,
     equipmentMode: existingWorkout.equipmentMode ?? "USER_EQUIPMENT",
-    needsRegeneration: existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
+    needsRegeneration: existingWorkout.generatorVersion !== AI_WORKOUT_GENERATOR_VERSION,
     canRegenerate: existingWorkout.status === "pending" && existingWorkout.generatorVersion !== CSV_WORKOUT_GENERATOR_VERSION,
     exercises: exercisesWithEquip.map((exercise, idx) => ({
       workoutExerciseId: exercise.workoutExerciseId,
@@ -492,7 +492,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     sessionDurationMinutes: durationMinutes,
     equipmentMode,
     availableEquipment: availableEquipmentForLog,
-    csvCandidateCount: generation.availableExerciseCount,
+    aiGeneratedExerciseCount: generation.availableExerciseCount,
     requestedExerciseCount: generation.requestedExerciseCount,
     persistedExercises: exercises.map(({ exerciseName, muscle, machine }) => ({ exerciseName, muscle, machine })),
   };
@@ -865,7 +865,7 @@ function resolveExerciseByName<T extends { id?: string; name: string }>(name: st
   const exact = exercises.filter((exercise) => normalizeExerciseValue(exercise.name) === exactKey);
   if (exact.length) {
     // Prefer a stable catalogue row over a generated CSV fallback with the same name.
-    return exact.find((exercise) => !(exercise.id ?? "").startsWith("csv-exercise-")) ?? exact[0];
+    return exact.find((exercise) => !(exercise.id ?? "").startsWith("ai-exercise-")) ?? exact[0];
   }
   const lookupKey = normalizeExerciseLookupName(name);
   const equivalent = exercises.filter((exercise) => normalizeExerciseLookupName(exercise.name) === lookupKey);
@@ -1033,8 +1033,8 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
       repRangeLow: exerciseRow.repRangeLow,
       repRangeHigh: exerciseRow.repRangeHigh,
       equipmentRequired: [nextAlternative.machine],
-      equipmentName: csvExercise.machine,
-      requiresEquipment: normalizeExerciseValue(csvExercise.machine) !== "bodyweight",
+      equipmentName: nextAlternative.machine,
+      requiresEquipment: normalizeExerciseValue(nextAlternative.machine) !== "bodyweight",
       status: "replaced",
       completedSets: [],
     },
