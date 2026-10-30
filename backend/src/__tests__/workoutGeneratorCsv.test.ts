@@ -89,7 +89,6 @@ describe("OpenRouter workout generation", () => {
 
   it("uses the exact plan target, persists AI exercises, and never reads the CSV catalogue", async () => {
     const { db, exercises, queries } = memoryDatabase();
-    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const state = { cycleId: "cycle-stays-the-same", currentIndex: 1 };
     const before = { ...state };
     const result = await generateWorkout(db, "user-1", "Back", 60, {
@@ -109,7 +108,6 @@ describe("OpenRouter workout generation", () => {
 
   it("keeps PPL target muscles constrained and returns distinct generated movements", async () => {
     const { db } = memoryDatabase();
-    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const result = await generateWorkout(db, "user-2", "Pull", 60, {
       lockToMuscles: ["back", "biceps"],
       equipmentMode: "FULL_GYM",
@@ -128,7 +126,6 @@ describe("OpenRouter workout generation", () => {
     [120, 5, 15],
   ])("generates the requested AI exercise count for %i minutes", async (minutes, exerciseCount, workingSets) => {
     const { db } = memoryDatabase();
-    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const result = await generateWorkout(db, "realistic-volume-user", "Chest", minutes, {
       lockToMuscles: ["chest"],
       equipmentMode: "FULL_GYM",
