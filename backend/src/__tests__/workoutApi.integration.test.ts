@@ -794,6 +794,7 @@ describe("workout API CSV flow", () => {
       exerciseRecommendationService: service,
     }));
 
+    mockOpenRouterExerciseGeneration();
     const { workoutRouter } = await import("../modules/workouts/routes.js");
     const app = express();
     app.use(express.json());
