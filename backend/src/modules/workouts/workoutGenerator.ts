@@ -117,7 +117,7 @@ function stableAiId(prefix: string, value: string): string {
   return `${prefix}-${createHash("sha256").update(normalizeExerciseValue(value)).digest("hex").slice(0, 32)}`;
 }
 
-/** Persist only the selected CSV rows into the existing Exercise relation so
+/** Persist only the selected AI-generated exercises into the existing Exercise relation so
  * WorkoutExercise and workout history keep their current foreign-key model. */
 export async function ensureExerciseRows(
   database: DatabaseLike,
