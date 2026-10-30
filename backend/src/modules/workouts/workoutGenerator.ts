@@ -86,15 +86,7 @@ async function getAvailableEquipmentIds(database: DatabaseLike, userId: string):
   return new Set(rows.map((r) => r.equipmentId));
 }
 
-async function getEquipmentAliases(database: DatabaseLike, equipmentIds: Set<string>): Promise<string[]> {
-  if (equipmentIds.size === 0) return [];
-  const rows = await database.all<{ name: string; alias: string | null }>(
-    `SELECT e.name, ea.alias FROM Equipment e LEFT JOIN EquipmentAlias ea ON ea.equipmentId=e.id
-     WHERE e.id IN (${[...equipmentIds].map(() => "?").join(",")})`,
-    ...equipmentIds
-  );
-  return [...new Set(rows.flatMap((row) => [row.name, row.alias].filter((value): value is string => Boolean(value))))];
-}
+
 
 async function getFallbackEquipment(
   database: DatabaseLike,
@@ -266,10 +258,7 @@ export async function generateWorkout(
   } else {
     availableEquipmentIds = new Set(options?.userEquipmentIds ?? await getAvailableEquipmentIds(database, userId));
   }
-  const availableEquipment = equipmentMode === "FULL_GYM"
-    ? []
-    : await getEquipmentAliases(database, availableEquipmentIds);
-  if (equipmentMode === "USER_EQUIPMENT" && availableEquipmentIds.size === 0) availableEquipment.push("Bodyweight");
+
 
   const requestedCount = exerciseCountForDuration(durationMin);
   const aiExercises = await getAiExerciseFallback({
