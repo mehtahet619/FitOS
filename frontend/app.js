@@ -2699,32 +2699,83 @@ function renderGymTour(equipment, plan, savedProfile) {
   const render = () => {
     const profileReady = profile?.gymTourCompleted === true;
     const known = Array.isArray(profile?.equipment) ? profile.equipment : [];
+    const today = new Date().toLocaleDateString("en-CA");
+    const needsSameGymCheck = profileReady && profile.lastConfirmedDate !== today;
+    const escaped = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
     el.innerHTML = `
       <div class="card">
         <div class="card-label">${profileReady ? "Gym equipment profile" : "One-time gym tour"}</div>
         <p class="card-sub">${profileReady ? "Your saved equipment is used for workouts at this gym." : "Record the whole gym once so FitOS can build your equipment profile."}</p>
         ${profileReady ? `
-          <div class="banner banner-success">Gym tour completed${profile.lastScanAt ? ` · ${new Date(profile.lastScanAt).toLocaleDateString()}` : ""}</div>
-          <div class="card-sub" style="margin-bottom:10px;">Are you at the same gym?</div>
-          <div class="btn-row"><button class="btn btn-mint" id="same-gym-yes">Yes, use saved equipment</button><button class="btn btn-outline" id="same-gym-no">No, start a new tour</button></div>
-          <button class="btn btn-outline" id="gym-tour-rescan" style="margin-top:10px;">Rescan Gym</button>
-          <div class="chip-group" style="margin-top:14px;">${known.map((name) => `<span class="pill">${name}</span>`).join("")}</div>
+          <div class="banner banner-success">Gym equipment saved${profile.lastScanAt ? ` · scanned ${new Date(profile.lastScanAt).toLocaleDateString()}` : ""}</div>
+          ${needsSameGymCheck ? `
+            <div class="card-sub" style="margin:12px 0 8px;">Are you using the same gym and equipment today?</div>
+            <div class="btn-row"><button class="btn btn-mint" id="same-gym-yes">Yes, same gym</button><button class="btn btn-outline" id="same-gym-no">No, different gym</button></div>
+          ` : `<div class="card-sub" style="margin-top:10px;">Your saved gym equipment is active for today. We won't ask again today.</div>`}
+          <button class="btn btn-outline" id="gym-tour-rescan" style="margin-top:10px;">Scan / update gym equipment</button>
+          <div class="chip-group" style="margin-top:14px;">${known.map((name) => `<span class="pill">${escaped(name)}</span>`).join("") || "No equipment saved yet."}</div>
         ` : `
           <p style="margin:14px 0 0;">Start Gym Tour to continuously detect equipment while you move around the gym.</p>
           <button class="btn btn-primary" id="gym-tour-start" style="margin-top:14px;">Start Gym Tour</button>
         `}
       </div>
       <div id="gym-tour-workspace"></div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-label">✏️ Manage equipment manually</div>
+        <p class="card-sub">Add or remove equipment any time. Scanned and manually selected equipment share the same saved gym profile.</p>
+        <div class="chip-group" id="gym-manual-equipment" style="flex-wrap:wrap;gap:8px;"></div>
+        <button class="btn btn-primary" id="gym-manual-save" style="margin-top:12px;">Save equipment selection</button>
+      </div>
     `;
-    if (profileReady) {
-      $("same-gym-yes").addEventListener("click", () => {
-        $("gym-tour-workspace").innerHTML = `<div class="banner banner-success">Saved equipment profile selected for today's workout.</div>`;
+    const manualGroup = $("gym-manual-equipment");
+    equipmentNames.forEach((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `chip ${known.includes(name) ? "active" : ""}`;
+      button.textContent = name;
+      button.setAttribute("aria-pressed", String(known.includes(name)));
+      button.addEventListener("click", () => {
+        const active = button.classList.toggle("active");
+        button.setAttribute("aria-pressed", String(active));
       });
-      $("same-gym-no").addEventListener("click", () => {
-        profile = { gymTourCompleted: false, equipment: [] };
+      manualGroup.appendChild(button);
+    });
+    $("gym-manual-save").addEventListener("click", async () => {
+      const button = $("gym-manual-save");
+      const selectedNames = Array.from(manualGroup.querySelectorAll(".chip.active")).map((item) => item.textContent.trim());
+      button.disabled = true;
+      button.textContent = "Saving…";
+      try {
+        await Api.post("/equipment/user/equipment", { equipmentNames: selectedNames });
+        const refreshed = await Api.get("/equipment/gym-profile");
+        profile = refreshed;
         render();
-        startTour();
-      });
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Save equipment selection";
+        $("gym-tour-workspace").innerHTML = `<div class="banner banner-error">${escaped(error.message || "Could not save equipment.")}</div>`;
+      }
+    });
+    if (profileReady) {
+      if (needsSameGymCheck) {
+        $("same-gym-yes").addEventListener("click", async () => {
+          const button = $("same-gym-yes");
+          button.disabled = true;
+          try {
+            const confirmed = await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
+            profile.lastConfirmedDate = confirmed.lastConfirmedDate;
+            render();
+          } catch (error) {
+            button.disabled = false;
+            $("gym-tour-workspace").innerHTML = `<div class="banner banner-error">${escaped(error.message || "Could not save gym confirmation.")}</div>`;
+          }
+        });
+        $("same-gym-no").addEventListener("click", () => {
+          profile = { gymTourCompleted: false, equipment: [] };
+          render();
+          startTour();
+        });
+      }
       $("gym-tour-rescan").addEventListener("click", () => {
         profile = { gymTourCompleted: false, equipment: [] };
         render();
