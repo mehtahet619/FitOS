@@ -95,9 +95,9 @@ equipmentRouter.post("/gym-profile/confirm-same", requireAuth, async (req: Authe
   const confirmedDate = isoDate || (parsedDate && Number.isFinite(parsedDate.getTime())
     ? [parsedDate.getFullYear(), String(parsedDate.getMonth() + 1).padStart(2, "0"), String(parsedDate.getDate()).padStart(2, "0")].join("-")
     : nowIso().slice(0, 10));
-  const profile = await db.get<{ id: string }>(\`SELECT id FROM GymEquipmentProfile WHERE userId = ? AND tourCompleted = 1\`, req.userId!);
+  const profile = await db.get<{ id: string }>(`SELECT id FROM GymEquipmentProfile WHERE userId = ? AND tourCompleted = 1`, req.userId!);
   if (!profile) return res.status(404).json({ error: "No completed gym profile exists." });
-  await db.run(\`UPDATE GymEquipmentProfile SET lastConfirmedDate = ?, updatedAt = ? WHERE userId = ?\`, confirmedDate, nowIso(), req.userId!);
+  await db.run(`UPDATE GymEquipmentProfile SET lastConfirmedDate = ?, updatedAt = ? WHERE userId = ?`, confirmedDate, nowIso(), req.userId!);
   return res.json({ confirmed: true, lastConfirmedDate: confirmedDate });
 });
 
