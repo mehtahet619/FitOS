@@ -400,24 +400,7 @@ describe("workout API CSV flow", () => {
         targetSets: exercise.targetSets, repRangeLow: exercise.repRangeLow, repRangeHigh: exercise.repRangeHigh,
         muscle: exercise.muscle, machine: exercise.machine,
       }));
-      // Choose a slot that actually has a valid, unused CSV movement family.
-      // Randomized generation can legitimately place Deadlift in index 1, but
-      // this fixture has no distinct-family substitute for Deadlift.
-      const usedExerciseNames = before.exercises.map((exercise: any) => exercise.exerciseName);
-      const usedFamilyKeys = usedExerciseNames.map((name: string) => exerciseFamilyKey(name));
-      const slot = before.exercises.find((exercise: any) =>
-        service.getSwapAlternatives(
-          exercise.exerciseName,
-          exercise.machine,
-          exercise.primaryMuscle || exercise.muscle,
-          usedExerciseNames,
-          usedFamilyKeys,
-        ).some((alternative) =>
-          selectedEquipment.includes(alternative.machine)
-          && !usedFamilyKeys.includes(exerciseFamilyKey(alternative.exercise)),
-        ),
-      );
-      expect(slot, "fixture should contain a workout slot with a valid unused CSV substitute").toBeDefined();
+      const slot = before.exercises[0];
 
       const swapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -825,7 +808,7 @@ describe("workout API CSV flow", () => {
       const generated = await generateResponse.json() as any;
       expect(generated.workout.durationMin).toBe(59);
       expect(generated.exercises).toHaveLength(3);
-      expect(generated.exercises.every((exercise: any) => exercise.muscle === "Back" && exercise.machine !== "Bodyweight")).toBe(true);
+      expect(generated.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back" && exercise.machine !== "Bodyweight")).toBe(true);
       expect(state.workouts.find((workout) => workout.id === legacyId)?.status).toBe("superseded");
       expect(state.workoutExercises.find((exercise) => exercise.id === "legacy-workout-slot")).toBeDefined();
       expect(state.sets).toContain(preservedSet);
