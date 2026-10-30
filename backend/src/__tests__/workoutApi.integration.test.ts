@@ -16,6 +16,7 @@ function mockOpenRouterExerciseGeneration() {
       ...actual,
       validateUncataloguedExercise: vi.fn(async (input: any) => {
         const name = String(input.exerciseName).toLowerCase();
+        if (name.includes("nonsense")) return null;
         if (name.includes("good morning")) return {
           valid: true, canonicalName: "Good Morning", primaryMuscle: "hamstrings",
           secondaryMuscles: ["glutes"], equipmentName: "Barbell", confidence: 0.97,
