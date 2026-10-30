@@ -1587,3 +1587,279 @@ body.gym-choice-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .gym-choice-overlay, .gym-choice-modal { animation: none; }
 }
+
+
+/* FitOS mobile app visual refresh — presentation only; existing markup and behavior stay intact. */
+:root {
+  --fitos-app-bg: #f5f6f2;
+  --fitos-card: #ffffff;
+  --fitos-ink: #17231c;
+  --fitos-muted: #778078;
+  --fitos-border: #e7ebe5;
+  --fitos-green: #286b50;
+  --fitos-green-dark: #174b37;
+  --fitos-mint: #e5f4eb;
+}
+#main-app {
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding-bottom: calc(74px + env(safe-area-inset-bottom));
+  background: var(--fitos-app-bg);
+  color: var(--fitos-ink);
+}
+#main-app > .screen {
+  width: 100%;
+  max-width: none;
+  min-height: calc(100dvh - 74px);
+  padding: 22px 18px 28px;
+  background: var(--fitos-app-bg);
+}
+#main-app .screen .header {
+  margin: 0 0 18px;
+}
+#main-app .screen .header h1,
+#main-app .screen > .header h1 {
+  margin: 0 0 5px;
+  color: var(--fitos-ink);
+  font-size: 28px;
+  font-weight: 780;
+  line-height: 1.12;
+  letter-spacing: -.045em;
+}
+#main-app .screen .header p {
+  margin: 0;
+  color: var(--fitos-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+#main-app .card,
+#main-app .food-tool-card,
+#main-app .workout-next-card,
+#main-app .workout-session-card,
+#main-app .workout-active-card,
+#main-app .gym-history-card,
+#main-app .gym-attendance-card,
+#main-app .equipment-card {
+  border: 1px solid var(--fitos-border);
+  border-radius: 17px;
+  background: var(--fitos-card);
+  box-shadow: 0 4px 15px rgba(25, 45, 32, .035);
+}
+#main-app .card { padding: 16px; margin-bottom: 12px; }
+#main-app .card-label,
+#main-app .food-tool-card h3 {
+  color: var(--fitos-ink);
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+}
+#main-app .card-sub,
+#main-app .muted,
+#main-app .empty-state { color: var(--fitos-muted); }
+#main-app .btn,
+#main-app button.btn {
+  min-height: 42px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 750;
+  box-shadow: none;
+}
+#main-app .btn-mint,
+#main-app .btn-primary {
+  border-color: var(--fitos-green);
+  background: var(--fitos-green);
+  color: #fff;
+}
+#main-app .btn-mint:hover,
+#main-app .btn-primary:hover { background: var(--fitos-green-dark); }
+#main-app .btn-outline {
+  border: 1px solid var(--fitos-border);
+  background: #fff;
+  color: var(--fitos-ink);
+}
+#main-app .chip,
+#main-app .chip-group button,
+#main-app .equipment-chip,
+#main-app .equipment-option,
+#main-app .choice-chip {
+  border: 1px solid var(--fitos-border);
+  border-radius: 999px;
+  background: #f8f9f6;
+  color: #47544b;
+}
+#main-app .chip.selected,
+#main-app .chip.active,
+#main-app .equipment-chip.selected,
+#main-app .equipment-option.selected,
+#main-app .choice-chip.selected {
+  border-color: #c8e8d6;
+  background: var(--fitos-mint);
+  color: var(--fitos-green-dark);
+}
+#screen-workout #workout-scan-area { margin-bottom: 12px; }
+#screen-workout #workout-content > * { margin-bottom: 12px; }
+#screen-workout .workout-session-card,
+#screen-workout .workout-session,
+#screen-workout .workout-summary,
+#screen-workout .workout-next-card {
+  padding: 17px;
+  border: 1px solid var(--fitos-border);
+  border-radius: 17px;
+  background: #fff;
+  color: var(--fitos-ink);
+  box-shadow: 0 4px 15px rgba(25,45,32,.035);
+}
+#screen-workout .workout-session-top,
+#screen-workout .workout-session-meta,
+#screen-workout .workout-next-top { color: var(--fitos-muted); }
+#screen-workout .workout-session h2,
+#screen-workout .workout-session-card h2,
+#screen-workout .workout-next-card h2 {
+  color: var(--fitos-ink);
+  font-size: 18px;
+  letter-spacing: -.03em;
+}
+#screen-workout .workout-progress-track {
+  height: 8px;
+  border-radius: 99px;
+  background: #edf0ec;
+}
+#screen-workout .workout-progress-track span {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #36a879, #16845c);
+}
+#screen-gym #gym-content > *,
+#screen-gym-scan #gym-scan-content > * { margin-bottom: 12px; }
+#screen-gym .card,
+#screen-gym-scan .card,
+#screen-gym-scan .food-tool-card {
+  padding: 16px;
+  border-radius: 17px;
+  border: 1px solid var(--fitos-border);
+  background: #fff;
+  box-shadow: 0 4px 15px rgba(25,45,32,.035);
+}
+#screen-gym .card-value,
+#screen-gym-scan .card-value { color: var(--fitos-green-dark); }
+#screen-gym .card-grid-2,
+#screen-gym-scan .card-grid-2 { gap: 10px; }
+#screen-gym-scan .chip-group,
+#screen-gym-scan .equipment-grid,
+#screen-gym-scan .equipment-list { gap: 7px; }
+#screen-gym-scan button,
+#screen-gym button { max-width: 100%; }
+#screen-diet .food-tracker {
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px solid var(--fitos-border);
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(25,45,32,.04);
+}
+#screen-diet .food-tracker-heading .eyebrow {
+  color: #4b9b75;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+#screen-diet .food-tracker-heading h2 {
+  margin: 7px 0 8px;
+  color: var(--fitos-ink);
+  font-size: 20px;
+  line-height: 1.16;
+  letter-spacing: -.04em;
+}
+#screen-diet .food-tracker-heading > p:last-child {
+  color: var(--fitos-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+#screen-diet .food-tracker-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0;
+}
+#screen-diet .food-tracker-tabs button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--fitos-border);
+  border-radius: 10px;
+  background: #f8f9f6;
+  color: #344239;
+  font-size: 11px;
+}
+#screen-diet .food-tracker-tabs button.active {
+  border-color: var(--fitos-green-dark);
+  background: var(--fitos-green-dark);
+  color: #fff;
+}
+#screen-diet .food-tool-card {
+  margin: 0 0 11px;
+  padding: 14px;
+  border: 1px solid var(--fitos-border);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: none;
+}
+#screen-diet .food-tool-card h3 { margin: 0 0 7px; font-size: 13px; }
+#screen-diet .food-tool-card p,
+#screen-diet .food-data-note {
+  color: var(--fitos-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+#screen-diet .food-actions { gap: 8px; }
+#screen-diet .food-input-row { gap: 7px; }
+#screen-diet input,
+#screen-diet select,
+#screen-diet textarea {
+  min-height: 40px;
+  border: 1px solid #e1e6df;
+  border-radius: 9px;
+  background: #fbfcfa;
+  color: var(--fitos-ink);
+  font-size: 12px;
+}
+#bottom-nav {
+  position: fixed;
+  z-index: 50;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  max-width: 430px;
+  margin-inline: auto;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid #e6ebe5;
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 -5px 20px rgba(24,42,30,.045);
+  backdrop-filter: blur(16px);
+}
+#bottom-nav .nav-item {
+  min-height: 49px;
+  gap: 2px;
+  color: #7b857d;
+  font-size: 9px;
+  font-weight: 650;
+}
+#bottom-nav .nav-icon {
+  width: 29px;
+  height: 28px;
+  border-radius: 9px;
+}
+#bottom-nav .nav-item.active { color: var(--fitos-green); }
+#bottom-nav .nav-item.active .nav-icon { background: var(--fitos-mint); }
+@media (min-width: 760px) {
+  #main-app { min-height: 100vh; }
+  #main-app > .screen:not(#screen-today) { width: 100%; max-width: 430px; margin-inline: auto; }
+}
+@media (max-width: 600px) {
+  #main-app > .screen { padding: 22px 18px 24px; }
+  #main-app .screen .header { margin-bottom: 16px; }
+  #screen-diet .food-tracker { padding: 14px; }
+  #bottom-nav .nav-item { min-height: 48px; }
+}
