@@ -197,6 +197,33 @@ equipmentRouter.post("/feedback", requireAuth, async (req: AuthedRequest, res) =
     feedback.verdict, feedback.confidence, feedback.imageBase64, nowIso()
   );
   recordEquipmentFeedback(feedback.verdict);
+  if (feedback.verdict === "CONFIRMED") {
+    let equipment = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, feedback.predictedLabel);
+    if (!equipment) {
+      const equipmentId = uuidv4();
+      await db.run(`INSERT INTO Equipment (id, name, isCustom) VALUES (?, ?, 1)`, equipmentId, feedback.predictedLabel);
+      equipment = { id: equipmentId };
+    }
+    await db.run(
+      `INSERT INTO UserEquipment (id, userId, equipmentId) VALUES (?, ?, ?) ON CONFLICT(userId, equipmentId) DO NOTHING`,
+      uuidv4(), req.userId!, equipment.id
+    );
+    const currentProfile = await db.get<{ id: string; equipmentJson: string; tourCompleted: number; lastScanAt: string | null; createdAt: string }>(
+      `SELECT id, equipmentJson, tourCompleted, lastScanAt, createdAt FROM GymEquipmentProfile WHERE userId = ?`, req.userId!
+    );
+    let currentNames: string[] = [];
+    try { currentNames = JSON.parse(currentProfile?.equipmentJson || "[]"); } catch { currentNames = []; }
+    if (!currentNames.includes(feedback.predictedLabel)) currentNames.push(feedback.predictedLabel);
+    const timestamp = nowIso();
+    const profileId = currentProfile?.id ?? uuidv4();
+    await db.run(
+      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, updatedAt=excluded.updatedAt`,
+      profileId, req.userId!, JSON.stringify(currentNames), currentProfile?.tourCompleted ?? 0,
+      currentProfile?.lastScanAt ?? null, currentProfile?.createdAt ?? timestamp, timestamp
+    );
+  }
   return res.status(201).json({ saved: true, feedbackId: id, verdict: feedback.verdict });
 });
 
