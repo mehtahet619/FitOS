@@ -5,6 +5,7 @@ import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { ensureCanonicalEquipmentCatalog } from "./catalog";
+import { recordEquipmentFeedback, recordEquipmentInference } from "../../vision/equipmentMetrics";
 
 export const equipmentRouter = Router();
 
@@ -107,8 +108,13 @@ equipmentRouter.post("/gym-tour", requireAuth, async (req: AuthedRequest, res) =
     );
     await db.run(`DELETE FROM UserEquipment WHERE userId = ?`, userId);
     for (const name of names) {
-      const equipment = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, name);
-      if (equipment) await db.run(
+      let equipment = await db.get<{ id: string }>(`SELECT id FROM Equipment WHERE name = ?`, name);
+      if (!equipment) {
+        const equipmentId = uuidv4();
+        await db.run(`INSERT INTO Equipment (id, name, isCustom) VALUES (?, ?, 1)`, equipmentId, name);
+        equipment = { id: equipmentId };
+      }
+      await db.run(
         `INSERT INTO UserEquipment (id, userId, equipmentId) VALUES (?, ?, ?) ON CONFLICT(userId, equipmentId) DO NOTHING`,
         uuidv4(), userId, equipment.id
       );
@@ -167,6 +173,33 @@ equipmentRouter.post("/confirm", requireAuth, async (req: AuthedRequest, res) =>
   return res.json({ confirmed: results });
 });
 
+const equipmentFeedbackSchema = z.object({
+  predictedLabel: z.string().trim().min(1).max(120),
+  correctedLabel: z.string().trim().min(1).max(120).optional(),
+  verdict: z.enum(["CONFIRMED", "REJECTED"]),
+  confidence: z.number().min(0).max(1),
+  imageBase64: z.string().min(100).max(2_000_000),
+}).superRefine((value, context) => {
+  if (value.verdict === "REJECTED" && !value.correctedLabel) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Corrected equipment name is required for rejected detections." });
+  }
+});
+
+equipmentRouter.post("/feedback", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = equipmentFeedbackSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid equipment feedback", details: parsed.error.flatten() });
+  const feedback = parsed.data;
+  const id = uuidv4();
+  await db.run(
+    `INSERT INTO GymEquipmentFeedback (id, userId, predictedLabel, correctedLabel, verdict, confidence, imageBase64, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    id, req.userId!, feedback.predictedLabel, feedback.correctedLabel ?? null,
+    feedback.verdict, feedback.confidence, feedback.imageBase64, nowIso()
+  );
+  recordEquipmentFeedback(feedback.verdict);
+  return res.status(201).json({ saved: true, feedbackId: id, verdict: feedback.verdict });
+});
+
 const detectSchema = z.object({
   imageBase64: z.string().min(100), // raw base64, no "data:image/..." prefix
 });
@@ -188,9 +221,12 @@ equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => 
   try {
     result = await provider.detectEquipment(parsed.data.imageBase64);
   } catch (e: any) {
+    recordEquipmentInference({ outcome: "error", latencyMs: Date.now() - started });
     console.error(JSON.stringify({ event: "equipment_detection_error", provider: provider.getProviderName(), latencyMs: Date.now() - started, error: e?.message || String(e) }));
     return res.status(503).json({ error: "EQUIPMENT_DETECTION_FAILED", message: "Equipment detection is temporarily unavailable." });
   }
+
+  recordEquipmentInference({ outcome: "success", latencyMs: result.latencyMs ?? Date.now() - started, rawPredictions: result.rawDetectionCount ?? result.detections.length, acceptedPredictions: result.detections.length });
 
   if (!result.configured) {
     return res.json({
