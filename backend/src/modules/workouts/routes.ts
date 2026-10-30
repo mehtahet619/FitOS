@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { ensureExerciseRows, generateWorkout, musclesForFocus } from "./workoutGenerator";
-import { getAiExerciseFallback, validateUncataloguedExercise } from "./exerciseAiFallback";
+import { exerciseFamilyKey, getAiExerciseFallback, validateUncataloguedExercise, type RecommendedExercise } from "./exerciseAiFallback";
 import { loadExerciseWithLinks } from "../exercises/substitutionEngine";
 import {
   canSwitchWorkoutPlan,
@@ -30,8 +30,6 @@ import {
 } from "./plan";
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
-import { exerciseFamilyKey, type RecommendedExercise } from "./exerciseAiFallback";
-
 function normalizeExerciseValue(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
