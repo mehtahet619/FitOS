@@ -22,6 +22,7 @@ import { logOtpRuntimeDiagnostics } from "./modules/auth/otpRuntimeDiagnostics";
 import { initializeEquipmentVisionProvider } from "./vision/equipmentVisionProvider";
 import { AuthedRequest, readIdentity, requireAuth } from "./common/auth";
 import { db } from "./db/client";
+import { renderEquipmentPrometheusMetrics } from "./vision/equipmentMetrics";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -185,6 +186,13 @@ app.post("/pricing-guesses", async (req: Request, res: Response) => {
     ...(await getPriceGuessSummary(identity?.userId, guestId)),
     authenticated: Boolean(identity?.userId),
   });
+});
+
+// Prometheus scrape endpoint. Keep labels bounded and never expose user/image data.
+app.get("/metrics", (_req, res) => {
+  res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.send(renderEquipmentPrometheusMetrics());
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
