@@ -1425,10 +1425,12 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
       Api.get("/equipment"),
       Api.get("/equipment/user/equipment"),
     ]);
-    equipment = (Array.isArray(catalog) ? catalog : []).filter((item) => item.name !== "No Equipment");
-    selected = new Set((Array.isArray(saved) ? saved : [])
-      .map((item) => item.name)
-      .filter((name) => name !== "No Equipment"));
+    const savedEquipment = Array.isArray(saved) ? saved : [];
+    const savedNames = new Set(savedEquipment.map((item) => item.name).filter((name) => name && name !== "No Equipment"));
+    const catalogItems = (Array.isArray(catalog) ? catalog : []).filter((item) => item.name !== "No Equipment");
+    const catalogNames = new Set(catalogItems.map((item) => item.name));
+    equipment = [...catalogItems, ...savedEquipment.filter((item) => !catalogNames.has(item.name))];
+    selected = savedNames;
   } catch (error) {
     selectionSummary.textContent = "Equipment could not be loaded.";
     feedback.className = "banner banner-error";
@@ -2728,7 +2730,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       </div>
     `;
     const manualGroup = $("gym-manual-equipment");
-    equipmentNames.forEach((name) => {
+    [...new Set([...equipmentNames, ...known])].forEach((name) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `chip ${known.includes(name) ? "active" : ""}`;
@@ -2747,6 +2749,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       button.textContent = "Saving…";
       try {
         await Api.post("/equipment/user/equipment", { equipmentNames: selectedNames });
+        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: new Date().toLocaleDateString("en-CA") });
         const refreshed = await Api.get("/equipment/gym-profile");
         profile = refreshed;
         render();
@@ -2939,8 +2942,9 @@ function renderGymTour(equipment, plan, savedProfile) {
       const button = $("gym-tour-done");
       button.disabled = true;
       try {
-        const saved = await Api.post("/equipment/gym-tour", { completed: true, detections: reliable.map(([equipmentName, item]) => ({ equipmentName, confidence: item.confidence, evidenceFrames: item.frames })) });
-        profile = saved;
+        await Api.post("/equipment/gym-tour", { completed: true, detections: reliable.map(([equipmentName, item]) => ({ equipmentName, confidence: item.confidence, evidenceFrames: item.frames })) });
+        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: new Date().toLocaleDateString("en-CA") });
+        profile = await Api.get("/equipment/gym-profile");
         render();
       } catch (error) {
         workspace.innerHTML = `<div class="banner banner-error">${error.message || "Could not save the gym profile."}</div>`;
