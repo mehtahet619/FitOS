@@ -106,9 +106,9 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
     const nameKey = normalizeExerciseValue(exercise);
     const muscle = targetByKey.get(normalizeExerciseValue(candidate.muscle));
     const machine = equipmentByAlias.get(normalizeExerciseValue(candidate.machine));
-    // Primary muscle must match this workout's target. Secondary muscles may
-    // legitimately fall outside a single-muscle split (e.g. biceps assisting
-    // a Back exercise), so do not reject the entire AI response for that.
+    // Every generated exercise must have a primary muscle from the selected
+    // workout targets. Secondary muscles are anatomical metadata only and
+    // must never become additional exercise targets or workout slots.
     const secondaryMuscles = Array.isArray(candidate.secondaryMuscles)
       ? candidate.secondaryMuscles
         .filter((value): value is string => typeof value === "string")
@@ -126,10 +126,10 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
       machine,
       muscle,
       primaryMuscle: muscle,
-      muscleCategories: [muscle, ...secondaryMuscles],
+      muscleCategories: [muscle],
       timeTakenOneSet: input.timeTakenOneSet || "25-45 sec",
       targetedMuscle: input.targetedMuscle || muscle,
-      targetedMuscles: [muscle, ...secondaryMuscles],
+      targetedMuscles: [muscle],
       secondaryMuscles: [...new Set(secondaryMuscles)],
       instructions: typeof candidate.instructions === "string" ? candidate.instructions.slice(0, 1200) : "",
       sets: Number.isInteger(candidate.sets) ? Math.max(2, Math.min(5, Number(candidate.sets))) : 3,
@@ -141,7 +141,7 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
 
   if (result.length < input.count) throw new Error(`OpenRouter returned only ${result.length} valid of ${input.count} requested exercises.`);
   if (input.targetMuscles.length >= 5) {
-    const covered = new Set(result.flatMap((exercise) => exercise.muscleCategories).map(normalizeExerciseValue));
+    const covered = new Set(result.map((exercise) => exercise.primaryMuscle).map(normalizeExerciseValue));
     const missingTargets = input.targetMuscles.filter((muscle) => !covered.has(normalizeExerciseValue(muscle)));
     if (missingTargets.length) {
       throw new Error(`OpenRouter workout did not cover all full-body targets: ${missingTargets.join(", ")}.`);
@@ -163,9 +163,9 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
       "Return only a JSON object with an exercises array; do not use markdown.",
       "Each item must have exercise, machine, muscle, secondaryMuscles, instructions, sets, repRangeLow, and repRangeHigh fields.",
       "Use only an exact allowedEquipment name or alias for machine; never invent equipment.",
-      "The primary muscle field must be one exact value from targetMuscles. Never change the workout focus.",
-      "Secondary muscles are allowed to be any anatomically valid muscle group, even when they are not in targetMuscles. For example, a Back exercise may list biceps as a secondary muscle. Never reject an otherwise valid exercise for this.",
-      "Distribute primary and secondary muscle coverage across ALL targetMuscles. For Full Body, use compound movements that collectively cover chest, back, quads, hamstrings, glutes, shoulders and core. Include only genuine secondary muscles, not stabilizers.",
+      "Every exercise primary muscle must be one exact value from targetMuscles. Never change the workout focus.",
+      "Secondary muscles are anatomical metadata only. They must NEVER be used as standalone exercise targets, must NEVER increase the exercise count for a muscle group, and must NEVER replace an exercise whose primary muscle is in targetMuscles. For a Back-only workout, every requested exercise must have primary muscle Back, even if biceps is listed as a secondary muscle.",
+      "Distribute PRIMARY exercise targets across ALL targetMuscles. For Full Body, cover chest, back, quads, hamstrings, glutes, shoulders and core with the primary muscle of the exercises. Secondary muscles do not count toward target coverage.",
       "Choose biomechanically sound, distinct movement patterns and avoid duplicate exercises or superficial grip, stance, tempo, or equipment variants.",
       "Prioritize compound movements, then accessories. Match every exercise to the exact equipment the user has available. Bodyweight is allowed.",
       "Provide concise actionable setup and execution instructions, realistic sets (2-4), and sensible rep ranges. Never prescribe an exercise requiring unavailable equipment.",
