@@ -2605,10 +2605,6 @@ async function continueAfterGymAttendance() {
       return;
     }
     const today = getLocalDateKey();
-    if (profile.lastConfirmedDate === today) {
-      navigate("/workout");
-      return;
-    }
     const sameGym = await showGymChoiceModal();
     if (sameGym) {
       await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
