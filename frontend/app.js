@@ -414,8 +414,8 @@ $("auth-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/login", { email, password });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     AuthState.authenticated(data.user);
-    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] login complete; redirecting to homepage");
     navigate("/homepage", true);
+    void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
     banner(bannerEl, "error", e.message || "Something went wrong.");
@@ -447,7 +447,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/homepage", true);
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/homepage", true); void handleGymChoiceAfterLogin();
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
