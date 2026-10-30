@@ -71,6 +71,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
 
   const db: DatabaseLike = {
     async all<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
+      if (sql.includes("SELECT completedAt FROM Workout")) return state.workouts.filter((row) => row.status === "completed" && row.completedAt).map((row) => ({ completedAt: row.completedAt })) as unknown as T[];
       if (sql === "SELECT name FROM Equipment") return state.equipment.map(({ name }) => ({ name })) as unknown as T[];
       if (sql === "SELECT * FROM Equipment ORDER BY name ASC") return [...state.equipment].sort((a, b) => a.name.localeCompare(b.name)) as T[];
       if (sql.includes("SELECT equipmentId FROM UserEquipment")) return state.userEquipment.filter((row) => row.userId === params[0]).map((row) => ({ equipmentId: row.equipmentId })) as unknown as T[];
