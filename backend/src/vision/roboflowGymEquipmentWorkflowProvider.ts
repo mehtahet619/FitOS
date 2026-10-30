@@ -7,7 +7,6 @@
  */
 import type { EquipmentDetection, EquipmentVisionProvider } from "./equipmentVisionProvider";
 import { deduplicateOverlappingDetections } from "./detectionUtils";
-import { db } from "../db/client.js";
 
 const WORKSPACE = "het-mehta";
 const WORKFLOW = "all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic";
@@ -80,7 +79,6 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
           const payload: unknown = await response.json();
           const output = extractWorkflowOutput(payload);
           const predictions = extractPredictions(output);
-          const labelMap = await getLabelMap();
           const thresholdValue = Number.parseFloat(process.env.EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD ?? "0.50");
           const threshold = Number.isFinite(thresholdValue) ? Math.max(0, Math.min(1, thresholdValue)) : 0.5;
           const detections: EquipmentDetection[] = [];
@@ -89,8 +87,10 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
             const rawLabel = stringValue(prediction.class ?? prediction.name ?? prediction.label);
             const confidence = Number(prediction.confidence);
             if (!rawLabel || !Number.isFinite(confidence) || confidence < threshold || confidence > 1) continue;
-            const equipmentName = labelMap[normalize(rawLabel)];
-            if (!equipmentName) continue;
+            // Roboflow is the source of truth for visual labels. Do not
+            // filter predictions through FitOS's equipment catalogue: gym
+            // machines vary by brand/model and may not exist in our database.
+            const equipmentName = rawLabel;
             const values = [prediction.x, prediction.y, prediction.width, prediction.height].map(Number);
             const boundingBox = values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
               ? { x: values[0], y: values[1], width: values[2], height: values[3] }
@@ -104,7 +104,6 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
             provider: this.getProviderName(),
             latencyMs: Date.now() - started,
             rawDetectionCount: predictions.length,
-            promptLabels: Object.keys(labelMap),
           };
         }
       } catch (error) {
@@ -138,67 +137,6 @@ function extractPredictions(output: JsonRecord): Prediction[] {
     return value.predictions.filter(isRecord) as Prediction[];
   }
   throw new Error('Roboflow response did not contain the declared "predictions" output with a predictions array.');
-}
-
-async function getLabelMap(): Promise<Record<string, string>> {
-  // Query existing canonical equipment and curated aliases. Never invent a
-  // database equipment name or expose a model class as an unsupported item.
-  const [equipment, aliases] = await Promise.all([
-    db.all<{ name: string }>(`SELECT name FROM Equipment WHERE name != 'No Equipment'`),
-    db.all<{ alias: string; name: string }>(
-      `SELECT ea.alias, e.name FROM EquipmentAlias ea JOIN Equipment e ON e.id = ea.equipmentId`
-    ).catch(() => []),
-  ]);
-  const canonical = new Map(equipment.map((item) => [normalize(item.name), item.name] as const));
-  const map: Record<string, string> = {};
-  for (const item of equipment) map[normalize(item.name)] = item.name;
-
-  // Roboflow's trained class names are not guaranteed to match the app's
-  // plural/canonical equipment labels. Keep these aliases here as well as
-  // database-managed aliases so valid detections are not silently discarded.
-  const builtInAliases: Record<string, string> = {
-    "dumbbell": "Dumbbells",
-    "free weight dumbbell": "Dumbbells",
-    "pair of dumbbells": "Dumbbells",
-    "barbells": "Barbell",
-    "pull up bar": "Pull-up Bar",
-    "pullup bar": "Pull-up Bar",
-    "lat pull down": "Lat Pulldown",
-    "lat pulldown machine": "Lat Pulldown",
-    "lat pull down machine": "Lat Pulldown",
-    "cable crossover": "Cable Machine",
-    "cable station": "Cable Machine",
-    "functional trainer": "Cable Machine",
-    "chest press machine": "Chest Press",
-    "machine chest press": "Chest Press",
-    "pec deck machine": "Pec Deck",
-    "leg press machine": "Leg Press",
-    "leg extension machine": "Leg Extension",
-    "leg curl machine": "Leg Curl",
-    "smith machine": "Smith Machine",
-    "kettlebell": "Kettlebells",
-    "exercise ball": "Exercise Ball",
-    "stability ball": "Exercise Ball",
-    "ez curl bar": "EZ Curl Bar",
-    "curl bar": "EZ Curl Bar",
-    "resistance band": "Resistance Bands",
-    "resistance bands": "Resistance Bands",
-    "medicine ball": "Medicine Ball",
-    "treadmill machine": "Treadmill",
-    "stationary bike": "Exercise Bike",
-    "spin bike": "Exercise Bike",
-  };
-  for (const [alias, name] of Object.entries(builtInAliases)) {
-    const canonicalName = canonical.get(normalize(name));
-    if (canonicalName) map[normalize(alias)] = canonicalName;
-  }
-
-  // Curated database aliases take precedence over generic built-in aliases.
-  for (const alias of aliases) {
-    const canonicalName = canonical.get(normalize(alias.name));
-    if (canonicalName) map[normalize(alias.alias)] = canonicalName;
-  }
-  return map;
 }
 
 function normalize(value: string): string {
