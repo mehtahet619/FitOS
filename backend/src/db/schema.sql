@@ -304,6 +304,21 @@ CREATE TABLE IF NOT EXISTS EquipmentDetection (
 CREATE INDEX IF NOT EXISTS idx_equipmentdetection_user ON EquipmentDetection(userId);
 CREATE INDEX IF NOT EXISTS idx_equipmentdetection_session ON EquipmentDetection(sessionId);
 
+-- Human-reviewed gym equipment detections. These rows are the source dataset
+-- for future Roboflow export/retraining; only user-confirmed corrections are trusted.
+CREATE TABLE IF NOT EXISTS GymEquipmentFeedback (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+  predictedLabel TEXT NOT NULL,
+  correctedLabel TEXT,
+  verdict TEXT NOT NULL CHECK(verdict IN ('CONFIRMED', 'REJECTED')),
+  confidence REAL NOT NULL,
+  imageBase64 TEXT NOT NULL,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gym_equipment_feedback_user ON GymEquipmentFeedback(userId, createdAt);
+CREATE INDEX IF NOT EXISTS idx_gym_equipment_feedback_verdict ON GymEquipmentFeedback(verdict, createdAt);
+
 CREATE TABLE IF NOT EXISTS NutritionProfile (
   id TEXT PRIMARY KEY,
   userId TEXT UNIQUE NOT NULL REFERENCES User(id),
