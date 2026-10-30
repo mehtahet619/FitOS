@@ -89,7 +89,7 @@ export function exerciseFamilyKey(exerciseName: string): string {
     .replace(/\bpull up\b/g, "pullup")
     .replace(/\bchest fly\b/g, "fly")
     // Pendlay rows are a strict dead-stop barbell variation of bent-over rows.
-    .replace(/\bpendlay row\b/g, "bent over row");
+    .replace(/\bpendlay row\b/g, "row");
   const familyWords = normalized.split(" ").filter((word) => word && !familyEquipmentWords.has(word));
   return familyWords.join(" ").replace(/\s+/g, " ").trim() || normalizeExerciseValue(exerciseName);
 }
