@@ -325,11 +325,9 @@ function showScreen(id) {
       return;
     }
     AuthState.authenticated(data.user);
-    await routeCurrent();
+    if (["/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true);
+    else await routeCurrent();
     await handleGymChoiceAfterLogin();
-    return;
-    if (location.hostname === "localhost" || location.hostname === "127.0.0.1") console.info("[AUTH] session restored; redirecting to homepage");
-    if (["/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true); else await routeCurrent();
   } catch (e) {
       if (!isLandingRoute) await keepIntroVisible();
     if (generation !== authBootGeneration) return;
