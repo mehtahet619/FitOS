@@ -1863,3 +1863,10 @@ body.gym-choice-open { overflow: hidden; }
   #screen-diet .food-tracker { padding: 14px; }
   #bottom-nav .nav-item { min-height: 48px; }
 }
+
+
+/* Use the full available width on touch devices, including browsers with page zoom enabled. */
+@media (pointer: coarse) {
+  #main-app { width: 100%; max-width: none; }
+  #bottom-nav { width: 100%; max-width: none; }
+}
