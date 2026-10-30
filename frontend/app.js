@@ -1460,9 +1460,11 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
     buildButton.disabled = true;
     return;
   }
-  if (!gymProfile?.gymTourCompleted) {
+  if (!gymProfile?.gymTourCompleted || gymProfile.lastConfirmedDate !== getLocalDateKey()) {
     feedback.className = "banner banner-info";
-    feedback.textContent = "Set up your gym equipment once in the Scan tab before generating a workout.";
+    feedback.textContent = gymProfile?.gymTourCompleted
+      ? "Confirm or update today's gym equipment in the Scan tab before generating a workout."
+      : "Set up your gym equipment once in the Scan tab before generating a workout.";
     buildButton.textContent = "Go to Gym Scan";
     buildButton.addEventListener("click", () => navigate("/equipment"));
     return;
