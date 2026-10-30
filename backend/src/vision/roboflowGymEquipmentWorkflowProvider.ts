@@ -152,10 +152,53 @@ async function getLabelMap(): Promise<Record<string, string>> {
   const canonical = new Map(equipment.map((item) => [normalize(item.name), item.name] as const));
   const map: Record<string, string> = {};
   for (const item of equipment) map[normalize(item.name)] = item.name;
-  for (const alias of aliases) map[normalize(alias.alias)] = alias.name;
-  return Object.fromEntries(
-    Object.entries(map).filter(([, name]) => canonical.has(normalize(name)))
-  );
+
+  // Roboflow's trained class names are not guaranteed to match the app's
+  // plural/canonical equipment labels. Keep these aliases here as well as
+  // database-managed aliases so valid detections are not silently discarded.
+  const builtInAliases: Record<string, string> = {
+    "dumbbell": "Dumbbells",
+    "free weight dumbbell": "Dumbbells",
+    "pair of dumbbells": "Dumbbells",
+    "barbells": "Barbell",
+    "pull up bar": "Pull-up Bar",
+    "pullup bar": "Pull-up Bar",
+    "lat pull down": "Lat Pulldown",
+    "lat pulldown machine": "Lat Pulldown",
+    "lat pull down machine": "Lat Pulldown",
+    "cable crossover": "Cable Machine",
+    "cable station": "Cable Machine",
+    "functional trainer": "Cable Machine",
+    "chest press machine": "Chest Press",
+    "machine chest press": "Chest Press",
+    "pec deck machine": "Pec Deck",
+    "leg press machine": "Leg Press",
+    "leg extension machine": "Leg Extension",
+    "leg curl machine": "Leg Curl",
+    "smith machine": "Smith Machine",
+    "kettlebell": "Kettlebells",
+    "exercise ball": "Exercise Ball",
+    "stability ball": "Exercise Ball",
+    "ez curl bar": "EZ Curl Bar",
+    "curl bar": "EZ Curl Bar",
+    "resistance band": "Resistance Bands",
+    "resistance bands": "Resistance Bands",
+    "medicine ball": "Medicine Ball",
+    "treadmill machine": "Treadmill",
+    "stationary bike": "Exercise Bike",
+    "spin bike": "Exercise Bike",
+  };
+  for (const [alias, name] of Object.entries(builtInAliases)) {
+    const canonicalName = canonical.get(normalize(name));
+    if (canonicalName) map[normalize(alias)] = canonicalName;
+  }
+
+  // Curated database aliases take precedence over generic built-in aliases.
+  for (const alias of aliases) {
+    const canonicalName = canonical.get(normalize(alias.name));
+    if (canonicalName) map[normalize(alias.alias)] = canonicalName;
+  }
+  return map;
 }
 
 function normalize(value: string): string {
