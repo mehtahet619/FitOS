@@ -1182,12 +1182,48 @@ function renderTodayError(el, message) {
 }
 
 /* ================= WORKOUT ================= */
+const WORKOUT_MISSING_AFTER_MS = 22 * 60 * 60 * 1000;
+
+function shouldShowWorkoutMissing(plan, workoutHistory, gymStatus, now = Date.now()) {
+  // A completed workout today always takes precedence over the missing state.
+  if (plan?.dailyWorkoutLocked || gymStatus?.checkedIn !== false) return false;
+
+  // Do not show a warning to a new user who has never completed a workout.
+  const completedWorkouts = Array.isArray(workoutHistory)
+    ? workoutHistory.filter((item) => item?.status === "completed" && item?.completedAt)
+    : [];
+  const latestCompletion = completedWorkouts
+    .map((item) => new Date(item.completedAt).getTime())
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp <= now)
+    .sort((a, b) => b - a)[0];
+
+  if (!latestCompletion) return false;
+  return now - latestCompletion >= WORKOUT_MISSING_AFTER_MS;
+}
+
+function renderWorkoutMissingNotice() {
+  return `
+    <section class="card workout-missing-card" role="status" aria-live="polite">
+      <div class="card-label">Today's workout is missing</div>
+      <h2>Time to check in</h2>
+      <p class="card-sub">It's been about 22 hours since your last completed workout, and you haven't marked today's gym attendance yet. Scan your gym QR code or mark attendance to continue.</p>
+    </section>
+  `;
+}
+
 async function loadWorkout() {
   renderWorkoutScanButton();
   const el = $("workout-content");
   el.innerHTML = `<div class="empty-state">Loading…</div>`;
   try {
-    const plan = await Api.get("/workouts/plan");
+    const [plan, historyResponse, gymStatus] = await Promise.all([
+      Api.get("/workouts/plan"),
+      Api.get("/workouts/history"),
+      Api.get("/gym/today"),
+    ]);
+    const workoutHistory = Array.isArray(historyResponse)
+      ? historyResponse
+      : historyResponse?.history || [];
     let workout;
     try {
       workout = await Api.get("/workouts/today");
@@ -1195,14 +1231,19 @@ async function loadWorkout() {
       if (error?.status !== 404) throw error;
       workout = null;
     }
+
     if (workout) {
       if (workout.needsRegeneration && workout.canRegenerate) {
         renderLegacyWorkoutRefresh(workout, plan);
-        return;
+      } else {
+        renderWorkout(workout, plan);
       }
-      renderWorkout(workout, plan);
     } else {
       await renderGenerateWorkoutPrompt(plan);
+    }
+
+    if (shouldShowWorkoutMissing(plan, workoutHistory, gymStatus)) {
+      el.insertAdjacentHTML("afterbegin", renderWorkoutMissingNotice());
     }
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
