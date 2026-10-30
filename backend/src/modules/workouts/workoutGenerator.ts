@@ -4,7 +4,7 @@ import { canonicalMuscleKey } from "./muscleTaxonomy";
 import { exerciseFamilyKey, getAiExerciseFallback, type ExerciseFallbackEquipment, type RecommendedExercise } from "./exerciseAiFallback";
 
 function normalizeExerciseValue(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
 export interface GeneratedExercise {
@@ -25,6 +25,14 @@ export interface GeneratedExercise {
 }
 
 export type EquipmentMode = "USER_EQUIPMENT" | "SCANNED" | "FULL_GYM";
+
+function exerciseCountForDuration(minutes: number): number {
+  if (minutes <= 45) return 2;
+  if (minutes <= 70) return 3;
+  if (minutes <= 110) return 4;
+  if (minutes <= 180) return 5;
+  return 6;
+}
 
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
   Push: ["chest", "shoulders", "triceps"],
@@ -152,11 +160,11 @@ export async function ensureExerciseRows(
       equipmentId = existingMachine?.id ?? stableAiId("ai-equipment", exercise.machine);
       if (!existingMachine) {
         await database.run(
-          `INSERT INTO Equipment (id,name,normalizedName,category,isCustom) VALUES (?,?,?, 'csv', 0) ON CONFLICT(name) DO NOTHING`,
+          `INSERT INTO Equipment (id,name,normalizedName,category,isCustom) VALUES (?,?,?, 'ai-generated', 0) ON CONFLICT(name) DO NOTHING`,
           equipmentId, exercise.machine, machineKey
         );
         const persistedMachine = await database.get<{ id: string }>(`SELECT id FROM Equipment WHERE lower(name)=lower(?)`, exercise.machine);
-        if (!persistedMachine) throw new Error(`Could not persist CSV equipment value "${exercise.machine}".`);
+        if (!persistedMachine) throw new Error(`Could not persist AI equipment value "${exercise.machine}".`);
         equipmentId = persistedMachine.id;
         equipmentRows.push({ id: equipmentId, name: exercise.machine });
       }
@@ -174,7 +182,7 @@ export async function ensureExerciseRows(
         "ai_generated", "beginner", exercise.sets ?? 3, exercise.repRangeLow ?? 8, exercise.repRangeHigh ?? 12, exercise.instructions ?? "", normalizeExerciseValue(exercise.machine) === "bodyweight" ? 0 : 1, createdAt
       );
       const persistedExercise = await database.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name)=lower(?)`, exercise.exercise);
-      if (!persistedExercise) throw new Error(`Could not persist CSV exercise value "${exercise.exercise}".`);
+      if (!persistedExercise) throw new Error(`Could not persist AI exercise value "${exercise.exercise}".`);
       exerciseRecord = {
         id: persistedExercise.id,
         name: exercise.exercise,
