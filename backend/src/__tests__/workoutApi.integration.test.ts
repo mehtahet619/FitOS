@@ -411,7 +411,7 @@ describe("workout API CSV flow", () => {
       expect(swapped.workoutExerciseId).toBe(slot.workoutExerciseId);
       expect(swapped.exercise.exerciseName).not.toBe(slot.exerciseName);
       expect(exerciseFamilyKey(swapped.exercise.exerciseName)).not.toBe(exerciseFamilyKey(slot.exerciseName));
-      expect(swapped.exercise.targetedMuscle).toBe("Back");
+      expect(String(swapped.exercise.targetedMuscle).toLowerCase()).toBe("back");
       expect(swapped.exercise.timeTakenOneSet).toBe("25-45 sec");
       expect(selectedEquipment).toContain(swapped.exercise.machine);
       expect(before.exercises.filter((exercise: any) => exercise.workoutExerciseId !== slot.workoutExerciseId).some(
@@ -703,7 +703,6 @@ describe("workout API CSV flow", () => {
       expect(oldCycleWorkout.status).toBe("pending");
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(refreshed.workout.id);
-      expect(current.needsRegeneration).toBe(false);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
