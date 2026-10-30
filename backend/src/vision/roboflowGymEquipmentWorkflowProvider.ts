@@ -57,9 +57,12 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
           },
+          // Roboflow's hosted Workflows REST API expects api_key in the
+          // JSON request body. A Bearer Authorization header is not the
+          // documented authentication contract for this endpoint.
           body: JSON.stringify({
+            api_key: apiKey,
             inputs: {
               image: { type: "base64", value: imageBase64 },
             },
