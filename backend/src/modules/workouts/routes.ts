@@ -871,7 +871,7 @@ function resolveExerciseByName<T extends { id?: string; name: string }>(name: st
   const equivalent = exercises.filter((exercise) => normalizeExerciseLookupName(exercise.name) === lookupKey);
   if (equivalent.length === 1) return equivalent[0];
   if (equivalent.length > 1) {
-    return equivalent.find((exercise) => !(exercise.id ?? "").startsWith("csv-exercise-"));
+    return equivalent.find((exercise) => !(exercise.id ?? "").startsWith("ai-exercise-"));
   }
   return undefined;
 }
