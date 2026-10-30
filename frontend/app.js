@@ -2737,19 +2737,73 @@ function renderGymTour(equipment, plan, savedProfile) {
 
   const stopStream = () => {
     running = false;
-    if (frameHandle) cancelAnimationFrame(frameHandle);
+    if (frameHandle) clearTimeout(frameHandle);
     if (stream) stream.getTracks().forEach((track) => track.stop());
     stream = null;
   };
 
   const renderEvidence = (workspace, status) => {
-    const rows = [...evidence.entries()].sort((a, b) => b[1].confidence - a[1].confidence)
-      .map(([name, item]) => `<div class="exercise-row"><div><strong>${name}</strong><div class="exercise-meta">${Math.round(item.confidence * 100)}% confidence · ${item.frames} frames</div></div><span class="pill">${item.frames >= 2 ? "Reliable" : "Checking"}</span></div>`).join("");
-    workspace.querySelector("#gym-tour-detections").innerHTML = rows || `<div class="empty-state">Move around the gym to collect detections.</div>`;
+    const escapeLabel = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
+    const entries = [...evidence.entries()].sort((a, b) => b[1].confidence - a[1].confidence);
+    const rows = entries.map(([name, item]) => {
+      const label = escapeLabel(name);
+      const state = item.status === "CONFIRMED"
+        ? '<span class="pill" style="background:#d1fae5;color:#065f46;">Added to gym</span>'
+        : item.status === "REJECTED"
+          ? `<span class="pill" style="background:#fee2e2;color:#991b1b;">Corrected: ${escapeLabel(item.correctedLabel || "Rejected")}</span>`
+          : `<div class="btn-row" style="gap:8px;margin-top:8px;">
+              <button class="btn btn-mint gym-equipment-confirm" data-equipment="${label}" type="button" aria-label="Confirm ${label}">✓ Correct</button>
+              <button class="btn btn-outline gym-equipment-reject" data-equipment="${label}" type="button" aria-label="Reject ${label}">✕ Wrong</button>
+            </div>`;
+      return `<div class="exercise-row" style="align-items:flex-start;"><div style="flex:1;min-width:0;"><strong>${label}</strong><div class="exercise-meta">${Math.round(item.confidence * 100)}% confidence · ${item.frames} frames</div>${state}</div></div>`;
+    }).join("");
+    const visibleCount = entries.filter(([, item]) => item.status !== "REJECTED").length;
+    const confirmedCount = entries.filter(([, item]) => item.status === "CONFIRMED").length;
+    workspace.querySelector("#gym-tour-detections").innerHTML = rows || '<div class="empty-state">Move the camera slowly across the gym to collect detections.</div>';
     workspace.querySelector("#gym-tour-count").textContent = status.startsWith("Model not configured")
       ? "Model not configured"
-      : `${evidence.size} equipment types detected`;
+      : `${visibleCount} detections · ${confirmedCount} confirmed`;
     workspace.querySelector("#gym-tour-status").textContent = status;
+
+    workspace.querySelectorAll(".gym-equipment-confirm").forEach((button) => button.addEventListener("click", async () => {
+      const name = button.dataset.equipment;
+      const item = evidence.get(name);
+      if (!item || item.status) return;
+      button.disabled = true;
+      try {
+        await Api.post("/equipment/feedback", {
+          predictedLabel: name, verdict: "CONFIRMED", confidence: item.confidence,
+          imageBase64: item.imageBase64
+        });
+        item.status = "CONFIRMED";
+        renderEvidence(workspace, "Equipment confirmed and added to this gym.");
+      } catch (error) {
+        button.disabled = false;
+        renderEvidence(workspace, `Could not save confirmation: ${error.message || "try again"}`);
+      }
+    }));
+    workspace.querySelectorAll(".gym-equipment-reject").forEach((button) => button.addEventListener("click", async () => {
+      const name = button.dataset.equipment;
+      const item = evidence.get(name);
+      if (!item || item.status) return;
+      const correctedLabel = window.prompt(`FitOS detected "${name}". What equipment is this actually?`);
+      if (!correctedLabel?.trim()) return;
+      button.disabled = true;
+      try {
+        await Api.post("/equipment/feedback", {
+          predictedLabel: name, correctedLabel: correctedLabel.trim(), verdict: "REJECTED",
+          confidence: item.confidence, imageBase64: item.imageBase64
+        });
+        item.status = "REJECTED";
+        item.correctedLabel = correctedLabel.trim();
+        renderEvidence(workspace, "Correction saved for the FitOS training dataset.");
+      } catch (error) {
+        button.disabled = false;
+        renderEvidence(workspace, `Could not save correction: ${error.message || "try again"}`);
+      }
+    }));
   };
 
   const startTour = async () => {
@@ -2780,30 +2834,38 @@ function renderGymTour(equipment, plan, savedProfile) {
         if (!paused && !detectionInFlight && video.readyState === video.HAVE_ENOUGH_DATA) {
           detectionInFlight = true;
           const canvas = document.createElement("canvas");
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          canvas.getContext("2d").drawImage(video, 0, 0);
+          const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+          canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+          canvas.getContext("2d", { alpha: false }).drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameBase64 = canvas.toDataURL("image/jpeg", 0.62).split(",")[1];
           try {
-            const result = await Api.post("/equipment/detect", { imageBase64: canvas.toDataURL("image/jpeg", 0.8).split(",")[1] });
+            const result = await Api.post("/equipment/detect", { imageBase64: frameBase64 });
             if (result.error === "MODEL_NOT_CONFIGURED") {
               renderEvidence(workspace, "Model not configured. Add a trained local YOLO model to the backend.");
               stopStream();
               return;
             }
             for (const detection of result.detections || []) {
-              const current = evidence.get(detection.equipmentName) || { confidence: 0, frames: 0 };
+              const name = String(detection.equipmentName || "").trim();
+              if (!name) continue;
+              const current = evidence.get(name) || { confidence: 0, frames: 0, status: null, imageBase64: frameBase64 };
+              if (current.status) continue;
               current.frames += 1;
-              current.confidence = Math.max(current.confidence, Number(detection.confidence) || 0);
-              evidence.set(detection.equipmentName, current);
+              if ((Number(detection.confidence) || 0) >= current.confidence) {
+                current.confidence = Number(detection.confidence) || 0;
+                current.imageBase64 = frameBase64;
+              }
+              evidence.set(name, current);
             }
-            renderEvidence(workspace, "Recording and detecting equipment…");
+            renderEvidence(workspace, `Roboflow responded in ${result.latencyMs ?? "?"} ms · review each result`);
           } catch (error) {
             renderEvidence(workspace, `Detection paused: ${error.message || "try another angle"}`);
           } finally {
             detectionInFlight = false;
           }
         }
-        frameHandle = requestAnimationFrame(detectFrame);
+        if (running) frameHandle = window.setTimeout(detectFrame, 900);
       };
       renderEvidence(workspace, "Recording and detecting equipment…");
       detectFrame();
@@ -2814,11 +2876,11 @@ function renderGymTour(equipment, plan, savedProfile) {
 
   const finishTour = async (workspace) => {
     stopStream();
-    const reliable = [...evidence.entries()].filter(([, item]) => item.frames >= 2 && item.confidence >= 0);
+    const reliable = [...evidence.entries()].filter(([, item]) => item.status === "CONFIRMED");
     workspace.innerHTML = `
       <div class="card">
         <div class="card-label">Gym tour analyzed</div>
-        <p class="card-sub">${reliable.length} equipment types have sufficient evidence.</p>
+        <p class="card-sub">${reliable.length} equipment types were explicitly confirmed by you. Rejected or unreviewed predictions will not be added.</p>
         <div class="card-sub" style="margin:12px 0;">Are you done recording your whole gym?</div>
         <div class="btn-row"><button class="btn btn-mint" id="gym-tour-done">Yes</button><button class="btn btn-outline" id="gym-tour-continue">No, continue recording</button></div>
         <div class="chip-group" style="margin-top:14px;">${reliable.map(([name]) => `<span class="pill">${name}</span>`).join("") || "No reliable equipment yet."}</div>
