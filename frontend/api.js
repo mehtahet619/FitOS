@@ -99,7 +99,7 @@ const Api = (() => {
     };
     const timeoutMs = Number.isFinite(opts.timeoutMs)
       ? Math.max(1000, opts.timeoutMs)
-      : isSessionCheck ? 7000 : 10000;
+      : isSessionCheck ? 7000 : path === "/equipment/detect" ? 12000 : 10000;
     let { response, text } = await fetchResponse(path, requestOptions, timeoutMs);
 
     // /auth/me intentionally reports an expired access cookie as an
