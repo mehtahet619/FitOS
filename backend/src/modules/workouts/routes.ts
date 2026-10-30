@@ -30,9 +30,14 @@ import {
 } from "./plan";
 import type { WorkoutUnit } from "./plan";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
-import { normalizeExerciseLookupName, normalizeExerciseValue } from "./exerciseCsvRepository";
-import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
-import type { RecommendedExercise } from "./exerciseRecommendation";
+import { exerciseFamilyKey, type RecommendedExercise } from "./exerciseAiFallback";
+
+function normalizeExerciseValue(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+}
+function normalizeExerciseLookupName(value: string): string {
+  return normalizeExerciseValue(value).replace(/s$/, "");
+}
 import { primaryMuscleMatchesTarget } from "./muscleTaxonomy";
 import { refreshProgressForCompletedWorkout } from "../grow-impact/service";
 import { exerciseDemoEmbedUrl } from "../exercises/exerciseMedia";
@@ -1005,7 +1010,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     base.primaryMuscle, nextAlternative.machine, workoutExerciseId
   );
   const swappedAt = nowIso();
-  for (const [familyKey, exerciseName] of [[previousFamilyKey, exerciseRow.sourceExerciseName || base.name], [nextFamilyKey, csvExercise.exercise]]) {
+  for (const [familyKey, exerciseName] of [[previousFamilyKey, exerciseRow.sourceExerciseName || base.name], [nextFamilyKey, nextAlternative.exercise]]) {
     await db.run(
       `INSERT INTO WorkoutExerciseSwapHistory (workoutExerciseId,familyKey,exerciseName,createdAt) VALUES (?,?,?,?) ON CONFLICT(workoutExerciseId,familyKey) DO NOTHING`,
       workoutExerciseId, familyKey, exerciseName, swappedAt,
@@ -1017,17 +1022,17 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     replaced: { from: base.name, to: nextAlternative.exercise },
     exercise: {
       exerciseId: persistedSubstitute.id,
-      exerciseName: csvExercise.exercise,
+      exerciseName: nextAlternative.exercise,
       primaryMuscle: base.primaryMuscle,
-      muscle: csvExercise.muscle,
-      targetedMuscle: csvExercise.targetedMuscle,
-      timeTakenOneSet: csvExercise.timeTakenOneSet,
+      muscle: nextAlternative.muscle,
+      targetedMuscle: nextAlternative.targetedMuscle,
+      timeTakenOneSet: nextAlternative.timeTakenOneSet,
       machine: nextAlternative.machine,
       instructions: persistedSubstitute.instructions,
       targetSets: exerciseRow.targetSets,
       repRangeLow: exerciseRow.repRangeLow,
       repRangeHigh: exerciseRow.repRangeHigh,
-      equipmentRequired: [csvExercise.machine],
+      equipmentRequired: [nextAlternative.machine],
       equipmentName: csvExercise.machine,
       requiresEquipment: normalizeExerciseValue(csvExercise.machine) !== "bodyweight",
       status: "replaced",
@@ -1281,44 +1286,21 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     ...equipmentAliases.filter((row) => availableIds.has(row.equipmentId)).map((row) => row.alias),
     "Bodyweight",
   ])];
-  let recommendations = otherSlots.length
-    ? exerciseRecommendationService.getRecommendedExercises({
+  const recommendations = otherSlots.length
+    ? await getAiExerciseFallback({
       targetMuscles: coverageTargets,
       sessionDurationMinutes: workout.durationMin,
-      requestedCount: otherSlots.length,
-      availableEquipment: recommendationEquipment,
-      equipmentMode: fullGym ? "FULL_GYM" : workout.equipmentMode === "SCANNED" ? "SCANNED" : "USER_EQUIPMENT",
-      // Recalculate against the replacement's movement family. Existing
-      // suggestions remain eligible and are kept only if the new selection
-      // still ranks them for this workout's targets and equipment.
-      excludedExerciseNames: [canonicalExerciseName],
-      excludedExerciseFamilyKeys: [exerciseFamilyKey(canonicalExerciseName)],
-    }).exercises
+      count: otherSlots.length,
+      equipment: (fullGym
+        ? allEquipment.filter((row) => normalizeExerciseValue(row.name) !== "no equipment")
+        : allEquipment.filter((row) => availableIds.has(row.id))).map((row) => ({
+          name: row.name,
+          aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
+        })).concat([{ name: "Bodyweight", aliases: [] }]),
+      excludedExerciseNames: [canonicalExerciseName, ...otherSlots.map((exercise) => exercise.sourceExerciseName || exerciseById.get(exercise.exerciseId)?.name || "")],
+      excludedFamilyKeys: [exerciseFamilyKey(canonicalExerciseName), ...otherSlots.map((exercise) => exerciseFamilyKey(exercise.sourceExerciseName || exerciseById.get(exercise.exerciseId)?.name || ""))],
+    })
     : [];
-  if (recommendations.length < otherSlots.length) {
-    const fallbackEquipment = allEquipment
-      .filter((row) => availableIds.has(row.id) && normalizeExerciseValue(row.name) !== "no equipment")
-      .map((row) => ({
-        name: row.name,
-        aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
-      }));
-    if (!fallbackEquipment.some((row) => normalizeExerciseValue(row.name) === "bodyweight")) {
-      fallbackEquipment.push({ name: "Bodyweight", aliases: [] });
-    }
-    const missingCount = otherSlots.length - recommendations.length;
-    const aiRecommendations = await getAiExerciseFallback({
-      targetMuscles: coverageTargets,
-      sessionDurationMinutes: workout.durationMin,
-      count: missingCount,
-      equipment: fallbackEquipment,
-      excludedExerciseNames: [canonicalExerciseName, ...recommendations.map((exercise) => exercise.exercise)],
-      excludedFamilyKeys: [exerciseFamilyKey(canonicalExerciseName), ...recommendations.map((exercise) => exercise.exercise)],
-    });
-    recommendations = [...recommendations, ...aiRecommendations.map((exercise, index) => ({
-      ...exercise,
-      sourceIndex: -1000 - index,
-    }))];
-  }
   if (recommendations.length !== otherSlots.length) {
     return res.status(422).json({
       code: "WORKOUT_REBALANCE_UNAVAILABLE",
