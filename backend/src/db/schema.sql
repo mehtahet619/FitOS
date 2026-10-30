@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS GymEquipmentProfile (
   equipmentJson TEXT NOT NULL DEFAULT '[]',
   tourCompleted INTEGER NOT NULL DEFAULT 0,
   lastScanAt TEXT,
+  lastConfirmedDate TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL
 );
