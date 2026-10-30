@@ -85,7 +85,7 @@ equipmentRouter.get("/gym-profile", requireAuth, async (req: AuthedRequest, res)
   return res.json({ gymTourCompleted: Boolean(profile.tourCompleted), profileId: profile.id, equipment, lastScanAt: profile.lastScanAt, lastConfirmedDate: profile.lastConfirmedDate ?? null });
 });
 
-const sameGymConfirmationSchema = z.object({ confirmedDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/) });
+const sameGymConfirmationSchema = z.object({ confirmedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 equipmentRouter.post("/gym-profile/confirm-same", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = sameGymConfirmationSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "A valid local confirmation date is required." });
