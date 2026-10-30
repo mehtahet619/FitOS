@@ -44,6 +44,24 @@ import { resolveExerciseVideo } from "../exercises/exerciseVideoProvider";
 export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
 const AI_WORKOUT_GENERATOR_VERSION = "openrouter-v1";
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
+function localDateKey(value: string | Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(value));
+}
+async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
+  const rows = await dbConn.all<{ completedAt: string }>(
+    `SELECT completedAt FROM Workout
+     WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
+     ORDER BY completedAt DESC LIMIT 20`,
+    userId
+  );
+  const today = localDateKey();
+  const latest = rows.find((row) => localDateKey(row.completedAt) === today);
+  return { locked: Boolean(latest), completedAt: latest?.completedAt ?? null };
+}
+
 
 function belongsToCurrentPlanStep(workout: any, state: any, planStepIndex: number): boolean {
   if (!workout || !state) return false;
@@ -59,6 +77,7 @@ workoutRouter.get("/plan/structures", async (_req, res) => {
 workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
+  const dailyCompletion = await getDailyWorkoutCompletion(db, userId);
   const log = (label: string) => {
     console.info(`[TRACE] GET /workouts/plan:${label} durationMs=${Date.now() - started}`);
   };
@@ -73,6 +92,8 @@ workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
       return res.json({
         activePlan: null,
         activePlanKey: null,
+        dailyWorkoutLocked: dailyCompletion.locked,
+        dailyWorkoutCompletedAt: dailyCompletion.completedAt,
         cycleId: null,
         cycleStatus: "NOT_STARTED",
         currentIndex: 0,
@@ -115,6 +136,8 @@ workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
 
     log("response ready");
     return res.json({
+      dailyWorkoutLocked: dailyCompletion.locked,
+      dailyWorkoutCompletedAt: dailyCompletion.completedAt,
       activePlan: state
         ? {
             structureKey: state.structureKey,
@@ -427,6 +450,16 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     if ((loggedSetCount?.count ?? 0) > 0 && !isLegacyWorkout) {
       return res.status(409).json({ error: "This workout has logged sets and cannot be regenerated without affecting your history." });
     }
+  }
+
+  const dailyCompletion = await getDailyWorkoutCompletion(db, userId);
+  if (dailyCompletion.locked) {
+    return res.status(429).json({
+      code: "DAILY_WORKOUT_LIMIT_REACHED",
+      error: "You've completed today's workout. Please come back tomorrow. Your next workout is already saved in your plan.",
+      completedAt: dailyCompletion.completedAt,
+      retryAfter: "tomorrow",
+    });
   }
 
   // When rebuilding a pending workout, exclude every movement family from the
