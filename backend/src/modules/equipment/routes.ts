@@ -85,14 +85,20 @@ equipmentRouter.get("/gym-profile", requireAuth, async (req: AuthedRequest, res)
   return res.json({ gymTourCompleted: Boolean(profile.tourCompleted), profileId: profile.id, equipment, lastScanAt: profile.lastScanAt, lastConfirmedDate: profile.lastConfirmedDate ?? null });
 });
 
-const sameGymConfirmationSchema = z.object({ confirmedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+const sameGymConfirmationSchema = z.object({ confirmedDate: z.unknown().optional() });
 equipmentRouter.post("/gym-profile/confirm-same", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = sameGymConfirmationSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "A valid local confirmation date is required." });
-  const profile = await db.get<{ id: string }>(`SELECT id FROM GymEquipmentProfile WHERE userId = ? AND tourCompleted = 1`, req.userId!);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid gym confirmation." });
+  const suppliedDate = typeof parsed.data.confirmedDate === "string" ? parsed.data.confirmedDate.trim() : "";
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/.test(suppliedDate) ? suppliedDate : "";
+  const parsedDate = suppliedDate ? new Date(suppliedDate) : null;
+  const confirmedDate = isoDate || (parsedDate && Number.isFinite(parsedDate.getTime())
+    ? [parsedDate.getFullYear(), String(parsedDate.getMonth() + 1).padStart(2, "0"), String(parsedDate.getDate()).padStart(2, "0")].join("-")
+    : nowIso().slice(0, 10));
+  const profile = await db.get<{ id: string }>(\`SELECT id FROM GymEquipmentProfile WHERE userId = ? AND tourCompleted = 1\`, req.userId!);
   if (!profile) return res.status(404).json({ error: "No completed gym profile exists." });
-  await db.run(`UPDATE GymEquipmentProfile SET lastConfirmedDate = ?, updatedAt = ? WHERE userId = ?`, parsed.data.confirmedDate, nowIso(), req.userId!);
-  return res.json({ confirmed: true, lastConfirmedDate: parsed.data.confirmedDate });
+  await db.run(\`UPDATE GymEquipmentProfile SET lastConfirmedDate = ?, updatedAt = ? WHERE userId = ?\`, confirmedDate, nowIso(), req.userId!);
+  return res.json({ confirmed: true, lastConfirmedDate: confirmedDate });
 });
 
 const gymTourSchema = z.object({
