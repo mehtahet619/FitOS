@@ -86,7 +86,7 @@ equipmentRouter.post("/gym-tour", requireAuth, async (req: AuthedRequest, res) =
   const parsed = gymTourSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid gym tour input" });
   const reliable = parsed.data.detections
-    .filter((d) => d.confidence >= 0.5 && d.evidenceFrames >= 2)
+    .filter((d) => d.confidence >= 0 && d.evidenceFrames >= 2)
     .reduce((map, detection) => {
       const current = map.get(detection.equipmentName);
       if (!current || detection.confidence > current.confidence) map.set(detection.equipmentName, detection);
