@@ -218,7 +218,7 @@ async function routeCurrent() {
     return;
   }
   if (path === "/login" || path === "/register") {
-    if (AuthState.status === "AUTHENTICATED") { navigate("/homepage", true); return; }
+    if (AuthState.status === "AUTHENTICATED") { navigate("/gym", true); return; }
     State.isRegisterMode = path === "/register";
     updateAuthMode(); showScreen("screen-auth"); return;
   }
@@ -481,7 +481,6 @@ $("auth-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/login", { email, password });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     AuthState.authenticated(data.user);
-    navigate("/homepage", true);
     void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
@@ -514,7 +513,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/homepage", true); void handleGymChoiceAfterLogin();
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); void handleGymChoiceAfterLogin();
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
@@ -664,7 +663,7 @@ function enterMainApp() {
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
   $("bottom-nav").style.display = "flex";
-  navigate("/homepage", true);
+  void handleGymChoiceAfterLogin();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
