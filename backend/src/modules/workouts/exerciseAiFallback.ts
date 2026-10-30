@@ -12,6 +12,7 @@ export interface RecommendedExercise {
   timeTakenOneSet: string;
   targetedMuscle: string;
   targetedMuscles: string[];
+  secondaryMuscles?: string[];
   instructions?: string;
   sets?: number;
   repRangeLow?: number;
@@ -104,7 +105,11 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
     const nameKey = normalizeExerciseValue(exercise);
     const muscle = targetByKey.get(normalizeExerciseValue(candidate.muscle));
     const machine = equipmentByAlias.get(normalizeExerciseValue(candidate.machine));
-    if (!exercise || exercise.length > 100 || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)) continue;
+    const secondaryMuscles = Array.isArray(candidate.secondaryMuscles)
+      ? candidate.secondaryMuscles.map((value) => typeof value === "string" ? targetByKey.get(normalizeExerciseValue(value)) : undefined)
+      : [];
+    if (!exercise || exercise.length > 100 || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)
+      || secondaryMuscles.some((value) => !value)) continue;
     const family = exerciseFamilyKey(exercise);
     if (!family || families.has(normalizeExerciseValue(family))) continue;
     names.add(nameKey);
@@ -115,10 +120,11 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
       machine,
       muscle,
       primaryMuscle: muscle,
-      muscleCategories: [muscle],
+      muscleCategories: [muscle, ...(secondaryMuscles as string[])],
       timeTakenOneSet: input.timeTakenOneSet || "25-45 sec",
       targetedMuscle: input.targetedMuscle || muscle,
-      targetedMuscles: [input.targetedMuscle || muscle],
+      targetedMuscles: [muscle, ...(secondaryMuscles as string[])],
+      secondaryMuscles: [...new Set(secondaryMuscles as string[])],
       instructions: typeof candidate.instructions === "string" ? candidate.instructions.slice(0, 1200) : "",
       sets: Number.isInteger(candidate.sets) ? Math.max(2, Math.min(5, Number(candidate.sets))) : 3,
       repRangeLow: Number.isInteger(candidate.repRangeLow) ? Math.max(1, Math.min(30, Number(candidate.repRangeLow))) : 8,
@@ -142,10 +148,10 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     ...(input.timeTakenOneSet ? { requiredOneSetDuration: input.timeTakenOneSet } : {}),
     rules: [
       "Return only a JSON object with an exercises array; do not use markdown.",
-      "Each item must have exercise, machine, muscle, instructions, sets, repRangeLow, and repRangeHigh fields.",
+      "Each item must have exercise, machine, muscle, secondaryMuscles, instructions, sets, repRangeLow, and repRangeHigh fields.",
       "Use only an exact allowedEquipment name or alias for machine; never invent equipment.",
       "Use only one of the exact targetMuscles values for muscle; never change the workout focus.",
-      "Distribute exercises across ALL targetMuscles as evenly as practical; for Full Body, cover lower body, push, pull, shoulders and core rather than clustering on one area.",
+      "Distribute primary and secondary muscle coverage across ALL targetMuscles. For Full Body, use compound movements that collectively cover chest, back, quads, hamstrings, glutes, shoulders and core. Include only genuine secondary muscles, not stabilizers.",
       "Choose biomechanically sound, distinct movement patterns and avoid duplicate exercises or superficial grip, stance, tempo, or equipment variants.",
       "Prioritize compound movements, then accessories. Match every exercise to the exact equipment the user has available. Bodyweight is allowed.",
       "Provide concise actionable setup and execution instructions, realistic sets (2-4), and sensible rep ranges. Never prescribe an exercise requiring unavailable equipment.",
