@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { csvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
+import { generateWorkout } from "../modules/workouts/workoutGenerator.js";
 
 vi.mock("../modules/workouts/exerciseAiFallback", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../modules/workouts/exerciseAiFallback")>();
@@ -77,7 +78,6 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
 describe("OpenRouter workout generation", () => {
   it("keeps an explicitly empty USER_EQUIPMENT selection bodyweight-only", async () => {
     const { db } = memoryDatabase();
-    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const result = await generateWorkout(db, "bodyweight-user", "Chest", 60, {
       lockToMuscles: ["chest"],
       equipmentMode: "USER_EQUIPMENT",
