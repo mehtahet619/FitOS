@@ -398,29 +398,44 @@ function showGymChoiceModal() {
   });
 }
 
+let gymChoiceInProgress = false;
+
 async function handleGymChoiceAfterLogin() {
-  if (AuthState.status !== "AUTHENTICATED" || AuthState.profileComplete !== true) return;
+  if (AuthState.status !== "AUTHENTICATED" || AuthState.profileComplete !== true || gymChoiceInProgress) return;
   const today = getLocalDateKey();
   if (sessionStorage.getItem("gymChoiceHandledDate") === today) return;
+
+  gymChoiceInProgress = true;
   try {
+    // Always land on the Gym tab first. The daily confirmation belongs on this screen,
+    // not on the login page or the previous homepage.
+    navigate("/gym", true);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
     const profile = await Api.get("/equipment/gym-profile");
     if (!profile?.gymTourCompleted) {
       sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/equipment");
+      navigate("/equipment", true);
       return;
     }
-    if (profile.lastConfirmedDate === today) return;
+    if (profile.lastConfirmedDate === today) {
+      sessionStorage.setItem("gymChoiceHandledDate", today);
+      return;
+    }
+
     const sameGym = await showGymChoiceModal();
     if (sameGym) {
       await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
       sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/workout");
+      navigate("/workout", true);
     } else {
       sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/equipment");
+      navigate("/equipment", true);
     }
   } catch (error) {
     console.error("[GymProfile] Could not resolve today's gym choice:", error);
+  } finally {
+    gymChoiceInProgress = false;
   }
 }
 
@@ -660,7 +675,7 @@ document.addEventListener("click", async (event) => {
   const target = event.target.closest("[data-logout]");
   if (!target) return;
   try { await Api.post("/auth/logout", {}); } catch { /* local sign-out still completes */ }
-  AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; AuthState.profileComplete = null; Api.clearTokens(); clearProtectedContent(); navigate("/login", true);
+  AuthState.status = "UNAUTHENTICATED"; AuthState.user = null; AuthState.profileComplete = null; Api.clearTokens(); sessionStorage.removeItem("gymChoiceHandledDate"); clearProtectedContent(); navigate("/login", true);
 });
 
 function switchTab(tab, updateUrl = true) {
