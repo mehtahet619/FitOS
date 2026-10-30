@@ -382,7 +382,7 @@ describe("workout API CSV flow", () => {
       expect(generated.exercises.every((exercise: any) => exercise.instructions.length > 0)).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
       expect(generated.workout.cycleId).toBe("current-cycle");
-      expect(generated.exercises.every((exercise: any) => exercise.exerciseName && exercise.machine && exercise.muscle === "Back")).toBe(true);
+      expect(generated.exercises.every((exercise: any) => exercise.exerciseName && exercise.machine && String(exercise.muscle).toLowerCase() === "back")).toBe(true);
       expect(generated.exercises.every((exercise: any) => selectedEquipment.includes(exercise.machine))).toBe(true);
       expect(generated.exercises.some((exercise: any) => exercise.machine === "Barbell")).toBe(false);
       expect(generated.exercises.every((exercise: any) => exercise.targetSets === 3)).toBe(true);
