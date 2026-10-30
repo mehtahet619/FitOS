@@ -1,9 +1,42 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { validateUncataloguedExercise } from "../modules/workouts/exerciseAiFallback";
+import { getAiExerciseFallback, validateUncataloguedExercise } from "../modules/workouts/exerciseAiFallback";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("OpenRouter workout exercise generation", () => {
+  it("accepts real secondary muscles outside a single-muscle Back target", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
+    vi.stubEnv("OPENROUTER_MODEL", "test/model");
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({
+          exercises: [
+            { exercise: "Chest Supported Row", machine: "Dumbbells", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Support chest on bench and row dumbbells toward hips.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
+            { exercise: "Lat Pulldown", machine: "Cable Machine", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Pull the bar to upper chest with control.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
+            { exercise: "Seated Cable Row", machine: "Cable Machine", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Keep torso stable and pull handle to waist.", sets: 3, repRangeLow: 8, repRangeHigh: 12 }
+          ]
+        }) } }]
+      })
+    })));
+
+    const result = await getAiExerciseFallback({
+      targetMuscles: ["back"],
+      sessionDurationMinutes: 60,
+      count: 3,
+      equipment: [
+        { name: "Dumbbells", aliases: [] },
+        { name: "Cable Machine", aliases: ["Cable"] },
+      ],
+    });
+
+    expect(result).toHaveLength(3);
+    expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
+    expect(result.every((exercise) => exercise.secondaryMuscles?.includes("biceps"))).toBe(true);
+  });
 });
 
 describe("uncatalogued exercise AI validation", () => {
