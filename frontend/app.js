@@ -2687,6 +2687,14 @@ async function loadGymScan() {
   }
 }
 
+function getLocalDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function renderGymTour(equipment, plan, savedProfile) {
   const el = $("gym-scan-content");
   const equipmentNames = equipment.filter((item) => item.name !== "No Equipment").map((item) => item.name);
@@ -2701,7 +2709,7 @@ function renderGymTour(equipment, plan, savedProfile) {
   const render = () => {
     const profileReady = profile?.gymTourCompleted === true;
     const known = Array.isArray(profile?.equipment) ? profile.equipment : [];
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = getLocalDateKey();
     const needsSameGymCheck = profileReady && profile.lastConfirmedDate !== today;
     const escaped = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
     el.innerHTML = `
@@ -2778,7 +2786,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       button.textContent = "Saving…";
       try {
         await Api.post("/equipment/user/equipment", { equipmentNames: selectedNames });
-        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: new Date().toLocaleDateString("en-CA") });
+        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: getLocalDateKey() });
         const refreshed = await Api.get("/equipment/gym-profile");
         profile = refreshed;
         render();
@@ -2825,6 +2833,36 @@ function renderGymTour(equipment, plan, savedProfile) {
     stream = null;
   };
 
+  const markEquipmentSelected = (name) => {
+    if (profile && Array.isArray(profile.equipment) && !profile.equipment.some((item) => String(item).toLowerCase() === name.toLowerCase())) {
+      profile.equipment = [...profile.equipment, name];
+    }
+    const manualGroup = $("gym-manual-equipment");
+    if (manualGroup) {
+      let chip = Array.from(manualGroup.querySelectorAll(".chip")).find((item) => item.textContent.trim().toLowerCase() === name.toLowerCase());
+      if (!chip) {
+        chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.textContent = name;
+        chip.addEventListener("click", () => {
+          const active = chip.classList.toggle("active");
+          chip.setAttribute("aria-pressed", String(active));
+        });
+        manualGroup.appendChild(chip);
+      }
+      chip.classList.add("active");
+      chip.setAttribute("aria-pressed", "true");
+    }
+    const profileChips = el.querySelector(".card .chip-group");
+    if (profileChips && !Array.from(profileChips.querySelectorAll(".pill")).some((item) => item.textContent.trim().toLowerCase() === name.toLowerCase())) {
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.textContent = name;
+      profileChips.appendChild(pill);
+    }
+  };
+
   const renderEvidence = (workspace, status) => {
     const escapeLabel = (value) => String(value).replace(/[&<>"']/g, (character) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -2861,7 +2899,8 @@ function renderGymTour(equipment, plan, savedProfile) {
           imageBase64: item.imageBase64
         });
         item.status = "CONFIRMED";
-        renderEvidence(workspace, "Equipment confirmed and added to this gym.");
+        markEquipmentSelected(name);
+        renderEvidence(workspace, "Equipment confirmed, ticked in your equipment list, and added to this gym.");
       } catch (error) {
         button.disabled = false;
         renderEvidence(workspace, `Could not save confirmation: ${error.message || "try again"}`);
@@ -2972,7 +3011,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       button.disabled = true;
       try {
         await Api.post("/equipment/gym-tour", { completed: true, detections: reliable.map(([equipmentName, item]) => ({ equipmentName, confidence: item.confidence, evidenceFrames: item.frames })) });
-        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: new Date().toLocaleDateString("en-CA") });
+        await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: getLocalDateKey() });
         profile = await Api.get("/equipment/gym-profile");
         render();
       } catch (error) {
