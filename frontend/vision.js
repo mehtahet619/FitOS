@@ -999,7 +999,8 @@ const VisionCoach = {
           "Live crowd estimate · Roboflow people counting",
           Number(result.peopleCount),
           String(result.crowdLevel || "Analyzed"),
-          result.occupancy || "People count is an estimate, not a machine-level availability signal."
+          result.occupancy || "People count is an estimate.",
+          Array.isArray(result.detections) ? result.detections : []
         );
       }
     } catch (error) {
@@ -1010,7 +1011,7 @@ const VisionCoach = {
     }
   },
 
-  renderCrowdState(status, count, level, note = "Machine-level occupancy is not confirmed by people counting.") {
+  renderCrowdState(status, count, level, note = "People count is an estimate.", peopleDetections = []) {
     const statusEl = document.getElementById("crowd-analysis-status");
     const countEl = document.getElementById("crowd-people-count");
     const levelEl = document.getElementById("crowd-level");
@@ -1018,7 +1019,53 @@ const VisionCoach = {
     if (statusEl) statusEl.textContent = status;
     if (countEl) countEl.textContent = Number.isFinite(count) ? String(count) : "—";
     if (levelEl) levelEl.textContent = level;
-    if (resultsEl) resultsEl.textContent = note;
+    if (!resultsEl) return;
+    resultsEl.replaceChildren();
+    const noteEl = document.createElement("p");
+    noteEl.className = "card-sub";
+    noteEl.textContent = note;
+    resultsEl.appendChild(noteEl);
+    const possibleOccupied = this.estimateOccupiedEquipment(peopleDetections);
+    const occupancy = document.createElement("div");
+    occupancy.className = "card-sub";
+    occupancy.style.marginTop = "10px";
+    occupancy.textContent = possibleOccupied.length
+      ? `Possibly occupied (visual estimate): ${possibleOccupied.join(", ")}`
+      : "Machine availability: no reliable person-to-machine overlap detected in this frame.";
+    resultsEl.appendChild(occupancy);
+  },
+
+  estimateOccupiedEquipment(peopleDetections = []) {
+    const videoWidth = this.video?.videoWidth || 0;
+    const videoHeight = this.video?.videoHeight || 0;
+    if (!videoWidth || !videoHeight || !Array.isArray(peopleDetections) || !peopleDetections.length) return [];
+    const normalize = (box, sourceWidth, sourceHeight) => {
+      if (!box) return null;
+      let { x, y, width, height } = box;
+      if (![x, y, width, height].every((value) => Number.isFinite(Number(value)))) return null;
+      x = Number(x); y = Number(y); width = Number(width); height = Number(height);
+      if (Math.max(Math.abs(x), Math.abs(y), Math.abs(width), Math.abs(height)) > 1.5) {
+        x /= sourceWidth; width /= sourceWidth; y /= sourceHeight; height /= sourceHeight;
+      }
+      // Roboflow object-detection boxes use center coordinates.
+      return { left: x - width / 2, top: y - height / 2, right: x + width / 2, bottom: y + height / 2 };
+    };
+    const people = peopleDetections.map((person) => normalize(person.boundingBox, 640, 360)).filter(Boolean);
+    if (!people.length) return [];
+    const labels = new Set();
+    for (const equipment of this.stableEquipment || []) {
+      const machine = normalize(equipment.boundingBox, videoWidth, videoHeight);
+      if (!machine) continue;
+      const machineArea = Math.max(0, machine.right - machine.left) * Math.max(0, machine.bottom - machine.top);
+      if (!machineArea) continue;
+      const overlap = people.some((person) => {
+        const width = Math.max(0, Math.min(machine.right, person.right) - Math.max(machine.left, person.left));
+        const height = Math.max(0, Math.min(machine.bottom, person.bottom) - Math.max(machine.top, person.top));
+        return (width * height) / machineArea >= 0.08;
+      });
+      if (overlap) labels.add(equipment.equipmentName);
+    }
+    return [...labels];
   },
 
   startEquipmentRecognition() {
