@@ -139,10 +139,6 @@ function extractPredictions(output: JsonRecord): Prediction[] {
   throw new Error('Roboflow response did not contain the declared "predictions" output with a predictions array.');
 }
 
-function normalize(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-}
-
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
