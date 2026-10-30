@@ -619,6 +619,10 @@ const VisionCoach = {
   canvas: null,
   ctx: null,
   equipmentCanvas: null,
+  crowdCanvas: null,
+  crowdTimer: null,
+  crowdRequestInFlight: false,
+  crowdIntervalMs: 2500,
   equipmentTimer: null,
   equipmentRequestInFlight: false,
   equipmentHistory: [],
@@ -654,6 +658,7 @@ const VisionCoach = {
     this.canvas = document.getElementById("vision-canvas");
     this.ctx = this.canvas.getContext("2d");
     this.equipmentCanvas = document.createElement("canvas");
+    this.crowdCanvas = document.createElement("canvas");
 
     document.querySelectorAll("#vision-segment button").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -843,6 +848,7 @@ const VisionCoach = {
       this.smoothedAngle = null;
       this.phaseFrames = 0;
       this.startEquipmentRecognition();
+      this.startCrowdAnalysis();
       void this.probeAiCoach();
       this.loop();
       this.showComparisonCard();
@@ -878,6 +884,9 @@ const VisionCoach = {
     this.phaseFrames = 0;
     this.noPoseSince = 0;
     this.cue = { candidate: "", count: 0, shown: "", shownAt: 0 };
+    if (this.crowdTimer) window.clearTimeout(this.crowdTimer);
+    this.crowdTimer = null;
+    this.crowdRequestInFlight = false;
     if (this.equipmentTimer) window.clearTimeout(this.equipmentTimer);
     this.equipmentTimer = null;
     this.equipmentRequestInFlight = false;
@@ -953,6 +962,63 @@ const VisionCoach = {
     if (feedbackEl) feedbackEl.textContent = "I can't see you. Step back so your whole body is in the camera view.";
     const angleEl = document.getElementById("vision-angle");
     if (angleEl) angleEl.textContent = "-- deg";
+  },
+
+  startCrowdAnalysis() {
+    const card = document.getElementById("crowd-analysis-card");
+    if (card) card.style.display = "block";
+    this.renderCrowdState("Connecting to Roboflow people counting…", null, "Waiting");
+    this.scheduleCrowdAnalysis(0);
+  },
+
+  scheduleCrowdAnalysis(delay = this.crowdIntervalMs) {
+    if (!this.running) return;
+    if (this.crowdTimer) window.clearTimeout(this.crowdTimer);
+    this.crowdTimer = window.setTimeout(() => this.analyzeCrowdFrame(), delay);
+  },
+
+  async analyzeCrowdFrame() {
+    if (!this.running) return;
+    if (this.crowdRequestInFlight || this.video.readyState < 2 || !this.video.videoWidth) {
+      this.scheduleCrowdAnalysis();
+      return;
+    }
+    this.crowdRequestInFlight = true;
+    const canvas = this.crowdCanvas;
+    const scale = Math.min(1, 640 / Math.max(this.video.videoWidth, this.video.videoHeight));
+    canvas.width = Math.max(1, Math.round(this.video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(this.video.videoHeight * scale));
+    canvas.getContext("2d").drawImage(this.video, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg", 0.62).split(",")[1];
+    try {
+      const result = await Api.post("/equipment/crowd-analysis", { imageBase64 }, { timeoutMs: 12000 });
+      if (!result.configured) {
+        this.renderCrowdState("Crowd analysis is not configured.", null, "Unavailable");
+      } else {
+        this.renderCrowdState(
+          "Live crowd estimate · Roboflow people counting",
+          Number(result.peopleCount),
+          String(result.crowdLevel || "Analyzed"),
+          result.occupancy || "People count is an estimate, not a machine-level availability signal."
+        );
+      }
+    } catch (error) {
+      this.renderCrowdState(error?.message || "Crowd analysis is temporarily unavailable. Retrying…", null, "Unavailable");
+    } finally {
+      this.crowdRequestInFlight = false;
+      this.scheduleCrowdAnalysis();
+    }
+  },
+
+  renderCrowdState(status, count, level, note = "Machine-level occupancy is not confirmed by people counting.") {
+    const statusEl = document.getElementById("crowd-analysis-status");
+    const countEl = document.getElementById("crowd-people-count");
+    const levelEl = document.getElementById("crowd-level");
+    const resultsEl = document.getElementById("crowd-analysis-results");
+    if (statusEl) statusEl.textContent = status;
+    if (countEl) countEl.textContent = Number.isFinite(count) ? String(count) : "—";
+    if (levelEl) levelEl.textContent = level;
+    if (resultsEl) resultsEl.textContent = note;
   },
 
   startEquipmentRecognition() {
