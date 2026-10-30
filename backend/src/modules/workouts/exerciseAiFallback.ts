@@ -21,7 +21,8 @@ export interface RecommendedExercise {
 
 export function exerciseFamilyKey(exerciseName: string): string {
   return normalizeExerciseValue(exerciseName)
-    .replace(/\\b(?:controlled|slow|explosive|tempo|wide|close|neutral|underhand|overhand|seated|standing|kneeling|lying|prone|supine|barbell|dumbbell|cable|machine)\\b/g, " ")
+    .replace(/\b(?:controlled|slow|explosive|tempo|wide|close|neutral|underhand|overhand|seated|standing|kneeling|lying|prone|supine|barbell|dumbbell|cable|machine)\b/g, " ")
+    .replace(/\bpendlay row\b/g, "row")
     .replace(/\s+/g, " ").trim();
 }
 
