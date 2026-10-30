@@ -1,5 +1,28 @@
-import { normalizeExerciseValue } from "./exerciseCsvRepository";
-import { exerciseFamilyKey, type RecommendedExercise } from "./exerciseRecommendation";
+function normalizeExerciseValue(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+}
+
+export interface RecommendedExercise {
+  sourceIndex: number;
+  exercise: string;
+  machine: string;
+  muscle: string;
+  primaryMuscle: string;
+  muscleCategories: string[];
+  timeTakenOneSet: string;
+  targetedMuscle: string;
+  targetedMuscles: string[];
+  instructions?: string;
+  sets?: number;
+  repRangeLow?: number;
+  repRangeHigh?: number;
+}
+
+export function exerciseFamilyKey(exerciseName: string): string {
+  return normalizeExerciseValue(exerciseName)
+    .replace(/\\b(?:controlled|slow|explosive|tempo|wide|close|neutral|underhand|overhand|seated|standing|kneeling|lying|prone|supine|barbell|dumbbell|cable|machine)\\b/g, " ")
+    .replace(/\\s+/g, " ").trim();
+}
 
 export interface ExerciseFallbackEquipment {
   name: string;
@@ -18,7 +41,7 @@ export interface ExerciseFallbackInput {
 }
 
 interface ProviderConfig {
-  name: "OpenAI" | "OpenRouter" | "Anthropic";
+  name: "OpenRouter";
   apiKey: string;
   model: string;
   url: string;
@@ -41,32 +64,13 @@ export interface AiExerciseValidation {
 }
 
 function configuredProviders(): ProviderConfig[] {
-  const providers: ProviderConfig[] = [];
-  if (process.env.OPENAI_API_KEY) {
-    providers.push({
-      name: "OpenAI",
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      url: "https://api.openai.com/v1/chat/completions",
-    });
-  }
-  if (process.env.OPENROUTER_API_KEY) {
-    providers.push({
-      name: "OpenRouter",
-      apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL || "openrouter/auto",
-      url: "https://openrouter.ai/api/v1/chat/completions",
-    });
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    providers.push({
-      name: "Anthropic",
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
-      url: "https://api.anthropic.com/v1/messages",
-    });
-  }
-  return providers;
+  if (!process.env.OPENROUTER_API_KEY) return [];
+  return [{
+    name: "OpenRouter",
+    apiKey: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL || "openrouter/auto",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+  }];
 }
 
 function parseJson(content: string): unknown {
@@ -115,6 +119,10 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
       timeTakenOneSet: input.timeTakenOneSet || "25-45 sec",
       targetedMuscle: input.targetedMuscle || muscle,
       targetedMuscles: [input.targetedMuscle || muscle],
+      instructions: typeof candidate.instructions === "string" ? candidate.instructions.slice(0, 1200) : "",
+      sets: Number.isInteger(candidate.sets) ? Math.max(2, Math.min(5, Number(candidate.sets))) : 3,
+      repRangeLow: Number.isInteger(candidate.repRangeLow) ? Math.max(1, Math.min(30, Number(candidate.repRangeLow))) : 8,
+      repRangeHigh: Number.isInteger(candidate.repRangeHigh) ? Math.max(1, Math.min(30, Number(candidate.repRangeHigh))) : 12,
     });
     if (result.length >= input.count) break;
   }
@@ -125,7 +133,7 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
 
 async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInput): Promise<string> {
   const prompt = {
-    task: "Suggest safe, conventional strength-training exercises that fill gaps in a workout dataset.",
+    task: "Generate a complete, balanced strength-training workout directly from the user profile and available gym equipment. Do not use or imitate a fixed exercise catalogue.",
     sessionDurationMinutes: input.sessionDurationMinutes,
     numberOfExercises: input.count,
     targetMuscles: input.targetMuscles,
@@ -134,10 +142,13 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     ...(input.timeTakenOneSet ? { requiredOneSetDuration: input.timeTakenOneSet } : {}),
     rules: [
       "Return only a JSON object with an exercises array; do not use markdown.",
-      "Each item must have exercise, machine, and muscle string fields.",
+      "Each item must have exercise, machine, muscle, instructions, sets, repRangeLow, and repRangeHigh fields.",
       "Use only an exact allowedEquipment name or alias for machine; never invent equipment.",
       "Use only one of the exact targetMuscles values for muscle; never change the workout focus.",
-      "Return distinct movement patterns, not grip, stance, tempo, or equipment variants of one movement.",
+      "Distribute exercises across ALL targetMuscles as evenly as practical; for Full Body, cover lower body, push, pull, shoulders and core rather than clustering on one area.",
+      "Choose biomechanically sound, distinct movement patterns and avoid duplicate exercises or superficial grip, stance, tempo, or equipment variants.",
+      "Prioritize compound movements, then accessories. Match every exercise to the exact equipment the user has available. Bodyweight is allowed.",
+      "Provide concise actionable setup and execution instructions, realistic sets (2-4), and sensible rep ranges. Never prescribe an exercise requiring unavailable equipment.",
       "Do not add explanations, warmups, or exercises beyond the requested number.",
     ],
   };
@@ -169,7 +180,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(7_000),
+    signal: AbortSignal.timeout(25_000),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const payload = await response.json() as any;
