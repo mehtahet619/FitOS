@@ -1,7 +1,32 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { csvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
-import { generateWorkout } from "../modules/workouts/workoutGenerator";
+
+vi.mock("../modules/workouts/exerciseAiFallback", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../modules/workouts/exerciseAiFallback")>();
+  return {
+    ...actual,
+    getAiExerciseFallback: vi.fn(async (input: any) => Array.from({ length: input.count }, (_, index) => {
+      const muscle = input.targetMuscles[index % input.targetMuscles.length];
+      const machine = input.equipment[0]?.name ?? "Bodyweight";
+      return {
+        sourceIndex: -index - 1,
+        exercise: `${muscle} AI Strength Movement ${index + 1}`,
+        machine,
+        muscle,
+        primaryMuscle: muscle,
+        muscleCategories: [muscle],
+        targetedMuscle: muscle,
+        targetedMuscles: [muscle],
+        timeTakenOneSet: "25-45 sec",
+        instructions: "Use controlled form and a full, comfortable range of motion.",
+        sets: 3,
+        repRangeLow: 8,
+        repRangeHigh: 12,
+      };
+    })),
+  };
+});
 
 function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[]; queries: string[] } {
   const exercises: any[] = [];
@@ -17,7 +42,7 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
       if (sql.includes("SELECT id,name FROM Equipment")) return equipment as T[];
       if (sql.includes("SELECT equipmentId,alias FROM EquipmentAlias")) return aliases as T[];
       if (sql.includes("SELECT weightKg, reps FROM WorkoutHistory")) return [];
-      throw new Error(`Unexpected database query in CSV generator test: ${sql}`);
+      throw new Error(`Unexpected database query in AI generator test: ${sql}`);
     },
     async get<T>(sql: string, ...params: unknown[]): Promise<T | undefined> {
       queries.push(sql);
@@ -49,52 +74,49 @@ function memoryDatabase(): { db: DatabaseLike; exercises: any[]; equipment: any[
   return { db, exercises, equipment, queries };
 }
 
-describe("CSV recommendations inside workout generation", () => {
+describe("OpenRouter workout generation", () => {
   it("keeps an explicitly empty USER_EQUIPMENT selection bodyweight-only", async () => {
     const { db } = memoryDatabase();
+    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const result = await generateWorkout(db, "bodyweight-user", "Chest", 60, {
       lockToMuscles: ["chest"],
       equipmentMode: "USER_EQUIPMENT",
       userEquipmentIds: [],
     });
-
-    expect(result.exercises.length).toBeGreaterThan(0);
+    expect(result.exercises).toHaveLength(3);
     expect(result.exercises.every((exercise) => exercise.machine === "Bodyweight" && !exercise.requiresEquipment)).toBe(true);
   });
 
-  it("uses the WorkoutPlanState target passed by the route, persists exact CSV source fields, and does not advance plan state", async () => {
+  it("uses the exact plan target, persists AI exercises, and never reads the CSV catalogue", async () => {
     const { db, exercises, queries } = memoryDatabase();
+    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const state = { cycleId: "cycle-stays-the-same", currentIndex: 1 };
     const before = { ...state };
     const result = await generateWorkout(db, "user-1", "Back", 60, {
       lockToMuscles: ["back"],
       equipmentMode: "FULL_GYM",
     });
-
     expect(result.focus).toBe("Back");
     expect(result.exercises).toHaveLength(3);
-    expect(result.exercises.every((exercise) => /back/i.test(exercise.muscle))).toBe(true);
-    expect(result.exercises.every((exercise) => Boolean(exercise.machine))).toBe(true);
-    const csvNames = new Set(csvExerciseRepository.getAll().map((exercise) => exercise.exercise));
-    expect(result.exercises.every((exercise) => csvNames.has(exercise.exerciseName))).toBe(true);
+    expect(result.exercises.every((exercise) => exercise.muscle === "back")).toBe(true);
+    expect(result.exercises.every((exercise) => exercise.instructions.length > 0)).toBe(true);
     expect(exercises.map((exercise) => exercise.name).sort()).toEqual(result.exercises.map((exercise) => exercise.exerciseName).sort());
     expect(exercises).toHaveLength(3);
+    expect(result.exercises.some((exercise) => csvExerciseRepository.getAll().some((row) => row.exercise === exercise.exerciseName))).toBe(false);
     expect(state).toEqual(before);
-    expect(queries.some((sql) => /UPDATE\s+WorkoutPlanState|INSERT\s+INTO\s+WorkoutCycleHistory/i.test(sql))).toBe(false);
+    expect(queries.some((sql) => /UPDATE\\s+WorkoutPlanState|INSERT\\s+INTO\\s+WorkoutCycleHistory/i.test(sql))).toBe(false);
   });
 
-  it("keeps PPL target muscles constrained and returns the same workout candidates on repeat", async () => {
+  it("keeps PPL target muscles constrained and returns distinct generated movements", async () => {
     const { db } = memoryDatabase();
-    const first = await generateWorkout(db, "user-2", "Pull", 60, {
+    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
+    const result = await generateWorkout(db, "user-2", "Pull", 60, {
       lockToMuscles: ["back", "biceps"],
       equipmentMode: "FULL_GYM",
     });
-    const second = await generateWorkout(db, "user-2", "Pull", 60, {
-      lockToMuscles: ["back", "biceps"],
-      equipmentMode: "FULL_GYM",
-    });
-    expect(first.exercises.map((exercise) => exercise.exerciseName)).toEqual(second.exercises.map((exercise) => exercise.exerciseName));
-    expect(first.exercises.every((exercise) => /back|biceps/i.test(exercise.muscle))).toBe(true);
+    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises.every((exercise) => ["back", "biceps"].includes(exercise.muscle))).toBe(true);
+    expect(new Set(result.exercises.map((exercise) => exercise.exerciseName)).size).toBe(3);
   });
 
   it.each([
@@ -104,8 +126,9 @@ describe("CSV recommendations inside workout generation", () => {
     [60, 3, 9],
     [90, 4, 12],
     [120, 5, 15],
-  ])("generates a practical Chest workout for %i minutes", async (minutes, exerciseCount, workingSets) => {
+  ])("generates the requested AI exercise count for %i minutes", async (minutes, exerciseCount, workingSets) => {
     const { db } = memoryDatabase();
+    const { generateWorkout } = await import("../modules/workouts/workoutGenerator");
     const result = await generateWorkout(db, "realistic-volume-user", "Chest", minutes, {
       lockToMuscles: ["chest"],
       equipmentMode: "FULL_GYM",
