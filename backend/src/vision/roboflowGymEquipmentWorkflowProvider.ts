@@ -79,14 +79,14 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
           const payload: unknown = await response.json();
           const output = extractWorkflowOutput(payload);
           const predictions = extractPredictions(output);
-          const thresholdValue = Number.parseFloat(process.env.EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD ?? "0.50");
-          const threshold = Number.isFinite(thresholdValue) ? Math.max(0, Math.min(1, thresholdValue)) : 0.5;
           const detections: EquipmentDetection[] = [];
 
           for (const prediction of predictions) {
             const rawLabel = stringValue(prediction.class ?? prediction.name ?? prediction.label);
             const confidence = Number(prediction.confidence);
-            if (!rawLabel || !Number.isFinite(confidence) || confidence < threshold || confidence > 1) continue;
+            // Roboflow's Workflow/model owns its confidence filtering. FitOS
+            // validates the score but does not apply a second hidden cutoff.
+            if (!rawLabel || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) continue;
             // Roboflow is the source of truth for visual labels. Do not
             // filter predictions through FitOS's equipment catalogue: gym
             // machines vary by brand/model and may not exist in our database.
