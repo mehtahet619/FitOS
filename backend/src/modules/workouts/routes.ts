@@ -950,62 +950,59 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     ...swapHistory.map((row) => row.familyKey),
     ...usedNames.map((row) => exerciseFamilyKey(row.name)),
   ]);
-  const csvAlternatives = exerciseRecommendationService.getSwapAlternatives(
-    exerciseRow.sourceExerciseName || base.name,
-    baseMachine,
-    base.primaryMuscle,
-    usedNames.map((row) => row.name),
-    excludedFamilyKeys,
-  );
   const equipmentIdByAlias = new Map<string, string>();
   for (const row of allEquipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
   const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
     `SELECT equipmentId,alias FROM EquipmentAlias ORDER BY alias,equipmentId`);
   for (const row of equipmentAliases) {
-    const key = normalizeExerciseValue(row.alias);
-    if (!equipmentIdByAlias.has(key)) equipmentIdByAlias.set(key, row.equipmentId);
+    if (!equipmentIdByAlias.has(normalizeExerciseValue(row.alias))) equipmentIdByAlias.set(normalizeExerciseValue(row.alias), row.equipmentId);
   }
-
-  const performableAlternatives: Array<{ exercise: (typeof csvAlternatives)[number]; equipmentId: string | null }> = [];
-  const seenPerformableNames = new Set<string>();
-  for (const exercise of csvAlternatives) {
-    const machineKey = normalizeExerciseValue(exercise.machine);
-    const isBodyweight = machineKey === "bodyweight";
-    let equipmentId = equipmentIdByAlias.get(machineKey);
-    if (!isBodyweight && !equipmentId && fullGym) {
-      equipmentId = `full-gym:${machineKey}`;
-      availableEquipmentIds.add(equipmentId);
-    }
-    if (!isBodyweight && (!equipmentId || !availableEquipmentIds.has(equipmentId))) continue;
-    const exerciseNameKey = normalizeExerciseValue(exercise.exercise);
-    if (seenPerformableNames.has(exerciseNameKey)) continue;
-    seenPerformableNames.add(exerciseNameKey);
-    performableAlternatives.push({ exercise, equipmentId: isBodyweight ? null : equipmentId! });
+  const allowedEquipment = fullGym
+    ? allEquipmentRows.filter((row) => normalizeExerciseValue(row.name) !== "no equipment")
+    : allEquipmentRows.filter((row) => availableEquipmentIds.has(row.id));
+  const fallbackEquipment = allowedEquipment.map((row) => ({
+    name: row.name,
+    aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
+  }));
+  if (!fallbackEquipment.some((row) => normalizeExerciseValue(row.name) === "bodyweight")) {
+    fallbackEquipment.push({ name: "Bodyweight", aliases: [] });
   }
-
-  const nextAlternative = performableAlternatives[0];
-  if (!nextAlternative)
+  const aiAlternatives = await getAiExerciseFallback({
+    targetMuscles: [base.primaryMuscle],
+    sessionDurationMinutes: workout.durationMin ?? 60,
+    count: 1,
+    equipment: fallbackEquipment,
+    excludedExerciseNames: usedNames.map((row) => row.name),
+    excludedFamilyKeys,
+    targetedMuscle: base.primaryMuscle,
+  });
+  const nextAlternative = aiAlternatives.find((exercise) => {
+    const equipmentId = equipmentIdByAlias.get(normalizeExerciseValue(exercise.machine));
+    return normalizeExerciseValue(exercise.machine) === "bodyweight"
+      || Boolean(equipmentId && (fullGym || availableEquipmentIds.has(equipmentId)));
+  });
+  if (!nextAlternative) {
     return res.status(422).json({
-      error: `No curated CSV substitute matches the target muscle, movement family, and available equipment for "${base.name}". Use Edit exercise to enter your own movement.`,
+      error: `OpenRouter could not generate a safe replacement for "${base.name}" using this workout's available equipment. Please retry.`,
       requiresEquipment: baseRequiresEquipment,
     });
+  }
 
-  const csvExercise = nextAlternative.exercise;
   const previousFamilyKey = exerciseFamilyKey(exerciseRow.sourceExerciseName || base.name);
-  const nextFamilyKey = exerciseFamilyKey(csvExercise.exercise);
-  const persisted = await ensureExerciseRows(db, [csvExercise]);
-  const exerciseRecord = persisted.get(csvExercise.sourceIndex);
-  if (!exerciseRecord) throw new Error(`Could not persist CSV substitute "${csvExercise.exercise}".`);
+  const nextFamilyKey = exerciseFamilyKey(nextAlternative.exercise);
+  const persisted = await ensureExerciseRows(db, [nextAlternative]);
+  const exerciseRecord = persisted.get(nextAlternative.sourceIndex);
+  if (!exerciseRecord) throw new Error(`Could not persist AI substitute "${nextAlternative.exercise}".`);
   const persistedSubstitute = await loadExerciseWithLinks(db, exerciseRecord.id);
-  if (!persistedSubstitute) throw new Error(`Could not load CSV substitute "${csvExercise.exercise}".`);
+  if (!persistedSubstitute) throw new Error(`Could not load AI substitute "${nextAlternative.exercise}".`);
 
   await db.run(
     `UPDATE WorkoutExercise
      SET exerciseId = ?, replacedFromId = ?, status = 'replaced',
          sourceExerciseName = ?, sourceMuscle = ?, sourcePrimaryMuscle = ?, sourceMachine = ?
      WHERE id = ?`,
-    persistedSubstitute.id, exerciseRow.exerciseId, csvExercise.exercise, csvExercise.muscle,
-    base.primaryMuscle, csvExercise.machine, workoutExerciseId
+    persistedSubstitute.id, exerciseRow.exerciseId, nextAlternative.exercise, nextAlternative.muscle,
+    base.primaryMuscle, nextAlternative.machine, workoutExerciseId
   );
   const swappedAt = nowIso();
   for (const [familyKey, exerciseName] of [[previousFamilyKey, exerciseRow.sourceExerciseName || base.name], [nextFamilyKey, csvExercise.exercise]]) {
@@ -1014,10 +1011,10 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
       workoutExerciseId, familyKey, exerciseName, swappedAt,
     );
   }
-  const explanation = `Swapped ${base.name} for ${csvExercise.exercise}.`;
+  const explanation = `Swapped ${base.name} for ${nextAlternative.exercise}.`;
   return res.json({
     workoutExerciseId,
-    replaced: { from: base.name, to: csvExercise.exercise },
+    replaced: { from: base.name, to: nextAlternative.exercise },
     exercise: {
       exerciseId: persistedSubstitute.id,
       exerciseName: csvExercise.exercise,
@@ -1025,7 +1022,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
       muscle: csvExercise.muscle,
       targetedMuscle: csvExercise.targetedMuscle,
       timeTakenOneSet: csvExercise.timeTakenOneSet,
-      machine: csvExercise.machine,
+      machine: nextAlternative.machine,
       instructions: persistedSubstitute.instructions,
       targetSets: exerciseRow.targetSets,
       repRangeLow: exerciseRow.repRangeLow,
