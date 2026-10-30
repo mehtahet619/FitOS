@@ -1050,7 +1050,7 @@ const VisionCoach = {
       // Roboflow object-detection boxes use center coordinates.
       return { left: x - width / 2, top: y - height / 2, right: x + width / 2, bottom: y + height / 2 };
     };
-    const people = peopleDetections.map((person) => normalize(person.boundingBox, 640, 360)).filter(Boolean);
+    const people = peopleDetections.map((person) => normalize(person.boundingBox, this.crowdCanvas?.width || 640, this.crowdCanvas?.height || 360)).filter(Boolean);
     if (!people.length) return [];
     const labels = new Set();
     for (const equipment of this.stableEquipment || []) {
