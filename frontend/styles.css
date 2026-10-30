@@ -1475,3 +1475,115 @@ button:disabled, [aria-disabled="true"] {
 #screen-diet .food-tracker-tabs button { min-height:42px; border-radius:12px; font-weight:700; }
 #screen-diet .food-tracker-tabs button.active { background:#1d3829; border-color:#1d3829; box-shadow:0 5px 14px rgba(29,56,41,.13); }
 @media(max-width:600px) { .screen .header { margin-bottom:16px; } #main-app .btn:hover { transform:none; } }
+
+
+/* Daily gym check-in modal */
+body.gym-choice-open { overflow: hidden; }
+.gym-choice-overlay {
+  position: fixed;
+  z-index: 3000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(13, 24, 18, .58);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: gymChoiceFadeIn .2s ease both;
+}
+.gym-choice-modal {
+  width: min(100%, 440px);
+  padding: 30px;
+  border: 1px solid rgba(224, 234, 226, .9);
+  border-radius: 25px;
+  background: #fff;
+  color: #17231c;
+  box-shadow: 0 28px 90px rgba(5, 18, 10, .28);
+  animation: gymChoiceRise .28s cubic-bezier(.2,.8,.2,1) both;
+}
+.gym-choice-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  margin-bottom: 22px;
+  border-radius: 17px;
+  background: #e8f5ed;
+  color: #286448;
+}
+.gym-choice-icon svg { width: 27px; height: 27px; }
+.gym-choice-eyebrow {
+  margin: 0 0 9px;
+  color: #438363;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+.gym-choice-modal h2 {
+  margin: 0;
+  color: #17231c;
+  font-size: clamp(27px, 6vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -.045em;
+}
+.gym-choice-modal > p:not(.gym-choice-eyebrow) {
+  margin: 12px 0 19px;
+  color: #68746b;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.gym-choice-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: #f2f8f3;
+  color: #466451;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.gym-choice-summary-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #48a879;
+}
+.gym-choice-actions { display: grid; gap: 10px; }
+.gym-choice-actions button {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 16px;
+  border: 1px solid #dce6de;
+  border-radius: 13px;
+  background: #fff;
+  color: #26372c;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease, border-color .16s ease;
+}
+.gym-choice-actions button:active { transform: scale(.985); }
+.gym-choice-actions .gym-choice-yes {
+  border-color: #286448;
+  background: #286448;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(40, 100, 72, .16);
+}
+.gym-choice-actions .gym-choice-yes:hover { background: #1f5038; }
+.gym-choice-actions .gym-choice-no:hover { border-color: #9db9a5; background: #f7faf7; }
+.gym-choice-overlay.is-closing { animation: gymChoiceFadeOut .16s ease both; }
+@keyframes gymChoiceFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gymChoiceFadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gymChoiceRise { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 480px) {
+  .gym-choice-overlay { padding: 16px; }
+  .gym-choice-modal { padding: 25px 21px 21px; border-radius: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gym-choice-overlay, .gym-choice-modal { animation: none; }
+}
