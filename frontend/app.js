@@ -481,6 +481,7 @@ $("auth-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/login", { email, password });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     AuthState.authenticated(data.user);
+    navigate("/gym", true);
     void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
@@ -513,7 +514,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); void handleGymChoiceAfterLogin();
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/gym", true); void handleGymChoiceAfterLogin();
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
@@ -663,6 +664,7 @@ function enterMainApp() {
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
   $("bottom-nav").style.display = "flex";
+  navigate("/gym", true);
   void handleGymChoiceAfterLogin();
 }
 
