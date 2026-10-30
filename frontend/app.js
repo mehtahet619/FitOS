@@ -2834,17 +2834,19 @@ function renderGymTour(equipment, plan, savedProfile) {
   };
 
   const markEquipmentSelected = (name) => {
-    if (profile && Array.isArray(profile.equipment) && !profile.equipment.some((item) => String(item).toLowerCase() === name.toLowerCase())) {
-      profile.equipment = [...profile.equipment, name];
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return;
+    if (profile && Array.isArray(profile.equipment) && !profile.equipment.some((item) => String(item).trim().toLowerCase() === normalizedName.toLowerCase())) {
+      profile.equipment = [...profile.equipment, normalizedName];
     }
     const manualGroup = $("gym-manual-equipment");
     if (manualGroup) {
-      let chip = Array.from(manualGroup.querySelectorAll(".chip")).find((item) => item.textContent.trim().toLowerCase() === name.toLowerCase());
+      let chip = Array.from(manualGroup.querySelectorAll(".chip")).find((item) => item.textContent.trim().toLowerCase() === normalizedName.toLowerCase());
       if (!chip) {
         chip = document.createElement("button");
         chip.type = "button";
         chip.className = "chip";
-        chip.textContent = name;
+        chip.textContent = normalizedName;
         chip.addEventListener("click", () => {
           const active = chip.classList.toggle("active");
           chip.setAttribute("aria-pressed", String(active));
