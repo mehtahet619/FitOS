@@ -48,7 +48,7 @@ const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 function localDateKey(value: string | Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date(value));
+  }).format(value instanceof Date ? value : new Date(value));
 }
 async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
   const rows = await dbConn.all<{ completedAt: string }>(
