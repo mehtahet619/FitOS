@@ -164,7 +164,9 @@ export async function ensureExerciseRows(
     }
 
     if (!exerciseRecord) {
-      const categories = exercise.muscleCategories;
+      // Secondary muscles remain exercise anatomy metadata only. They are
+      // persisted separately and never used to allocate workout exercise slots.
+      const categories = exercise.secondaryMuscles ?? [];
       const exerciseId = stableAiId("ai-exercise", exercise.exercise);
       await database.run(
         `INSERT INTO Exercise (id,name,primaryMuscle,secondaryMuscles,movementPattern,difficulty,defaultSets,repRangeLow,repRangeHigh,instructions,requiresEquipment,createdAt)
