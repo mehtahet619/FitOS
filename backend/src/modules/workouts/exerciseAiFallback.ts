@@ -1,5 +1,5 @@
 function normalizeExerciseValue(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
 export interface RecommendedExercise {
@@ -21,7 +21,7 @@ export interface RecommendedExercise {
 export function exerciseFamilyKey(exerciseName: string): string {
   return normalizeExerciseValue(exerciseName)
     .replace(/\\b(?:controlled|slow|explosive|tempo|wide|close|neutral|underhand|overhand|seated|standing|kneeling|lying|prone|supine|barbell|dumbbell|cable|machine)\\b/g, " ")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/\s+/g, " ").trim();
 }
 
 export interface ExerciseFallbackEquipment {
