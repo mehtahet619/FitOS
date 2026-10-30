@@ -45,8 +45,8 @@ export class RoboflowGymEquipmentWorkflowProvider implements EquipmentVisionProv
     }
 
     const started = Date.now();
-    const timeoutMs = 30_000;
-    const maxRetries = 2;
+    const timeoutMs = 12_000;
+    const maxRetries = 0;
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
