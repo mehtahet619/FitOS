@@ -99,6 +99,7 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
     },
     async get<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {
       if (sql.includes("SELECT * FROM UserProfile")) return { sessionMinutes } as unknown as T;
+      if (sql.includes("SELECT id, createdAt, lastScanAt FROM GymEquipmentProfile WHERE userId = ?")) return undefined;
       if (sql.includes("WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)")) {
         return state.workouts.find((row) => row.id === params[0] && row.userId === params[1] && (row.cycleId === params[2] || row.cycleId == null) && row.status !== "superseded") as T | undefined;
       }
@@ -130,7 +131,10 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       throw new Error(`Unexpected integration-test lookup: ${sql}`);
     },
     async run(sql: string, ...params: unknown[]): Promise<{ changes: number }> {
-      if (sql.includes("INSERT INTO Equipment (")) {
+      if (sql.includes("INSERT INTO GymEquipmentProfile (")) {
+        // Gym profile synchronization is a side effect of saving workout equipment.
+        // This test focuses on workout generation, so accept the profile upsert.
+      } else if (sql.includes("INSERT INTO Equipment (")) {
         if (!state.equipment.some((row) => row.name.toLowerCase() === String(params[1]).toLowerCase())) {
           state.equipment.push({ id: params[0], name: params[1] });
         }
