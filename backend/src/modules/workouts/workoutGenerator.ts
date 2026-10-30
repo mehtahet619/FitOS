@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
-import { normalizeExerciseValue } from "./exerciseCsvRepository";
 import { canonicalMuscleKey } from "./muscleTaxonomy";
-import { exerciseFamilyKey, exerciseRecommendationService } from "./exerciseRecommendation";
-import { getAiExerciseFallback, type ExerciseFallbackEquipment } from "./exerciseAiFallback";
+import { exerciseFamilyKey, getAiExerciseFallback, type ExerciseFallbackEquipment, type RecommendedExercise } from "./exerciseAiFallback";
+
+function normalizeExerciseValue(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+}
 
 export interface GeneratedExercise {
   exerciseId: string;
@@ -111,7 +113,7 @@ async function getFallbackEquipment(
   return [...byName.values()];
 }
 
-function stableCsvId(prefix: string, value: string): string {
+function stableAiId(prefix: string, value: string): string {
   return `${prefix}-${createHash("sha256").update(normalizeExerciseValue(value)).digest("hex").slice(0, 32)}`;
 }
 
@@ -119,7 +121,7 @@ function stableCsvId(prefix: string, value: string): string {
  * WorkoutExercise and workout history keep their current foreign-key model. */
 export async function ensureExerciseRows(
   database: DatabaseLike,
-  selected: ReturnType<typeof exerciseRecommendationService.getRecommendedExercises>["exercises"]
+  selected: RecommendedExercise[]
 ): Promise<Map<number, { id: string; sets: number; repRangeLow: number; repRangeHigh: number }>> {
   const existingRows = await database.all<{
     id: string;
@@ -147,7 +149,7 @@ export async function ensureExerciseRows(
     let equipmentId = equipmentIdByAlias.get(machineKey);
     if (!equipmentId) {
       const existingMachine = equipmentRows.find((row) => normalizeExerciseValue(row.name) === machineKey);
-      equipmentId = existingMachine?.id ?? stableCsvId("csv-equipment", exercise.machine);
+      equipmentId = existingMachine?.id ?? stableAiId("ai-equipment", exercise.machine);
       if (!existingMachine) {
         await database.run(
           `INSERT INTO Equipment (id,name,normalizedName,category,isCustom) VALUES (?,?,?, 'csv', 0) ON CONFLICT(name) DO NOTHING`,
@@ -163,13 +165,13 @@ export async function ensureExerciseRows(
 
     if (!exerciseRecord) {
       const categories = exercise.muscleCategories;
-      const exerciseId = stableCsvId("csv-exercise", exercise.exercise);
+      const exerciseId = stableAiId("ai-exercise", exercise.exercise);
       await database.run(
         `INSERT INTO Exercise (id,name,primaryMuscle,secondaryMuscles,movementPattern,difficulty,defaultSets,repRangeLow,repRangeHigh,instructions,requiresEquipment,createdAt)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(name) DO NOTHING`,
         exerciseId, exercise.exercise, exercise.primaryMuscle,
         categories.filter((muscle) => normalizeExerciseValue(muscle) !== normalizeExerciseValue(exercise.primaryMuscle)).join(","),
-        "csv_recommendation", "beginner", 3, 8, 12, "", normalizeExerciseValue(exercise.machine) === "bodyweight" ? 0 : 1, createdAt
+        "ai_generated", "beginner", exercise.sets ?? 3, exercise.repRangeLow ?? 8, exercise.repRangeHigh ?? 12, exercise.instructions ?? "", normalizeExerciseValue(exercise.machine) === "bodyweight" ? 0 : 1, createdAt
       );
       const persistedExercise = await database.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name)=lower(?)`, exercise.exercise);
       if (!persistedExercise) throw new Error(`Could not persist CSV exercise value "${exercise.exercise}".`);
@@ -185,7 +187,7 @@ export async function ensureExerciseRows(
 
     await database.run(
       `INSERT INTO ExerciseEquipment (id,exerciseId,equipmentId) VALUES (?,?,?) ON CONFLICT(exerciseId,equipmentId) DO NOTHING`,
-      stableCsvId("csv-exercise-equipment", `${exercise.exercise}|${exercise.machine}`), exerciseRecord.id, equipmentId
+      stableAiId("ai-exercise-equipment", `${exercise.exercise}|${exercise.machine}`), exerciseRecord.id, equipmentId
     );
     ids.set(exercise.sourceIndex, {
       id: exerciseRecord.id,
@@ -261,52 +263,44 @@ export async function generateWorkout(
     : await getEquipmentAliases(database, availableEquipmentIds);
   if (equipmentMode === "USER_EQUIPMENT" && availableEquipmentIds.size === 0) availableEquipment.push("Bodyweight");
 
-  const result = exerciseRecommendationService.getRecommendedExercises({
+  const requestedCount = exerciseCountForDuration(durationMin);
+  const aiExercises = await getAiExerciseFallback({
     targetMuscles: unitMuscles,
     sessionDurationMinutes: durationMin,
-    availableEquipment,
-    equipmentMode,
+    count: requestedCount,
+    equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
     excludedExerciseNames: options?.excludedExerciseNames,
-    excludedExerciseFamilyKeys: options?.excludedExerciseFamilyKeys,
-    // Only route-level workout regeneration opts into rotation. Direct callers
-    // without a seed retain deterministic ordering for compatibility and tests.
-    selectionSeed: options?.selectionSeed,
+    excludedFamilyKeys: options?.excludedExerciseFamilyKeys,
   });
-  const missingCount = Math.max(0, result.requestedCount - result.exercises.length);
-  const aiExercises = missingCount > 0
-    ? await getAiExerciseFallback({
-      targetMuscles: unitMuscles,
-      sessionDurationMinutes: durationMin,
-      count: missingCount,
-      equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
-      excludedExerciseNames: [...(options?.excludedExerciseNames ?? []), ...result.exercises.map((exercise) => exercise.exercise)],
-      excludedFamilyKeys: [...(options?.excludedExerciseFamilyKeys ?? []), ...result.exercises.map((exercise) => exerciseFamilyKey(exercise.exercise))],
-    })
-    : [];
-  // Treat CSV and AI fallback results as one candidate pool. A fallback must not
-  // reintroduce a movement family already selected from the CSV catalogue.
+  if (aiExercises.length !== requestedCount) {
+    throw new Error(
+      process.env.OPENROUTER_API_KEY
+        ? `OpenRouter generated ${aiExercises.length} of ${requestedCount} required exercises. Please retry.`
+        : "OpenRouter is not configured. Set OPENROUTER_API_KEY to generate workouts."
+    );
+  }
   const seenMovementFamilies = new Set<string>();
-  const selectedExercises = [...result.exercises, ...aiExercises].filter((exercise) => {
+  const selectedExercises = aiExercises.filter((exercise) => {
     const familyKey = exerciseFamilyKey(exercise.exercise);
-    if (seenMovementFamilies.has(familyKey)) {
-      console.warn(`[workouts/generate] dropping duplicate movement family "${familyKey}" (${exercise.exercise})`);
-      return false;
-    }
+    if (seenMovementFamilies.has(familyKey)) return false;
     seenMovementFamilies.add(familyKey);
     return true;
   });
+  if (selectedExercises.length !== requestedCount) {
+    throw new Error("OpenRouter returned duplicate movement patterns. Please retry workout generation.");
+  }
   const exerciseIds = await ensureExerciseRows(database, selectedExercises);
   const generated = await Promise.all(selectedExercises.map(async (exercise): Promise<GeneratedExercise> => {
     const exerciseRecord = exerciseIds.get(exercise.sourceIndex);
-    if (!exerciseRecord) throw new Error(`No database exercise record was created for CSV row ${exercise.sourceIndex}.`);
+    if (!exerciseRecord) throw new Error(`No database exercise record was created for AI exercise ${exercise.exercise}.`);
     return {
       exerciseId: exerciseRecord.id,
       exerciseName: exercise.exercise,
       primaryMuscle: exercise.primaryMuscle,
-      instructions: "",
-      sets: exerciseRecord.sets,
-      repRangeLow: exerciseRecord.repRangeLow,
-      repRangeHigh: exerciseRecord.repRangeHigh,
+      instructions: exercise.instructions ?? "",
+      sets: exercise.sets ?? exerciseRecord.sets,
+      repRangeLow: exercise.repRangeLow ?? exerciseRecord.repRangeLow,
+      repRangeHigh: exercise.repRangeHigh ?? exerciseRecord.repRangeHigh,
       suggestedWeightKg: await suggestNextWeight(database, userId, exerciseRecord.id),
       wasSubstituted: false,
       equipmentRequired: [exercise.machine],
@@ -319,8 +313,8 @@ export async function generateWorkout(
   return {
     focus,
     exercises: generated,
-    requestedExerciseCount: result.requestedCount,
-    availableExerciseCount: result.availableCount + aiExercises.length,
-    limitedByDataset: selectedExercises.length < result.requestedCount,
+    requestedExerciseCount: requestedCount,
+    availableExerciseCount: selectedExercises.length,
+    limitedByDataset: false,
   };
 }
