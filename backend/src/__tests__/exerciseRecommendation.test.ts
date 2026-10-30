@@ -224,6 +224,7 @@ describe("bundled CSV exercise recommendations", () => {
     expect(exerciseFamilyKey("Straight-Arm Pulldown")).not.toBe(pulldownFamily);
     expect(exerciseFamilyKey("Dumbbell Pullover")).toBe(exerciseFamilyKey("Machine Pullover"));
     expect(exerciseFamilyKey("Assisted Pull Up")).toBe(exerciseFamilyKey("Wide Grip Chin Up"));
+    expect(exerciseFamilyKey("Controlled Tempo Pendlay Row")).toBe(exerciseFamilyKey("Barbell Bent-Over Row"));
   });
 
   it("returns at most one exact CSV alternative per movement family", () => {
