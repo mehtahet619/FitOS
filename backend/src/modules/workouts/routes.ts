@@ -497,8 +497,8 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   if (exercises.length === 0) {
     console.info(JSON.stringify({ ...generationTrace, event: "workout_generation_empty", persistedExercises: [] }));
     return res.status(422).json({
-      code: "CSV_EXERCISES_NOT_FOUND",
-      error: `No bundled CSV exercises match the current plan target (${requiredUnit.muscles.join(", ")}) and equipment mode.`,
+      code: "AI_EXERCISES_NOT_GENERATED",
+      error: `OpenRouter could not generate exercises for the current plan targets (${requiredUnit.muscles.join(", ")}) and available equipment. Please retry.`,
     });
   }
 
@@ -862,7 +862,7 @@ function resolveExerciseByName<T extends { id?: string; name: string }>(name: st
   const exactKey = normalizeExerciseValue(name);
   const exact = exercises.filter((exercise) => normalizeExerciseValue(exercise.name) === exactKey);
   if (exact.length) {
-    // Prefer a stable catalogue row over a generated CSV fallback with the same name.
+    // Prefer an existing catalogue row over a duplicate AI-generated record with the same name.
     return exact.find((exercise) => !(exercise.id ?? "").startsWith("ai-exercise-")) ?? exact[0];
   }
   const lookupKey = normalizeExerciseLookupName(name);
