@@ -2726,6 +2726,13 @@ function renderGymTour(equipment, plan, savedProfile) {
         <div class="card-label">✏️ Manage equipment manually</div>
         <p class="card-sub">Add or remove equipment any time. Scanned and manually selected equipment share the same saved gym profile.</p>
         <div class="chip-group" id="gym-manual-equipment" style="flex-wrap:wrap;gap:8px;"></div>
+        <div class="field" style="margin-top:12px;">
+          <label for="gym-custom-equipment-name">Add equipment not listed</label>
+          <div class="btn-row">
+            <input id="gym-custom-equipment-name" type="text" maxlength="120" placeholder="e.g. Pendulum squat machine">
+            <button class="btn btn-outline" id="gym-custom-equipment-add" type="button">Add</button>
+          </div>
+        </div>
         <button class="btn btn-primary" id="gym-manual-save" style="margin-top:12px;">Save equipment selection</button>
       </div>
     `;
@@ -2741,6 +2748,28 @@ function renderGymTour(equipment, plan, savedProfile) {
         button.setAttribute("aria-pressed", String(active));
       });
       manualGroup.appendChild(button);
+    });
+    $("gym-custom-equipment-add").addEventListener("click", () => {
+      const input = $("gym-custom-equipment-name");
+      const name = input.value.trim();
+      if (!name) return;
+      const existing = Array.from(manualGroup.querySelectorAll(".chip")).find((item) => item.textContent.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+      if (existing) {
+        existing.classList.add("active");
+        existing.setAttribute("aria-pressed", "true");
+      } else {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chip active";
+        button.textContent = name;
+        button.setAttribute("aria-pressed", "true");
+        button.addEventListener("click", () => {
+          const active = button.classList.toggle("active");
+          button.setAttribute("aria-pressed", String(active));
+        });
+        manualGroup.appendChild(button);
+      }
+      input.value = "";
     });
     $("gym-manual-save").addEventListener("click", async () => {
       const button = $("gym-manual-save");
