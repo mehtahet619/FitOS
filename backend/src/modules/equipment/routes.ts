@@ -55,6 +55,17 @@ equipmentRouter.post("/user/equipment", requireAuth, async (req: AuthedRequest, 
     `SELECT e.* FROM Equipment e JOIN UserEquipment ue ON ue.equipmentId = e.id WHERE ue.userId = ?`,
     userId
   );
+  const timestamp = nowIso();
+  const currentProfile = await db.get<{ id: string; createdAt: string }>(
+    `SELECT id, createdAt FROM GymEquipmentProfile WHERE userId = ?`, userId
+  );
+  await db.run(
+    `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, lastConfirmedDate, createdAt, updatedAt)
+     VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+     ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, tourCompleted=1, updatedAt=excluded.updatedAt`,
+    currentProfile?.id ?? uuidv4(), userId, JSON.stringify(result.map((item: any) => item.name)),
+    timestamp, null, null, currentProfile?.createdAt ?? timestamp, timestamp
+  );
   return res.json(result);
 });
 
@@ -68,10 +79,20 @@ equipmentRouter.get("/user/equipment", requireAuth, async (req: AuthedRequest, r
 
 equipmentRouter.get("/gym-profile", requireAuth, async (req: AuthedRequest, res) => {
   const profile = await db.get<any>(`SELECT * FROM GymEquipmentProfile WHERE userId = ?`, req.userId!);
-  if (!profile) return res.json({ gymTourCompleted: false, profileId: null, equipment: [], lastScanAt: null });
+  if (!profile) return res.json({ gymTourCompleted: false, profileId: null, equipment: [], lastScanAt: null, lastConfirmedDate: null });
   let equipment: unknown[] = [];
   try { equipment = JSON.parse(profile.equipmentJson || "[]"); } catch { equipment = []; }
-  return res.json({ gymTourCompleted: Boolean(profile.tourCompleted), profileId: profile.id, equipment, lastScanAt: profile.lastScanAt });
+  return res.json({ gymTourCompleted: Boolean(profile.tourCompleted), profileId: profile.id, equipment, lastScanAt: profile.lastScanAt, lastConfirmedDate: profile.lastConfirmedDate ?? null });
+});
+
+const sameGymConfirmationSchema = z.object({ confirmedDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/) });
+equipmentRouter.post("/gym-profile/confirm-same", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = sameGymConfirmationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "A valid local confirmation date is required." });
+  const profile = await db.get<{ id: string }>(`SELECT id FROM GymEquipmentProfile WHERE userId = ? AND tourCompleted = 1`, req.userId!);
+  if (!profile) return res.status(404).json({ error: "No completed gym profile exists." });
+  await db.run(`UPDATE GymEquipmentProfile SET lastConfirmedDate = ?, updatedAt = ? WHERE userId = ?`, parsed.data.confirmedDate, nowIso(), req.userId!);
+  return res.json({ confirmed: true, lastConfirmedDate: parsed.data.confirmedDate });
 });
 
 const gymTourSchema = z.object({
@@ -101,9 +122,9 @@ equipmentRouter.post("/gym-tour", requireAuth, async (req: AuthedRequest, res) =
 
   if (parsed.data.completed) {
     await db.run(
-      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, createdAt, updatedAt)
-       VALUES (?, ?, ?, 1, ?, ?, ?)
-       ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, tourCompleted=1, lastScanAt=excluded.lastScanAt, updatedAt=excluded.updatedAt`,
+      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, lastConfirmedDate, createdAt, updatedAt)
+       VALUES (?, ?, ?, 1, ?, NULL, ?, ?)
+       ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, tourCompleted=1, lastScanAt=excluded.lastScanAt, lastConfirmedDate=NULL, updatedAt=excluded.updatedAt`,
       profileId, userId, JSON.stringify(names), ts, ts, ts
     );
     await db.run(`DELETE FROM UserEquipment WHERE userId = ?`, userId);
@@ -217,8 +238,8 @@ equipmentRouter.post("/feedback", requireAuth, async (req: AuthedRequest, res) =
     const timestamp = nowIso();
     const profileId = currentProfile?.id ?? uuidv4();
     await db.run(
-      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, lastConfirmedDate, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
        ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, updatedAt=excluded.updatedAt`,
       profileId, req.userId!, JSON.stringify(currentNames), currentProfile?.tourCompleted ?? 0,
       currentProfile?.lastScanAt ?? null, currentProfile?.createdAt ?? timestamp, timestamp
