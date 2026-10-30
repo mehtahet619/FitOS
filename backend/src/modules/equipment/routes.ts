@@ -57,14 +57,14 @@ equipmentRouter.post("/user/equipment", requireAuth, async (req: AuthedRequest, 
   );
   const timestamp = nowIso();
   const currentProfile = await db.get<{ id: string; createdAt: string }>(
-    `SELECT id, createdAt FROM GymEquipmentProfile WHERE userId = ?`, userId
+    `SELECT id, createdAt, lastScanAt FROM GymEquipmentProfile WHERE userId = ?`, userId
   );
   await db.run(
     `INSERT INTO GymEquipmentProfile (id, userId, equipmentJson, tourCompleted, lastScanAt, lastConfirmedDate, createdAt, updatedAt)
      VALUES (?, ?, ?, 1, ?, ?, ?, ?)
      ON CONFLICT(userId) DO UPDATE SET equipmentJson=excluded.equipmentJson, tourCompleted=1, updatedAt=excluded.updatedAt`,
     currentProfile?.id ?? uuidv4(), userId, JSON.stringify(result.map((item: any) => item.name)),
-    timestamp, null, null, currentProfile?.createdAt ?? timestamp, timestamp
+    currentProfile?.lastScanAt ?? null, null, currentProfile?.createdAt ?? timestamp, timestamp
   );
   return res.json(result);
 });
