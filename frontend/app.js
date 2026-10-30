@@ -2596,6 +2596,31 @@ function renderNearby(data, foodName) {
 }
 
 /* ================= GYM ================= */
+async function continueAfterGymAttendance() {
+  navigate("/vision");
+  try {
+    const profile = await Api.get("/equipment/gym-profile");
+    if (!profile?.gymTourCompleted) {
+      navigate("/equipment");
+      return;
+    }
+    const today = getLocalDateKey();
+    if (profile.lastConfirmedDate === today) {
+      navigate("/workout");
+      return;
+    }
+    const sameGym = await showGymChoiceModal();
+    if (sameGym) {
+      await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
+      navigate("/workout");
+    } else {
+      navigate("/equipment");
+    }
+  } catch (error) {
+    console.error("[GymAttendance] Could not confirm today's gym equipment:", error);
+  }
+}
+
 async function loadGym() {
   const el = $("gym-content");
   el.innerHTML = `<div class="empty-state">Loading…</div>`;
@@ -2638,6 +2663,7 @@ function renderGym(status, history) {
     try {
       await Api.post("/gym/checkin", { method: "manual" });
       await loadGym();
+      await continueAfterGymAttendance();
     } catch (e) {
       el.innerHTML = `<div class="banner banner-error">${e.message}</div>` + el.innerHTML;
     }
@@ -2711,6 +2737,7 @@ async function confirmQrCheckin() {
     return;
   }
   await loadGym();
+  await continueAfterGymAttendance();
 }
 
 /* ================= GYM SCAN ================= */
