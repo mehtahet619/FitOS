@@ -6,6 +6,7 @@ import { requireAuth, AuthedRequest } from "../../common/auth";
 import { getEquipmentVisionProvider } from "../../vision/equipmentVisionProvider";
 import { ensureCanonicalEquipmentCatalog } from "./catalog";
 import { recordEquipmentFeedback, recordEquipmentInference } from "../../vision/equipmentMetrics";
+import { runPeopleCountingWorkflow } from "../../vision/peopleCountingWorkflowProvider";
 
 export const equipmentRouter = Router();
 
@@ -265,6 +266,73 @@ const detectSchema = z.object({
 // selection and instructions are the same deterministic Exercise table the
 // rest of the app uses — the vision model only ever supplies equipment
 // labels, never exercise advice.
+equipmentRouter.post("/crowd-analysis", requireAuth, async (req: AuthedRequest, res) => {
+  const imageBase64 = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
+  if (imageBase64.length < 100) {
+    return res.status(400).json({ error: "A valid camera frame is required for crowd analysis." });
+  }
+  if (imageBase64.length > 5_000_000) {
+    return res.status(413).json({ error: "Camera frame is too large for crowd analysis." });
+  }
+  const output = await runPeopleCountingWorkflow(
+    { type: "base64", value: imageBase64 },
+    { timeoutMs: 10_000, maxRetries: 0 }
+  );
+  const candidates = findPeoplePredictions(output);
+  const people = candidates.map((item) => {
+    const box = item.bounding_box && typeof item.bounding_box === "object"
+      ? item.bounding_box as Record<string, unknown>
+      : item;
+    const x = Number(box.x);
+    const y = Number(box.y);
+    const width = Number(box.width);
+    const height = Number(box.height);
+    const confidence = Number(item.confidence ?? item.score ?? 0);
+    return {
+      label: String(item.class ?? item.name ?? item.label ?? "person"),
+      confidence: Number.isFinite(confidence) ? confidence : 0,
+      boundingBox: [x, y, width, height].every(Number.isFinite) && width > 0 && height > 0
+        ? { x, y, width, height }
+        : undefined,
+    };
+  }).filter((person) => /person|people|human/i.test(person.label));
+  const explicitCount = Number(output.count ?? output.people_count ?? output.person_count);
+  const peopleCount = Number.isFinite(explicitCount) && explicitCount >= 0
+    ? Math.round(explicitCount)
+    : people.length;
+  return res.json({
+    configured: true,
+    provider: "roboflow-people-counting",
+    peopleCount,
+    detections: people,
+    crowdLevel: peopleCount === 0 ? "Clear" : peopleCount <= 3 ? "Low" : peopleCount <= 8 ? "Moderate" : "Busy",
+    occupancy: "People count only. Individual machine occupancy is not confirmed by this workflow.",
+  });
+});
+
+function findPeoplePredictions(value: unknown, depth = 0): Record<string, unknown>[] {
+  if (depth > 5 || !value || typeof value !== "object") return [];
+  if (Array.isArray(value)) {
+    if (value.every((entry) => entry && typeof entry === "object" && !Array.isArray(entry))) {
+      const rows = value as Record<string, unknown>[];
+      if (rows.some((row) => "class" in row || "label" in row || "confidence" in row)) return rows;
+    }
+    return value.flatMap((entry) => findPeoplePredictions(entry, depth + 1));
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of ["predictions", "detections", "people", "persons"]) {
+    if (key in record) {
+      const found = findPeoplePredictions(record[key], depth + 1);
+      if (found.length) return found;
+    }
+  }
+  for (const child of Object.values(record)) {
+    const found = findPeoplePredictions(child, depth + 1);
+    if (found.length) return found;
+  }
+  return [];
+}
+
 equipmentRouter.post("/detect", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = detectSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "imageBase64 (raw base64, no data: prefix) is required" });
