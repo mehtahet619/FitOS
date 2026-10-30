@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("OpenRouter workout exercise generation", () => {
-  it("accepts real secondary muscles outside a single-muscle Back target", async () => {
+  it("keeps secondary biceps metadata without creating Biceps workout targets", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
     vi.stubEnv("OPENROUTER_MODEL", "test/model");
     vi.stubGlobal("fetch", vi.fn(async () => ({
@@ -35,6 +35,8 @@ describe("OpenRouter workout exercise generation", () => {
 
     expect(result).toHaveLength(3);
     expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
+    expect(result.every((exercise) => exercise.targetedMuscles.length === 1 && exercise.targetedMuscles[0] === "back")).toBe(true);
+    expect(result.every((exercise) => exercise.muscleCategories.length === 1 && exercise.muscleCategories[0] === "back")).toBe(true);
     expect(result.every((exercise) => exercise.secondaryMuscles?.includes("biceps"))).toBe(true);
   });
 });
