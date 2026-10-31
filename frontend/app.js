@@ -1243,9 +1243,10 @@ async function loadWorkout() {
       return;
     }
 
-    // A successful gym check-in is the daily attendance signal for this flow.
-    // Once attendance is recorded, show the green daily-complete state.
-    if (gymStatus?.checkedIn === true) {
+    // The workout cooldown is measured from the last completed workout,
+    // not from the calendar date or gym check-in. A gym check-in must never
+    // extend the 22-hour workout lock.
+    if (plan?.dailyWorkoutLocked === true) {
       await renderGenerateWorkoutPrompt({ ...plan, dailyWorkoutLocked: true });
       return;
     }
