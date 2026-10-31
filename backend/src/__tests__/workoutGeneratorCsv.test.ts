@@ -83,7 +83,7 @@ describe("OpenRouter workout generation", () => {
       equipmentMode: "USER_EQUIPMENT",
       userEquipmentIds: [],
     });
-    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises).toHaveLength(5);
     expect(result.exercises.every((exercise) => exercise.machine === "Bodyweight" && !exercise.requiresEquipment)).toBe(true);
   });
 
@@ -96,7 +96,7 @@ describe("OpenRouter workout generation", () => {
       equipmentMode: "FULL_GYM",
     });
     expect(result.focus).toBe("Back");
-    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises).toHaveLength(5);
     expect(result.exercises.every((exercise) => exercise.muscle === "back")).toBe(true);
     expect(result.exercises.every((exercise) => exercise.instructions.length > 0)).toBe(true);
     expect(exercises.map((exercise) => exercise.name).sort()).toEqual(result.exercises.map((exercise) => exercise.exerciseName).sort());
@@ -118,12 +118,12 @@ describe("OpenRouter workout generation", () => {
   });
 
   it.each([
-    [30, 2, 6],
-    [45, 2, 6],
-    [59, 3, 9],
-    [60, 3, 9],
-    [90, 4, 12],
-    [120, 5, 15],
+    [30, 3, 9],
+    [45, 4, 12],
+    [59, 5, 15],
+    [60, 5, 15],
+    [90, 6, 18],
+    [120, 7, 21],
   ])("generates the requested AI exercise count for %i minutes", async (minutes, exerciseCount, workingSets) => {
     const { db } = memoryDatabase();
     const result = await generateWorkout(db, "realistic-volume-user", "Chest", minutes, {
