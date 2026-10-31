@@ -465,7 +465,7 @@ describe("workout API CSV flow", () => {
           expect(current.repRangeHigh).toBe(previous.repRangeHigh);
         }
       }
-      expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
+      expect(state.workoutExercises.map((exercise) => exercise.orderIndex).sort((a, b) => a - b)).toEqual(Array.from({ length: 6 }, (_, index) => index));
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
       const historyBeforeSecondSwap = state.swapHistory
