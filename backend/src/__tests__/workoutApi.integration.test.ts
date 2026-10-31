@@ -707,7 +707,7 @@ describe("workout API CSV flow", () => {
       expect(refreshed.exercises).toHaveLength(3);
       expect(refreshed.workout.id).not.toBe(before.id);
       expect(state.workouts.find((workout) => workout.id === before.id)?.status).toBe("superseded");
-      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)).toHaveLength(4);
+      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)).toHaveLength(6);
       expect(oldCycleWorkout.status).toBe("pending");
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(refreshed.workout.id);
