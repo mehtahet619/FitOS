@@ -145,6 +145,12 @@ function makeDatabase(plan: Row, sessionMinutes = 60) {
       throw new Error(`Unexpected integration-test query: ${sql}`);
     },
     async get<T extends import("pg").QueryResultRow = import("pg").QueryResultRow>(sql: string, ...params: unknown[]): Promise<T | undefined> {
+      if (sql.includes("SELECT completedAt FROM Workout")) {
+        const latest = state.workouts
+          .filter((row) => row.userId === params[0] && row.status === "completed" && row.completedAt)
+          .sort((left, right) => new Date(right.completedAt!).getTime() - new Date(left.completedAt!).getTime())[0];
+        return latest ? ({ completedAt: latest.completedAt } as unknown as T) : undefined;
+      }
       if (sql.includes("SELECT * FROM UserProfile")) return { sessionMinutes } as unknown as T;
       if (sql.includes("SELECT id, createdAt, lastScanAt FROM GymEquipmentProfile WHERE userId = ?")) return undefined;
       if (sql.includes("WHERE id = ? AND userId = ? AND status != 'superseded' AND (cycleId = ? OR cycleId IS NULL)")) {
