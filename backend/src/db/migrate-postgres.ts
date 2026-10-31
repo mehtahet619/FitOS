@@ -169,6 +169,26 @@ async function main() {
   // Seed Muscle table.
   await seedMuscles(database);
 
+
+  // Correct the legacy Chin-ups classification. It is a compound vertical
+  // pull: back is primary and biceps are secondary. Rebuild normalized links
+  // to repair databases that already ran the older seed migration.
+  const chinUps = await database.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name) = 'chin-ups'`);
+  const back = await database.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'back'`);
+  const biceps = await database.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'biceps'`);
+  if (chinUps && back && biceps) {
+    await database.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps' WHERE id = ?`, chinUps.id);
+    await database.run(`DELETE FROM ExerciseMuscle WHERE exerciseId = ?`, chinUps.id);
+    await database.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'PRIMARY', 1.0)`, uuidv4(), chinUps.id, back.id);
+    await database.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'SECONDARY', 0.5)`, uuidv4(), chinUps.id, biceps.id);
+    await database.run(`
+      DELETE FROM ExerciseSubstitution
+      WHERE substituteId = ? AND baseExerciseId IN (
+        SELECT id FROM Exercise WHERE lower(primaryMuscle) = 'biceps'
+      )
+    `, chinUps.id);
+  }
+
   await database.close();
 
   console.log("PostgreSQL migration applied.");

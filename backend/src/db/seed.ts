@@ -46,7 +46,7 @@ const EXERCISES: ExerciseSeed[] = [
   { name: "Barbell Curl", primaryMuscle: "biceps", secondaryMuscles: [], movementPattern: "elbow_flexion", difficulty: "beginner", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "Curl bar up keeping elbows pinned to sides.", equipment: ["Barbell"] },
   { name: "Dumbbell Curl", primaryMuscle: "biceps", secondaryMuscles: [], movementPattern: "elbow_flexion", difficulty: "beginner", defaultSets: 3, repRangeLow: 8, repRangeHigh: 12, instructions: "Curl dumbbells up alternating or together, control the descent.", equipment: ["Dumbbells"] },
   { name: "Resistance Band Curl", primaryMuscle: "biceps", secondaryMuscles: [], movementPattern: "elbow_flexion", difficulty: "beginner", defaultSets: 3, repRangeLow: 12, repRangeHigh: 20, instructions: "Stand on band, curl handles up keeping elbows fixed.", equipment: ["Resistance Bands"] },
-  { name: "Chin-ups", primaryMuscle: "biceps", secondaryMuscles: ["back"], movementPattern: "vertical_pull", difficulty: "advanced", defaultSets: 3, repRangeLow: 4, repRangeHigh: 10, instructions: "Underhand grip pull-up, biases biceps more than standard pull-ups.", equipment: ["Pull-up Bar"] },
+  { name: "Chin-ups", primaryMuscle: "back", secondaryMuscles: ["biceps"], movementPattern: "vertical_pull", difficulty: "advanced", defaultSets: 3, repRangeLow: 4, repRangeHigh: 10, instructions: "Underhand-grip vertical pull. Trains the lats and upper back, with the biceps assisting.", equipment: ["Pull-up Bar"] },
 
   // LEGS - quads
   { name: "Barbell Back Squat", primaryMuscle: "quads", secondaryMuscles: ["glutes", "hamstrings"], movementPattern: "squat", difficulty: "intermediate", defaultSets: 4, repRangeLow: 5, repRangeHigh: 10, instructions: "Bar on upper back, squat to depth, drive up through heels.", equipment: ["Barbell", "Squat Rack"] },
@@ -93,7 +93,7 @@ const SUBSTITUTIONS: [string, string[]][] = [
   ["Pull-ups", ["Lat Pulldown", "Inverted Row", "Dumbbell Row", "Resistance Band Row", "Superman Rows (Bodyweight)"]],
   ["Lat Pulldown", ["Pull-ups", "Inverted Row", "Dumbbell Row", "Resistance Band Row"]],
   ["Barbell Bent-Over Row", ["Dumbbell Row", "Resistance Band Row", "Inverted Row", "Superman Rows (Bodyweight)"]],
-  ["Barbell Curl", ["Dumbbell Curl", "Resistance Band Curl", "Chin-ups"]],
+  ["Barbell Curl", ["Dumbbell Curl", "Resistance Band Curl"]],
   ["Dumbbell Curl", ["Barbell Curl", "Resistance Band Curl"]],
   ["Barbell Back Squat", ["Smith Machine Squat", "Leg Press", "Goblet Squat", "Bodyweight Squat", "Walking Lunges"]],
   ["Smith Machine Squat", ["Barbell Back Squat", "Leg Press", "Goblet Squat", "Bodyweight Squat"]],
