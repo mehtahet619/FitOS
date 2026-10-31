@@ -50,16 +50,21 @@ function localDateKey(value: string | Date = new Date()): string {
     timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(value instanceof Date ? value : new Date(value));
 }
+const DAILY_WORKOUT_LOCK_MS = 22 * 60 * 60 * 1000;
+
 async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
-  const rows = await dbConn.all<{ completedAt: string }>(
+  const latest = await dbConn.get<{ completedAt: string }>(
     `SELECT completedAt FROM Workout
      WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
-     ORDER BY completedAt DESC LIMIT 20`,
+     ORDER BY completedAt DESC LIMIT 1`,
     userId
   );
-  const today = localDateKey();
-  const latest = rows.find((row) => localDateKey(row.completedAt) === today);
-  return { locked: Boolean(latest), completedAt: latest?.completedAt ?? null };
+  if (!latest?.completedAt) return { locked: false, completedAt: null };
+
+  const completedAtMs = new Date(latest.completedAt).getTime();
+  const elapsedMs = Date.now() - completedAtMs;
+  const locked = Number.isFinite(completedAtMs) && elapsedMs >= 0 && elapsedMs < DAILY_WORKOUT_LOCK_MS;
+  return { locked, completedAt: latest.completedAt };
 }
 
 
