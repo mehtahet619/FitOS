@@ -1206,9 +1206,9 @@ function shouldShowWorkoutMissing(plan, workoutHistory, gymStatus, now = Date.no
 function renderWorkoutMissingNotice() {
   return `
     <section class="card workout-missing-card" role="status" aria-live="polite">
-      <div class="card-label">Today's workout is missing</div>
-      <h2>Time to check in</h2>
-      <p class="card-sub">It's been about 22 hours since your last completed workout, and you haven't marked today's gym attendance yet. Scan your gym QR code or mark attendance to continue.</p>
+      <div class="card-label">Gym attendance reminder</div>
+      <h2>Attendance not marked</h2>
+      <p class="card-sub">It's been about 22 hours since your last completed workout, and today's gym attendance is not marked yet. You can still generate and complete your planned workout. Scan your gym QR code or mark attendance to record your visit.</p>
     </section>
   `;
 }
@@ -1234,24 +1234,16 @@ async function loadWorkout() {
       workout = null;
     }
 
-    // Once the 22-hour deadline passes, require a fresh gym attendance check-in.
-    // This takes precedence over the calendar-day workout lock, which can otherwise
-    // keep showing the green "workout complete" card after the deadline.
-    if (shouldShowWorkoutMissing(plan, workoutHistory, gymStatus)) {
-      el.innerHTML = `${plan?.activePlan ? renderActivePlanCard(plan) : ""}${renderWorkoutMissingNotice()}`;
-      if (plan?.activePlan) wirePlanActions(plan);
-      return;
-    }
+    // The 22-hour attendance reminder is informational only. It must never
+    // block workout generation or hide an unfinished/pending workout.
+    const showAttendanceReminder = shouldShowWorkoutMissing(plan, workoutHistory, gymStatus);
 
-    // The workout cooldown is measured from the last completed workout,
-    // not from the calendar date or gym check-in. A gym check-in must never
-    // extend the 22-hour workout lock.
+    // Only a genuinely completed workout within the rolling cooldown is locked.
+    // Logging in, opening the Workout tab, or leaving today's workout ungenerated
+    // must not count as completing a workout.
     if (plan?.dailyWorkoutLocked === true) {
       await renderGenerateWorkoutPrompt({ ...plan, dailyWorkoutLocked: true });
-      return;
-    }
-
-    if (workout) {
+    } else if (workout) {
       if (workout.needsRegeneration && workout.canRegenerate) {
         renderLegacyWorkoutRefresh(workout, plan);
       } else {
@@ -1259,6 +1251,12 @@ async function loadWorkout() {
       }
     } else {
       await renderGenerateWorkoutPrompt(plan);
+    }
+
+    // Append the attendance reminder after the main workout UI has rendered,
+    // rather than replacing the UI with a blocking check-in screen.
+    if (showAttendanceReminder) {
+      el.insertAdjacentHTML("beforeend", renderWorkoutMissingNotice());
     }
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
