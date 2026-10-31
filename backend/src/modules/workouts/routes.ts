@@ -1024,7 +1024,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   });
   if (!nextAlternative) {
     return res.status(422).json({
-      error: `OpenRouter could not generate a safe replacement for "${base.name}" using this workout's available equipment. Please retry.`,
+      error: `Sorry, we couldn't find a suitable alternative for "${base.name}" with your available equipment. We're constantly improving FitOS and working to make better recommendations. Please try another exercise or update your gym equipment.`,
       requiresEquipment: baseRequiresEquipment,
     });
   }
