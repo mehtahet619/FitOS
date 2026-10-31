@@ -177,7 +177,7 @@ async function main() {
   const back = await database.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'back'`);
   const biceps = await database.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'biceps'`);
   if (chinUps && back && biceps) {
-    await database.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps' WHERE id = ?`, chinUps.id);
+    await database.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps', instructions = 'Underhand-grip vertical pull. Trains the lats and upper back, with the biceps assisting.' WHERE id = ?`, chinUps.id);
     await database.run(`DELETE FROM ExerciseMuscle WHERE exerciseId = ?`, chinUps.id);
     await database.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'PRIMARY', 1.0)`, uuidv4(), chinUps.id, back.id);
     await database.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'SECONDARY', 0.5)`, uuidv4(), chinUps.id, biceps.id);

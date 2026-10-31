@@ -243,7 +243,7 @@ db.exec(schema)
       const back = await db.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'back'`);
       const biceps = await db.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'biceps'`);
       if (chinUps && back && biceps) {
-        await db.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps' WHERE id = ?`, chinUps.id);
+        await db.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps', instructions = 'Underhand-grip vertical pull. Trains the lats and upper back, with the biceps assisting.' WHERE id = ?`, chinUps.id);
         await db.run(`DELETE FROM ExerciseMuscle WHERE exerciseId = ?`, chinUps.id);
         await db.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'PRIMARY', 1.0)`, uuidv4(), chinUps.id, back.id);
         await db.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'SECONDARY', 0.5)`, uuidv4(), chinUps.id, biceps.id);
