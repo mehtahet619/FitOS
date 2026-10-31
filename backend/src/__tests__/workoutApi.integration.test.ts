@@ -399,8 +399,8 @@ describe("workout API CSV flow", () => {
       });
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
-      expect(generated.exercises).toHaveLength(4);
-      expect(generated.availableExerciseCount).toBe(4);
+      expect(generated.exercises).toHaveLength(6);
+      expect(generated.availableExerciseCount).toBe(6);
       expect(new Set(generated.exercises.map((exercise: any) => exerciseFamilyKey(exercise.exerciseName))).size).toBe(generated.exercises.length);
       expect(generated.exercises.every((exercise: any) => exercise.instructions.length > 0)).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
@@ -814,7 +814,7 @@ describe("workout API CSV flow", () => {
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
       expect(generated.workout.durationMin).toBe(59);
-      expect(generated.exercises).toHaveLength(3);
+      expect(generated.exercises).toHaveLength(5);
       expect(generated.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back" && exercise.machine !== "Bodyweight")).toBe(true);
       expect(state.workouts.find((workout) => workout.id === legacyId)?.status).toBe("superseded");
       expect(state.workoutExercises.find((exercise) => exercise.id === "legacy-workout-slot")).toBeDefined();
@@ -823,7 +823,7 @@ describe("workout API CSV flow", () => {
 
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(generated.workout.id);
-      expect(current.exercises).toHaveLength(3);
+      expect(current.exercises).toHaveLength(5);
       expect(current.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back")).toBe(true);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
