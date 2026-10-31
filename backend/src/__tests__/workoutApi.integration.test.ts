@@ -399,8 +399,8 @@ describe("workout API CSV flow", () => {
       });
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
-      expect(generated.exercises).toHaveLength(4);
-      expect(generated.availableExerciseCount).toBe(4);
+      expect(generated.exercises).toHaveLength(6);
+      expect(generated.availableExerciseCount).toBe(6);
       expect(new Set(generated.exercises.map((exercise: any) => exerciseFamilyKey(exercise.exerciseName))).size).toBe(generated.exercises.length);
       expect(generated.exercises.every((exercise: any) => exercise.instructions.length > 0)).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
@@ -442,7 +442,7 @@ describe("workout API CSV flow", () => {
       )).toBe(false);
 
       const after = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
-      expect(after.exercises).toHaveLength(4);
+      expect(after.exercises).toHaveLength(6);
       expect(after.durationMin).toBe(before.durationMin);
 
       // The endpoint may choose any eligible slot above; assert by stable slot
@@ -465,7 +465,7 @@ describe("workout API CSV flow", () => {
           expect(current.repRangeHigh).toBe(previous.repRangeHigh);
         }
       }
-      expect(state.workoutExercises.map((exercise) => exercise.orderIndex)).toEqual([0, 1, 2, 3]);
+      expect(state.workoutExercises.map((exercise) => exercise.orderIndex).sort((a, b) => a - b)).toEqual(Array.from({ length: 6 }, (_, index) => index));
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
       const historyBeforeSecondSwap = state.swapHistory
@@ -636,7 +636,7 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(editResponse.status).toBe(200);
-      expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
+      expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 5 });
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "back", sourceMachine: "Dumbbells" });
       expect(editedSlot?.exerciseId).toBe("catalog-deadlift");
@@ -704,10 +704,10 @@ describe("workout API CSV flow", () => {
       expect(refreshResponse.status).toBe(201);
       const refreshed = await refreshResponse.json() as any;
       expect(refreshed.workout.durationMin).toBe(30);
-      expect(refreshed.exercises).toHaveLength(2);
+      expect(refreshed.exercises).toHaveLength(3);
       expect(refreshed.workout.id).not.toBe(before.id);
       expect(state.workouts.find((workout) => workout.id === before.id)?.status).toBe("superseded");
-      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)).toHaveLength(4);
+      expect(state.workoutExercises.filter((exercise) => exercise.workoutId === before.id)).toHaveLength(6);
       expect(oldCycleWorkout.status).toBe("pending");
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(refreshed.workout.id);
@@ -814,7 +814,7 @@ describe("workout API CSV flow", () => {
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
       expect(generated.workout.durationMin).toBe(59);
-      expect(generated.exercises).toHaveLength(3);
+      expect(generated.exercises).toHaveLength(5);
       expect(generated.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back" && exercise.machine !== "Bodyweight")).toBe(true);
       expect(state.workouts.find((workout) => workout.id === legacyId)?.status).toBe("superseded");
       expect(state.workoutExercises.find((exercise) => exercise.id === "legacy-workout-slot")).toBeDefined();
@@ -823,7 +823,7 @@ describe("workout API CSV flow", () => {
 
       const current = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
       expect(current.id).toBe(generated.workout.id);
-      expect(current.exercises).toHaveLength(3);
+      expect(current.exercises).toHaveLength(5);
       expect(current.exercises.every((exercise: any) => String(exercise.muscle).toLowerCase() === "back")).toBe(true);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

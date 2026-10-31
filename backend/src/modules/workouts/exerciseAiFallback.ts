@@ -151,36 +151,26 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
 }
 
 async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInput): Promise<string> {
-  const prompt = {
-    task: "Generate a complete, balanced strength-training workout directly from the user profile and available gym equipment. Do not use or imitate a fixed exercise catalogue.",
-    sessionDurationMinutes: input.sessionDurationMinutes,
-    numberOfExercises: input.count,
-    targetMuscles: input.targetMuscles,
-    allowedEquipment: input.equipment.map(({ name, aliases }) => ({ name, aliases })),
-    ...(input.targetedMuscle ? { requiredTargetedMuscle: input.targetedMuscle } : {}),
-    ...(input.timeTakenOneSet ? { requiredOneSetDuration: input.timeTakenOneSet } : {}),
-    rules: [
-      "Return only a JSON object with an exercises array; do not use markdown.",
-      "Each item must have exercise, machine, muscle, secondaryMuscles, instructions, sets, repRangeLow, and repRangeHigh fields.",
-      "Use only an exact allowedEquipment name or alias for machine; never invent equipment.",
-      "Every exercise primary muscle must be one exact value from targetMuscles. Never change the workout focus.",
-      "Secondary muscles are anatomical metadata only. They must NEVER be used as standalone exercise targets, must NEVER increase the exercise count for a muscle group, and must NEVER replace an exercise whose primary muscle is in targetMuscles. For a Back-only workout, every requested exercise must have primary muscle Back, even if biceps is listed as a secondary muscle.",
-      "Distribute PRIMARY exercise targets across ALL targetMuscles. For Full Body, cover chest, back, quads, hamstrings, glutes, shoulders and core with the primary muscle of the exercises. Secondary muscles do not count toward target coverage.",
-      "Choose biomechanically sound, distinct movement patterns and avoid duplicate exercises or superficial grip, stance, tempo, or equipment variants.",
-      "Prioritize compound movements, then accessories. Match every exercise to the exact equipment the user has available. Bodyweight is allowed.",
-      "Provide concise actionable setup and execution instructions, realistic sets (2-4), and sensible rep ranges. Never prescribe an exercise requiring unavailable equipment.",
-      "Do not add explanations, warmups, or exercises beyond the requested number.",
-    ],
-  };
-  const system = "You are a conservative exercise catalog assistant. Follow the supplied constraints exactly and return valid JSON only.";
+  const prompt = [
+    `Create a complete strength-training workout for these target muscles: ${input.targetMuscles.join(", ")}.`,
+    `The total session duration is ${input.sessionDurationMinutes} minutes.`,
+    `Generate exactly ${input.count} distinct exercises that fit this duration.`,
+    `Available equipment: ${input.equipment.map(({ name }) => name).join(", ")}.`,
+    "Train the full target muscle, not just one small area. For a single muscle, cover its relevant heads, regions, and functions with genuinely different exercises and angles. For multiple muscles, distribute primary exercises across every requested muscle.",
+    "Do not fill the workout with near-identical curls, presses, rows, or equipment variations. Choose movements that provide complementary muscle coverage.",
+    "Use only the listed equipment or bodyweight. Every exercise must have one primary muscle from the requested target muscles. Secondary muscles are descriptive only and do not count as target coverage.",
+    "Return only valid JSON in this exact shape: { \"exercises\": [{ \"exercise\": string, \"machine\": string, \"muscle\": string, \"secondaryMuscles\": string[], \"instructions\": string, \"sets\": number, \"repRangeLow\": number, \"repRangeHigh\": number }] }.",
+    "Use exact muscle and equipment names from the input. Use 2-4 working sets and realistic rep ranges. No warmup, explanation, markdown, or extra exercises.",
+  ].join("\n");
+  const system = "You are a practical strength coach. Generate a balanced workout that covers the requested muscles within the stated time. Return valid JSON only.";
   const body = {
     model: provider.model,
     temperature: 0.1,
-    max_tokens: 1600,
+    max_tokens: 3000,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
-      { role: "user", content: JSON.stringify(prompt) },
+      { role: "user", content: prompt },
     ],
   };
   const headers: Record<string, string> = {

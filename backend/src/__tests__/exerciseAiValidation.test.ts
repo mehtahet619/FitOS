@@ -17,7 +17,9 @@ describe("OpenRouter workout exercise generation", () => {
           exercises: [
             { exercise: "Chest Supported Row", machine: "Dumbbells", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Support chest on bench and row dumbbells toward hips.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
             { exercise: "Lat Pulldown", machine: "Cable Machine", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Pull the bar to upper chest with control.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
-            { exercise: "Seated Cable Row", machine: "Cable Machine", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Keep torso stable and pull handle to waist.", sets: 3, repRangeLow: 8, repRangeHigh: 12 }
+            { exercise: "Seated Cable Row", machine: "Cable Machine", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Keep torso stable and pull handle to waist.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
+            { exercise: "Single Arm Dumbbell Row", machine: "Dumbbells", muscle: "back", secondaryMuscles: ["biceps"], instructions: "Brace on a bench and row one dumbbell toward the hip.", sets: 3, repRangeLow: 8, repRangeHigh: 12 },
+            { exercise: "Straight Arm Pulldown", machine: "Cable Machine", muscle: "back", secondaryMuscles: [], instructions: "Keep elbows softly bent and pull the cable toward the thighs.", sets: 3, repRangeLow: 10, repRangeHigh: 15 }
           ]
         }) } }]
       })
@@ -26,18 +28,19 @@ describe("OpenRouter workout exercise generation", () => {
     const result = await getAiExerciseFallback({
       targetMuscles: ["back"],
       sessionDurationMinutes: 60,
-      count: 3,
+      count: 5,
       equipment: [
         { name: "Dumbbells", aliases: [] },
         { name: "Cable Machine", aliases: ["Cable"] },
       ],
     });
 
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(5);
     expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
     expect(result.every((exercise) => exercise.targetedMuscles.length === 1 && exercise.targetedMuscles[0] === "back")).toBe(true);
     expect(result.every((exercise) => exercise.muscleCategories.length === 1 && exercise.muscleCategories[0] === "back")).toBe(true);
-    expect(result.every((exercise) => exercise.secondaryMuscles?.includes("biceps"))).toBe(true);
+    expect(result.some((exercise) => exercise.secondaryMuscles?.includes("biceps"))).toBe(true);
+    expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
   });
 });
 

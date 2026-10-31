@@ -27,11 +27,12 @@ export interface GeneratedExercise {
 export type EquipmentMode = "USER_EQUIPMENT" | "SCANNED" | "FULL_GYM";
 
 function exerciseCountForDuration(minutes: number): number {
-  if (minutes <= 45) return 2;
-  if (minutes <= 70) return 3;
-  if (minutes <= 110) return 4;
-  if (minutes <= 180) return 5;
-  return 6;
+  if (minutes <= 30) return 3;
+  if (minutes <= 45) return 4;
+  if (minutes <= 70) return 5;
+  if (minutes <= 110) return 6;
+  if (minutes <= 180) return 7;
+  return 8;
 }
 
 const FOCUS_TO_MUSCLES: Record<string, string[]> = {
@@ -266,7 +267,7 @@ export async function generateWorkout(
   }
 
 
-  const requestedCount = exerciseCountForDuration(durationMin);
+  const requestedCount = Math.max(exerciseCountForDuration(durationMin), unitMuscles.length >= 5 ? unitMuscles.length : 0);
   const aiExercises = await getAiExerciseFallback({
     targetMuscles: unitMuscles,
     sessionDurationMinutes: durationMin,
