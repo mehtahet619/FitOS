@@ -1185,8 +1185,10 @@ function renderTodayError(el, message) {
 const WORKOUT_MISSING_AFTER_MS = 22 * 60 * 60 * 1000;
 
 function shouldShowWorkoutMissing(plan, workoutHistory, gymStatus, now = Date.now()) {
-  // A completed workout today always takes precedence over the missing state.
-  if (plan?.dailyWorkoutLocked || gymStatus?.checkedIn !== false) return false;
+  // A recorded gym check-in is the only signal that suppresses the missing state.
+  // Do not use dailyWorkoutLocked here: it is based on the calendar day and can
+  // remain true even after the 22-hour attendance deadline has elapsed.
+  if (gymStatus?.checkedIn === true) return false;
 
   // Do not show a warning to a new user who has never completed a workout.
   const completedWorkouts = Array.isArray(workoutHistory)
@@ -1232,10 +1234,18 @@ async function loadWorkout() {
       workout = null;
     }
 
+    // Once the 22-hour deadline passes, require a fresh gym attendance check-in.
+    // This takes precedence over the calendar-day workout lock, which can otherwise
+    // keep showing the green "workout complete" card after the deadline.
+    if (shouldShowWorkoutMissing(plan, workoutHistory, gymStatus)) {
+      el.innerHTML = `${plan?.activePlan ? renderActivePlanCard(plan) : ""}${renderWorkoutMissingNotice()}`;
+      if (plan?.activePlan) wirePlanActions(plan);
+      return;
+    }
+
     // A successful gym check-in is the daily attendance signal for this flow.
-    // Once attendance is recorded, show the same green daily-complete state and
-    // do not ask the user to generate another workout for that attendance day.
-    if (gymStatus?.checkedIn) {
+    // Once attendance is recorded, show the green daily-complete state.
+    if (gymStatus?.checkedIn === true) {
       await renderGenerateWorkoutPrompt({ ...plan, dailyWorkoutLocked: true });
       return;
     }
@@ -1248,10 +1258,6 @@ async function loadWorkout() {
       }
     } else {
       await renderGenerateWorkoutPrompt(plan);
-    }
-
-    if (shouldShowWorkoutMissing(plan, workoutHistory, gymStatus)) {
-      el.insertAdjacentHTML("afterbegin", renderWorkoutMissingNotice());
     }
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
