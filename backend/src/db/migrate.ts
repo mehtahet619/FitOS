@@ -233,6 +233,32 @@ db.exec(schema)
       );
     }
 
+
+    // Correct the legacy Chin-ups classification. Chin-ups are a compound
+    // vertical pull with back as the primary target and biceps assisting.
+    // Rebuild the normalized relationships because the original migration
+    // may already have inserted the incorrect biceps PRIMARY relationship.
+    try {
+      const chinUps = await db.get<{ id: string }>(`SELECT id FROM Exercise WHERE lower(name) = 'chin-ups'`);
+      const back = await db.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'back'`);
+      const biceps = await db.get<{ id: string }>(`SELECT id FROM Muscle WHERE lower(name) = 'biceps'`);
+      if (chinUps && back && biceps) {
+        await db.run(`UPDATE Exercise SET primaryMuscle = 'back', secondaryMuscles = 'biceps' WHERE id = ?`, chinUps.id);
+        await db.run(`DELETE FROM ExerciseMuscle WHERE exerciseId = ?`, chinUps.id);
+        await db.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'PRIMARY', 1.0)`, uuidv4(), chinUps.id, back.id);
+        await db.run(`INSERT INTO ExerciseMuscle (id, exerciseId, muscleId, role, weight) VALUES (?, ?, ?, 'SECONDARY', 0.5)`, uuidv4(), chinUps.id, biceps.id);
+        await db.run(`
+          DELETE FROM ExerciseSubstitution
+          WHERE substituteId = ? AND baseExerciseId IN (
+            SELECT id FROM Exercise WHERE lower(primaryMuscle) = 'biceps'
+          )
+        `, chinUps.id);
+      }
+    } catch (error) {
+      console.error("Chin-ups muscle classification correction failed:", error);
+      throw error;
+    }
+
     console.log("Migration applied.");
   })
   .catch((error) => {
