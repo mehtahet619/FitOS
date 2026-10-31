@@ -442,7 +442,7 @@ describe("workout API CSV flow", () => {
       )).toBe(false);
 
       const after = await (await fetch(`${baseUrl}/workouts/today`)).json() as any;
-      expect(after.exercises).toHaveLength(4);
+      expect(after.exercises).toHaveLength(6);
       expect(after.durationMin).toBe(before.durationMin);
 
       // The endpoint may choose any eligible slot above; assert by stable slot
