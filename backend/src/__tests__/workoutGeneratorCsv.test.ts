@@ -100,7 +100,7 @@ describe("OpenRouter workout generation", () => {
     expect(result.exercises.every((exercise) => exercise.muscle === "back")).toBe(true);
     expect(result.exercises.every((exercise) => exercise.instructions.length > 0)).toBe(true);
     expect(exercises.map((exercise) => exercise.name).sort()).toEqual(result.exercises.map((exercise) => exercise.exerciseName).sort());
-    expect(exercises).toHaveLength(3);
+    expect(exercises).toHaveLength(5);
     expect(result.exercises.some((exercise) => csvExerciseRepository.getAll().some((row) => row.exercise === exercise.exerciseName))).toBe(false);
     expect(state).toEqual(before);
     expect(queries.some((sql) => /UPDATE\\s+WorkoutPlanState|INSERT\\s+INTO\\s+WorkoutCycleHistory/i.test(sql))).toBe(false);
