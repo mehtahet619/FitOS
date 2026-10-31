@@ -166,7 +166,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
   const body = {
     model: provider.model,
     temperature: 0.1,
-    max_tokens: 1600,
+    max_tokens: 3000,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
