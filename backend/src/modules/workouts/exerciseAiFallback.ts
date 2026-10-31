@@ -170,7 +170,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
-      { role: "user", content: JSON.stringify(prompt) },
+      { role: "user", content: prompt },
     ],
   };
   const headers: Record<string, string> = {
