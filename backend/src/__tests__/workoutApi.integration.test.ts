@@ -636,7 +636,7 @@ describe("workout API CSV flow", () => {
         body: JSON.stringify({ workoutExerciseId: editSlotId, exerciseName: "Deadlift", targetMuscle: "back", equipmentName: "Dumbbells" }),
       });
       expect(editResponse.status).toBe(200);
-      expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 3 });
+      expect(await editResponse.json()).toMatchObject({ updated: true, rebalancedExerciseCount: 5 });
       const editedSlot = state.workoutExercises.find((exercise) => exercise.id === editSlotId);
       expect(editedSlot).toMatchObject({ sourceExerciseName: "Deadlift", sourcePrimaryMuscle: "back", sourceMachine: "Dumbbells" });
       expect(editedSlot?.exerciseId).toBe("catalog-deadlift");
