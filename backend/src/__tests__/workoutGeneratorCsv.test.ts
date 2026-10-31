@@ -112,9 +112,9 @@ describe("OpenRouter workout generation", () => {
       lockToMuscles: ["back", "biceps"],
       equipmentMode: "FULL_GYM",
     });
-    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises).toHaveLength(5);
     expect(result.exercises.every((exercise) => ["back", "biceps"].includes(exercise.muscle))).toBe(true);
-    expect(new Set(result.exercises.map((exercise) => exercise.exerciseName)).size).toBe(3);
+    expect(new Set(result.exercises.map((exercise) => exercise.exerciseName)).size).toBe(5);
   });
 
   it.each([
