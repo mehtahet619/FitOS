@@ -2691,6 +2691,9 @@ async function continueAfterGymAttendance() {
   }
 }
 
+function gymEscapeHtml(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
+}
 async function setupGymIntelligence(selectedGym) {
   if (selectedGym) {
     $("gym-change-selection")?.addEventListener("click", () => { void loadGymSelectionForm(); });
@@ -2704,12 +2707,12 @@ async function loadGymSelectionForm() {
   const gymSelect = $("gym-result-select"); const saveButton = $("gym-save-selection"); let timer;
   cityInput.addEventListener("input", () => {
     clearTimeout(timer); const query = cityInput.value.trim(); if (query.length < 2) { cityList.replaceChildren(); return; }
-    timer = setTimeout(async () => { try { const result = await Api.get(`/gym/cities?q=${encodeURIComponent(query)}`); cityList.innerHTML = (result.cities || []).map(city => `<option value="${escapeHtml(city)}"></option>`).join(""); cityStatus.textContent = "Choose a city from the suggestions."; } catch (error) { cityStatus.textContent = error.message; } }, 250);
+    timer = setTimeout(async () => { try { const result = await Api.get(`/gym/cities?q=${encodeURIComponent(query)}`); cityList.innerHTML = (result.cities || []).map(city => `<option value="${gymEscapeHtml(city)}"></option>`).join(""); cityStatus.textContent = "Choose a city from the suggestions."; } catch (error) { cityStatus.textContent = error.message; } }, 250);
   });
   $("gym-search-button")?.addEventListener("click", async () => {
     const city = cityInput.value.trim(); if (!city) { searchStatus.textContent = "Select a city first."; return; }
     const button = $("gym-search-button"); button.disabled = true; searchStatus.textContent = "Searching…";
-    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${escapeHtml(gym.id)}">${escapeHtml(gym.name)} · ${escapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found.` : "No gyms found. Add yours below."; }
+    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found.` : "No gyms found. Add yours below."; }
     catch (error) { searchStatus.textContent = error.message; } finally { button.disabled = false; }
   });
   saveButton?.addEventListener("click", async () => { if (!gymSelect.value) { searchStatus.textContent = "Select a gym first."; return; } saveButton.disabled = true; try { await Api.post("/gym/select", { gymId: gymSelect.value, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; saveButton.disabled = false; } });
@@ -2739,7 +2742,7 @@ function renderGym(status, history, selectedGym) {
   el.innerHTML = `
     <div class="card gym-intelligence-card">
       <div class="card-label">📊 Gym crowd intelligence</div>
-      ${selectedGym ? `<strong>${escapeHtml(selectedGym.name)}</strong><p class="card-sub">${escapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
+      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
     </div>
     <div class="card">
       <div class="card-label">📇 Attendance</div>
