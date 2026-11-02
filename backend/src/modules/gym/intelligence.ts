@@ -185,8 +185,10 @@ async function predictGymWeek(gym: any, timeZone: string) {
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
       const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
       // Freeze a forecast once the target hour starts or an actual value is recorded.
-      const targetStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00:00`);
-      if (targetStart.getTime() > nowMs && !existing?.evaluatedAt) {
+      const todayInGymZone = localDateAt(now, timeZone);
+      const currentGymHour = localWeekdayHour(now, timeZone).hour;
+      const targetIsFuture = dateKey > todayInGymZone || (dateKey === todayInGymZone && hour > currentGymHour);
+      if (targetIsFuture && !existing?.evaluatedAt) {
         if (existing) {
           await db.run("UPDATE GymCrowdForecastSnapshot SET predictedCrowdPercent = ?, modelVersion = ?, generatedAt = ? WHERE id = ?", predicted, modelVersion, nowIso(), existing.id);
         } else {
