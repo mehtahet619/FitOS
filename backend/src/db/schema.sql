@@ -574,3 +574,57 @@ CREATE TABLE IF NOT EXISTS food_log (
 );
 CREATE INDEX IF NOT EXISTS idx_food_log_user_date ON food_log(user_id, logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_food_log_user_code ON food_log(user_id, product_code, logged_at);
+
+
+-- Shared gym identity and adaptive crowd intelligence.
+CREATE TABLE IF NOT EXISTS Gym (
+  id TEXT PRIMARY KEY,
+  placeId TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL,
+  latitude REAL,
+  longitude REAL,
+  rating REAL,
+  ratingCount INTEGER,
+  openingHoursJson TEXT,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gym_city_name ON Gym(city, name);
+
+CREATE TABLE IF NOT EXISTS GymMembership (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL UNIQUE REFERENCES User(id) ON DELETE CASCADE,
+  gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
+  timeZone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gym_membership_gym ON GymMembership(gymId);
+
+CREATE TABLE IF NOT EXISTS GymCrowdObservation (
+  id TEXT PRIMARY KEY,
+  gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
+  userId TEXT REFERENCES User(id) ON DELETE SET NULL,
+  observedAt TEXT NOT NULL,
+  crowdPercent REAL NOT NULL CHECK(crowdPercent >= 0 AND crowdPercent <= 100),
+  occupiedCount INTEGER,
+  capacity INTEGER,
+  source TEXT NOT NULL,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gym_observation_gym_time ON GymCrowdObservation(gymId, observedAt);
+CREATE INDEX IF NOT EXISTS idx_gym_observation_time ON GymCrowdObservation(observedAt);
+
+CREATE TABLE IF NOT EXISTS GymCrowdPrediction (
+  id TEXT PRIMARY KEY,
+  gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
+  predictedFor TEXT NOT NULL,
+  crowdPercent REAL NOT NULL,
+  crowdLevel TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  generatedAt TEXT NOT NULL,
+  modelVersion TEXT NOT NULL,
+  UNIQUE(gymId, predictedFor)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_prediction_gym_time ON GymCrowdPrediction(gymId, predictedFor);

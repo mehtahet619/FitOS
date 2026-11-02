@@ -291,3 +291,11 @@ npx ts-node scripts/smoke-people-counting-workflow.ts
 ```
 
 The smoke test makes a real Roboflow inference request using a public sample image. It checks that the workflow returns its declared output. Network access and valid Roboflow credentials are required.
+
+### Gym Crowd Intelligence
+
+The crowd module stores one shared Gym record per Google Place ID, one selected GymMembership per FitOS account, raw GymCrowdObservation rows, and GymCrowdPrediction rows. Forecast requests recompute the next seven local calendar days from the gym's weekday/hour observations, with a global weekday/hour prior once enough observations exist. Newly submitted observations affect the next forecast request, including tomorrow's hourly predictions. Model output is versioned and carries sample count and confidence.
+
+Google Places supplies gym identity, address, ratings and regular opening-hour periods where available. It does not provide historical hourly Popular Times through the Places API, so the system does not fabricate or scrape that data. If opening hours are unavailable, the API marks openingHoursKnown=false and returns all 24 hours rather than silently assuming a schedule. A low-confidence neutral prior is used until trustworthy crowd observations exist. The observation endpoint is an ingestion interface; cameras, IR sensors and owner integrations must send validated observations before the model has real occupancy data.
+
+Endpoints: GET /gym/cities?q=an, GET /gym/search?city=Anand&q=gyms, POST /gym/create, POST /gym/select, GET /gym/selected, GET /gym/:gymId/forecast, and POST /gym/:gymId/observations. Gym discovery requires GOOGLE_PLACES_API_KEY with Places API (New) enabled.

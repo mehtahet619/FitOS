@@ -2120,3 +2120,18 @@ body.gym-choice-open { overflow: hidden; }
 .workout-missing-card h2 {
   margin: 8px 0;
 }
+
+.gym-intelligence-card .form-label { display:block; margin:12px 0 6px; font-size:12px; font-weight:700; }
+.gym-intelligence-card .input { width:100%; min-height:42px; margin:5px 0; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:#fff; color:var(--ink); font:inherit; }
+.gym-intelligence-card .btn { margin-top:10px; }
+.gym-intelligence-card details { margin-top:14px; color:var(--muted); font-size:13px; }
+.gym-crowd-day { margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
+.gym-crowd-day h3 { margin:0 0 10px; font-size:14px; }
+.gym-crowd-hour { display:grid; grid-template-columns:44px minmax(40px,1fr) 38px 68px; align-items:center; gap:7px; margin:7px 0; font-size:11px; }
+.gym-crowd-hour span,.gym-crowd-hour small { color:var(--muted); }
+.gym-crowd-hour b { text-align:right; font-variant-numeric:tabular-nums; }
+.gym-crowd-track { height:9px; overflow:hidden; border-radius:99px; background:#e9ece8; }
+.gym-crowd-track i { display:block; height:100%; border-radius:inherit; background:#50b88b; }
+.gym-crowd-track i.is-moderate { background:#e4ad4e; }
+.gym-crowd-track i.is-busy { background:#df6b61; }
+@media (max-width:380px) { .gym-crowd-hour { grid-template-columns:40px minmax(35px,1fr) 34px; } .gym-crowd-hour small { display:none; } }

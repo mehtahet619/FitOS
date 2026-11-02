@@ -2691,21 +2691,65 @@ async function continueAfterGymAttendance() {
   }
 }
 
+function gymEscapeHtml(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
+}
+async function setupGymIntelligence(selectedGym) {
+  if (selectedGym) {
+    $("gym-change-selection")?.addEventListener("click", async () => { try { const [status, history] = await Promise.all([Api.get("/gym/today"), Api.get("/gym/history")]); renderGym(status, history, null); } catch (error) { console.error("[GymCrowd] Could not change gym:", error); } });
+    await loadGymCrowdForecast(selectedGym.id);
+    $("gym-report-crowd")?.addEventListener("click", async () => {
+      const button = $("gym-report-crowd"); button.disabled = true;
+      try { await Api.post(`/gym/${encodeURIComponent(selectedGym.id)}/observations`, { crowdPercent: Number($("gym-report-level").value), source: "manual" }); await loadGymCrowdForecast(selectedGym.id); button.textContent = "Thanks, observation shared"; }
+      catch (error) { button.textContent = error.message || "Could not share"; }
+      finally { button.disabled = false; }
+    });
+  } else { await loadGymSelectionForm(); }
+}
+
+async function loadGymSelectionForm() {
+  const cityInput = $("gym-city-input"); if (!cityInput) return;
+  const cityList = $("gym-city-options"); const cityStatus = $("gym-city-status"); const searchStatus = $("gym-search-status");
+  const gymSelect = $("gym-result-select"); const saveButton = $("gym-save-selection"); let timer;
+  cityInput.addEventListener("input", () => {
+    clearTimeout(timer); const query = cityInput.value.trim(); if (query.length < 2) { cityList.replaceChildren(); return; }
+    timer = setTimeout(async () => { try { const result = await Api.get(`/gym/cities?q=${encodeURIComponent(query)}`); cityList.innerHTML = (result.cities || []).map(city => `<option value="${gymEscapeHtml(city)}"></option>`).join(""); cityStatus.textContent = "Choose a city from the suggestions."; } catch (error) { cityStatus.textContent = error.message; } }, 250);
+  });
+  $("gym-search-button")?.addEventListener("click", async () => {
+    const city = cityInput.value.trim(); if (!city) { searchStatus.textContent = "Select a city first."; return; }
+    const button = $("gym-search-button"); button.disabled = true; searchStatus.textContent = "Searching…";
+    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found.` : "No gyms found. Add yours below."; }
+    catch (error) { searchStatus.textContent = error.message; } finally { button.disabled = false; }
+  });
+  saveButton?.addEventListener("click", async () => { if (!gymSelect.value) { searchStatus.textContent = "Select a gym first."; return; } saveButton.disabled = true; try { await Api.post("/gym/select", { gymId: gymSelect.value, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; saveButton.disabled = false; } });
+  $("gym-manual-create")?.addEventListener("click", async () => { const name = $("gym-manual-name").value.trim(); const city = cityInput.value.trim(); if (!name || !city) { searchStatus.textContent = "Enter a gym name and city."; return; } try { await Api.post("/gym/create", { name, city, address: $("gym-manual-address").value.trim(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; } });
+}
+
+async function loadGymCrowdForecast(gymId) {
+  const target = $("gym-crowd-forecast"); if (!target) return;
+  try { const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`); target.innerHTML = `<p class="card-sub">Next 7 days · ${Number(result.observationsUsed || 0)} observations · ${result.openingHoursKnown ? "Opening hours verified" : "Opening hours unavailable; showing all hours"}</p>` + (result.days || []).map(day => `<section class="gym-crowd-day"><h3>${new Date(`${day.date}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</h3>${day.hours.map(item => `<div class="gym-crowd-hour"><span>${String(item.hour).padStart(2, "0")}:00</span><div class="gym-crowd-track"><i style="width:${item.crowdPercent}%" class="${item.crowdPercent >= 80 ? "is-busy" : item.crowdPercent >= 55 ? "is-moderate" : "is-quiet"}"></i></div><b>${item.crowdPercent}%</b><small>${item.crowdLevel.replaceAll("_", " ")}</small></div>`).join("")}</section>`).join(""); }
+  catch (error) { target.textContent = error.message || "Could not load the forecast."; }
+}
+
 async function loadGym() {
   const el = $("gym-content");
   el.innerHTML = `<div class="empty-state">Loading…</div>`;
   try {
-    const [status, history] = await Promise.all([Api.get("/gym/today"), Api.get("/gym/history")]);
-    renderGym(status, history);
+    const [status, history, selected] = await Promise.all([Api.get("/gym/today"), Api.get("/gym/history"), Api.get("/gym/selected")]);
+    renderGym(status, history, selected.gym);
   } catch (e) {
     el.innerHTML = `<div class="empty-state">${e.message}</div>`;
   }
 }
 
-function renderGym(status, history) {
+function renderGym(status, history, selectedGym) {
   const el = $("gym-content");
   const checkedIn = status.checkedIn;
   el.innerHTML = `
+    <div class="card gym-intelligence-card">
+      <div class="card-label">📊 Gym crowd intelligence</div>
+      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
+    </div>
     <div class="card">
       <div class="card-label">📇 Attendance</div>
       ${
@@ -2740,6 +2784,7 @@ function renderGym(status, history) {
   });
 
   $("scan-btn").addEventListener("click", () => startQrScan());
+  void setupGymIntelligence(selectedGym);
 }
 
 async function startQrScan() {
