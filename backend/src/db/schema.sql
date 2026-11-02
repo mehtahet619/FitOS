@@ -628,3 +628,38 @@ CREATE TABLE IF NOT EXISTS GymCrowdPrediction (
   UNIQUE(gymId, predictedFor)
 );
 CREATE INDEX IF NOT EXISTS idx_gym_prediction_gym_time ON GymCrowdPrediction(gymId, predictedFor);
+
+
+-- Independently licensed official crowd data is the only training source.
+-- FitOS member reports are stored separately and used for forecast evaluation only.
+CREATE TABLE IF NOT EXISTS GymCrowdOfficialObservation (
+  id TEXT PRIMARY KEY,
+  gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
+  observedAt TEXT NOT NULL,
+  crowdPercent REAL NOT NULL CHECK(crowdPercent >= 0 AND crowdPercent <= 100),
+  sourceName TEXT NOT NULL,
+  sourceReference TEXT NOT NULL,
+  license TEXT NOT NULL,
+  sourceRecordId TEXT NOT NULL,
+  importedAt TEXT NOT NULL,
+  UNIQUE(gymId, sourceReference, sourceRecordId)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_crowd_official_gym_time ON GymCrowdOfficialObservation(gymId, observedAt);
+
+-- Immutable prediction snapshot per gym/hour. Actual observations score the
+-- snapshot and never become model-training rows.
+CREATE TABLE IF NOT EXISTS GymCrowdForecastSnapshot (
+  id TEXT PRIMARY KEY,
+  gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
+  predictedFor TEXT NOT NULL,
+  predictedCrowdPercent REAL NOT NULL,
+  modelVersion TEXT NOT NULL,
+  generatedAt TEXT NOT NULL,
+  actualCrowdPercent REAL,
+  actualSource TEXT,
+  absoluteError REAL,
+  evaluatedAt TEXT,
+  UNIQUE(gymId, predictedFor)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_crowd_snapshot_gym_time ON GymCrowdForecastSnapshot(gymId, predictedFor);
+CREATE INDEX IF NOT EXISTS idx_gym_crowd_snapshot_evaluated ON GymCrowdForecastSnapshot(gymId, evaluatedAt);
