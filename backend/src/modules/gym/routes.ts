@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
+import { registerGymIntelligenceRoutes } from "./intelligence";
 
 export const gymRouter = Router();
 gymRouter.use(requireAuth);
@@ -74,3 +75,5 @@ gymRouter.get("/history", async (req: AuthedRequest, res) => {
   const rows = await db.all(`SELECT * FROM GymAttendance WHERE userId = ? ORDER BY date DESC LIMIT 30`, req.userId!);
   return res.json(rows);
 });
+
+registerGymIntelligenceRoutes(gymRouter);
