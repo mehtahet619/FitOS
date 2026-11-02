@@ -199,6 +199,16 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     return res.json({ configured: true, city, gyms });
   });
 
+  router.post("/create", async (req: AuthedRequest, res) => {
+    const parsed = z.object({ name: z.string().trim().min(2).max(120), city: z.string().trim().min(2).max(100), address: z.string().trim().max(300).default(""), timeZone: z.string().trim().min(1).max(80).default("Asia/Kolkata") }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Gym name and city are required." });
+    const id = uuidv4();
+    const now = nowIso();
+    await db.run("INSERT INTO Gym (id, placeId, name, address, city, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)", id, `custom:${id}`, parsed.data.name, parsed.data.address, parsed.data.city, now, now);
+    await db.run("INSERT INTO GymMembership (id, userId, gymId, timeZone, createdAt) VALUES (?, ?, ?, ?, ?)", uuidv4(), req.userId!, id, parsed.data.timeZone, now);
+    const gym = await db.get<any>("SELECT * FROM Gym WHERE id = ?", id);
+    return res.status(201).json({ gym, datasetReused: false, message: "Gym created. Its forecast will improve as validated observations arrive." });
+  });
   router.post("/select", async (req: AuthedRequest, res) => {
     const parsed = z.object({ gymId: z.string().min(1), timeZone: z.string().min(1).max(80).default("Asia/Kolkata") }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "A valid gymId is required." });
