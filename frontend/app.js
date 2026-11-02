@@ -2696,7 +2696,7 @@ function gymEscapeHtml(value) {
 }
 async function setupGymIntelligence(selectedGym) {
   if (selectedGym) {
-    $("gym-change-selection")?.addEventListener("click", () => { void loadGymSelectionForm(); });
+    $("gym-change-selection")?.addEventListener("click", async () => { try { const [status, history] = await Promise.all([Api.get("/gym/today"), Api.get("/gym/history")]); renderGym(status, history, null); } catch (error) { console.error("[GymCrowd] Could not change gym:", error); } });
     await loadGymCrowdForecast(selectedGym.id);
   } else { await loadGymSelectionForm(); }
 }
