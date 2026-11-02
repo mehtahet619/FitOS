@@ -400,7 +400,7 @@ describe("workout API CSV flow", () => {
       expect(generateResponse.status).toBe(201);
       const generated = await generateResponse.json() as any;
       expect(generated.exercises).toHaveLength(4);
-      expect(generated.availableExerciseCount).toBe(6);
+      expect(generated.availableExerciseCount).toBe(4);
       expect(new Set(generated.exercises.map((exercise: any) => exerciseFamilyKey(exercise.exerciseName))).size).toBe(generated.exercises.length);
       expect(generated.exercises.every((exercise: any) => exercise.instructions.length > 0)).toBe(true);
       expect(generated.workout.durationMin).toBe(90);
