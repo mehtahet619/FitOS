@@ -121,6 +121,20 @@ const camelCaseColumns: Record<string, string> = {
   growthstagecount: "growthStageCount",
   completedsessiondatesjson: "completedSessionDatesJson",
   computedat: "computedAt",
+  observedat: "observedAt",
+  crowdpercent: "crowdPercent",
+  sourcename: "sourceName",
+  sourcereference: "sourceReference",
+  sourcerecordid: "sourceRecordId",
+  importedat: "importedAt",
+  predictedfor: "predictedFor",
+  predictedcrowdpercent: "predictedCrowdPercent",
+  modelversion: "modelVersion",
+  generatedat: "generatedAt",
+  actualcrowdpercent: "actualCrowdPercent",
+  actualsource: "actualSource",
+  absoluteerror: "absoluteError",
+  evaluatedat: "evaluatedAt",
 };
 
 export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {
