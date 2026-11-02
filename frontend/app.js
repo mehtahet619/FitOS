@@ -2726,9 +2726,27 @@ async function loadGymSelectionForm() {
 }
 
 async function loadGymCrowdForecast(gymId) {
-  const target = $("gym-crowd-forecast"); if (!target) return;
-  try { const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`); target.innerHTML = `<p class="card-sub">Next 7 days · ${Number(result.observationsUsed || 0)} observations · ${result.openingHoursKnown ? "Opening hours verified" : "Opening hours unavailable; showing all hours"}</p>` + (result.days || []).map(day => `<section class="gym-crowd-day"><h3>${new Date(`${day.date}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</h3>${day.hours.map(item => `<div class="gym-crowd-hour"><span>${String(item.hour).padStart(2, "0")}:00</span><div class="gym-crowd-track"><i style="width:${item.crowdPercent}%" class="${item.crowdPercent >= 80 ? "is-busy" : item.crowdPercent >= 55 ? "is-moderate" : "is-quiet"}"></i></div><b>${item.crowdPercent}%</b><small>${item.crowdLevel.replaceAll("_", " ")}</small></div>`).join("")}</section>`).join(""); }
-  catch (error) { target.textContent = error.message || "Could not load the forecast."; }
+  const target = $("gym-crowd-forecast");
+  if (!target) return;
+  try {
+    const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`);
+    const evaluation = result.evaluation || {};
+    const trainingSummary = Number(result.trainingSamples || 0) > 0
+      ? `Official training records: ${Number(result.trainingSamples)}`
+      : "No official training dataset imported yet · cold-start estimates";
+    const errorSummary = Number(evaluation.evaluatedCount || 0) > 0
+      ? `Prediction MAE: ${Number(evaluation.mae).toFixed(1)} points · RMSE: ${Number(evaluation.rmse).toFixed(1)} · evaluated hours: ${Number(evaluation.evaluatedCount)}`
+      : "Prediction error: waiting for actual crowd reports";
+    target.innerHTML =
+      `<p class="card-sub">Next 7 days · ${trainingSummary} · ${errorSummary} · ${result.openingHoursKnown ? "Opening hours verified" : "Opening hours unavailable; showing all hours"}</p>` +
+      (result.days || []).map(day =>
+        `<section class="gym-crowd-day"><h3>${new Date(`${day.date}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</h3>${day.hours.map(item =>
+          `<div class="gym-crowd-hour"><span>${String(item.hour).padStart(2, "0")}:00</span><div class="gym-crowd-track"><i style="width:${item.crowdPercent}%" class="${item.crowdPercent >= 80 ? "is-busy" : item.crowdPercent >= 55 ? "is-moderate" : "is-quiet"}"></i></div><b>${item.crowdPercent}%</b><small>${item.crowdLevel.replaceAll("_", " ")}</small></div>`
+        ).join("")}</section>`
+      ).join("");
+  } catch (error) {
+    target.textContent = error.message || "Could not load the forecast.";
+  }
 }
 
 async function loadGym() {
