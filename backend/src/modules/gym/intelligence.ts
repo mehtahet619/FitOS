@@ -26,6 +26,20 @@ function googleKey(): string | undefined {
   return process.env.GOOGLE_PLACES_API_KEY || undefined;
 }
 
+async function placesCityAutocomplete(input: string): Promise<string[]> {
+  const key = googleKey();
+  if (!key) return [];
+  const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "suggestions.placePrediction.text.text" },
+    body: JSON.stringify({ input: `${input}, India`, includedPrimaryTypes: ["(cities)"] }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`Google Places city lookup failed (${response.status})`);
+  const payload = await response.json() as { suggestions?: Array<{ placePrediction?: { text?: { text?: string } } }> };
+  return [...new Set((payload.suggestions ?? []).map(item => item.placePrediction?.text?.text?.trim()).filter((value): value is string => Boolean(value)))].slice(0, 10);
+}
+
 async function placesTextSearch(textQuery: string): Promise<Place[]> {
   const key = googleKey();
   if (!key) return [];
@@ -164,13 +178,8 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (query.length < 2) return res.json({ configured: Boolean(googleKey()), cities: [] });
     if (!googleKey()) return res.status(503).json({ configured: false, error: "Gym discovery requires GOOGLE_PLACES_API_KEY." });
-    const places = await placesTextSearch(`cities in India near ${query}`);
-    const unique = new Map<string, string>();
-    for (const place of places) {
-      const city = (place.displayName?.text || "").trim();
-      if (city) unique.set(city.toLowerCase(), city);
-    }
-    return res.json({ configured: true, cities: [...unique.values()].slice(0, 10) });
+    const cities = await placesCityAutocomplete(query);
+    return res.json({ configured: true, cities });
   });
 
   router.get("/search", async (req, res) => {
