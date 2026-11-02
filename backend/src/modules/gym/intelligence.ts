@@ -98,16 +98,18 @@ function addDays(date: Date, amount: number): Date {
 }
 
 function hourIsOpen(periods: any[] | null, weekday: number, hour: number): boolean {
-  if (!periods?.length) return true; // Unknown hours: expose all hours and explicitly mark the schedule as unverified.
+  if (!periods?.length) return true; // Unknown schedule: return a full-day forecast with openingHoursKnown=false.
+  const current = weekday * 24 + hour;
   return periods.some((period) => {
     const openDay = Number(period.open?.day);
     const openHour = Number(period.open?.hour ?? 0);
     const closeDay = Number(period.close?.day ?? openDay);
     const closeHour = Number(period.close?.hour ?? 24);
     const start = openDay * 24 + openHour;
-    const end = closeDay * 24 + closeHour;
-    const current = weekday * 24 + hour;
-    return end >= start ? current >= start && current < end : current >= start || current < end;
+    let end = closeDay * 24 + closeHour;
+    if (end <= start) end += 168;
+    const candidate = current < start ? current + 168 : current;
+    return candidate >= start && candidate < end;
   });
 }
 
