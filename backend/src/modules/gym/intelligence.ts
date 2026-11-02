@@ -16,7 +16,7 @@ type Place = {
 
 const observationSchema = z.object({
   crowdPercent: z.number().min(0).max(100),
-  source: z.enum(["sensor", "camera", "owner", "voluntary_checkin", "manual"]).default("manual"),
+  source: z.literal("manual").default("manual"),
   observedAt: z.string().datetime().optional(),
   occupiedCount: z.number().int().min(0).optional(),
   capacity: z.number().int().positive().optional(),
@@ -172,7 +172,11 @@ async function predictGymWeek(gym: any, timeZone: string) {
       output.push({ date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: local?.count ?? 0 });
     }
   }
-  return { predictions: output, timezone: timeZone, openingHoursKnown: Boolean(periods?.length), observationsUsed: history.length, modelVersion: "global-prior-gym-calibrated-v1" };
+  const days = [...new Set(output.map((item) => item.date))].map((date) => ({
+    date,
+    hours: output.filter((item) => item.date === date),
+  }));
+  return { days, predictions: output, timezone: timeZone, openingHoursKnown: Boolean(periods?.length), observationsUsed: history.length, modelVersion: "global-prior-gym-calibrated-v1" };
 }
 
 export function registerGymIntelligenceRoutes(router: Router): void {
@@ -190,7 +194,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     if (city.length < 2) return res.status(400).json({ error: "Select a city before searching for gyms." });
     if (!googleKey()) return res.status(503).json({ configured: false, error: "Gym discovery requires GOOGLE_PLACES_API_KEY." });
     const places = await placesTextSearch(`${query || "gyms"} in ${city}, India`);
-    const gyms = [];
+    const gyms: any[] = [];
     for (const place of places) {
       if (!place.id || !place.displayName?.text) continue;
       const gym = await upsertPlace(place, city);
@@ -238,7 +242,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
 
   router.post("/:gymId/observations", async (req: AuthedRequest, res) => {
     const parsed = observationSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "crowdPercent must be between 0 and 100; source must be valid." });
+    if (!parsed.success) return res.status(400).json({ error: "crowdPercent must be between 0 and 100; source must be manual." });
     const membership = await db.get<any>("SELECT gymId FROM GymMembership WHERE userId = ?", req.userId!);
     if (!membership || membership.gymId !== req.params.gymId) return res.status(403).json({ error: "You must be a member of this gym to submit an observation." });
     const observedAt = parsed.data.observedAt || nowIso();
