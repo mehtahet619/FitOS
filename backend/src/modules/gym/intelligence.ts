@@ -113,25 +113,47 @@ function hourIsOpen(periods: any[] | null, weekday: number, hour: number): boole
   });
 }
 
+function localWeekdayHour(value: string | Date, timeZone: string): { weekday: number; hour: number } {
+  const date = value instanceof Date ? value : new Date(value);
+  const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
+  return { weekday, hour };
+}
+
+function coldStartBaseline(weekday: number, hour: number): number {
+  const weekend = weekday === 0 || weekday === 6;
+  return weekend
+    ? (hour >= 8 && hour <= 11 ? 58 : hour >= 16 && hour <= 19 ? 48 : hour >= 12 && hour <= 15 ? 35 : 22)
+    : (hour >= 6 && hour <= 8 ? 62 : hour >= 17 && hour <= 20 ? 72 : hour >= 9 && hour <= 11 ? 42 : hour >= 12 && hour <= 16 ? 28 : hour >= 21 && hour <= 22 ? 38 : 18);
+}
+
+async function getCrowdEvaluation(gymId: string) {
+  const metrics = await db.get<any>(
+    "SELECT COUNT(*) AS evaluatedCount, AVG(absoluteError) AS mae, AVG(absoluteError * absoluteError) AS mse FROM GymCrowdForecastSnapshot WHERE gymId = ? AND evaluatedAt IS NOT NULL",
+    gymId
+  );
+  const evaluatedCount = Number(metrics?.evaluatedCount ?? 0);
+  const mae = evaluatedCount ? Number(metrics.mae) : null;
+  const mse = evaluatedCount ? Number(metrics.mse) : null;
+  return { evaluatedCount, mae: mae === null ? null : Number(mae.toFixed(2)), rmse: mse === null ? null : Number(Math.sqrt(mse).toFixed(2)) };
+}
+
 async function predictGymWeek(gym: any, timeZone: string) {
-  const history = await db.all<any>(
-    "SELECT observedAt, crowdPercent FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 5000",
+  // Training data is intentionally isolated from FitOS member reports.
+  // Only independently licensed/authorized official dataset rows are used.
+  const trainingRows = await db.all<any>(
+    "SELECT observedAt, crowdPercent FROM GymCrowdOfficialObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
     gym.id
   );
-  // FitOS owns this dataset. Only voluntary, gym-specific FitOS observations
-  // are used for calibration. No Google Popular Times, camera, Roboflow, or
-  // third-party crowd feed is queried or used as model input.
   const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number }>();
   const nowMs = Date.now();
-  for (const row of history) {
+  for (const row of trainingRows) {
     const date = new Date(row.observedAt);
     if (!Number.isFinite(date.getTime())) continue;
-    const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
-    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
-    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
+    const { weekday, hour } = localWeekdayHour(date, timeZone);
     const key = `${weekday}:${hour}`;
     const ageDays = Math.max(0, (nowMs - date.getTime()) / 86400000);
-    // Recent observations matter more; the 45-day half-life adapts to changes.
     const weight = Math.pow(0.5, ageDays / 45);
     const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0 };
     slot.weightedSum += Number(row.crowdPercent) * weight;
@@ -140,6 +162,8 @@ async function predictGymWeek(gym: any, timeZone: string) {
     slot.latestAt = Math.max(slot.latestAt, date.getTime());
     bySlot.set(key, slot);
   }
+  const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
+  const modelVersion = `fitos-official-hourly-v3-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
   const periods = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null;
   const now = new Date();
   const output: any[] = [];
@@ -150,35 +174,43 @@ async function predictGymWeek(gym: any, timeZone: string) {
     for (let hour = 0; hour < 24; hour += 1) {
       if (!hourIsOpen(periods, weekday, hour)) continue;
       const key = `${weekday}:${hour}`;
-      const local = bySlot.get(key);
-      // Transparent cold-start prior: a generic time-of-week pattern, not
-      // scraped or imported crowd data. It is always marked low confidence.
-      const weekend = weekday === 0 || weekday === 6;
-      const baseline = weekend
-        ? (hour >= 8 && hour <= 11 ? 58 : hour >= 16 && hour <= 19 ? 48 : hour >= 12 && hour <= 15 ? 35 : 22)
-        : (hour >= 6 && hour <= 8 ? 62 : hour >= 17 && hour <= 20 ? 72 : hour >= 9 && hour <= 11 ? 42 : hour >= 12 && hour <= 16 ? 28 : hour >= 21 && hour <= 22 ? 38 : 18);
-      const localAverage = local && local.weight > 0 ? local.weightedSum / local.weight : null;
-      const sampleWeight = local ? Math.min(0.92, local.count / (local.count + 6)) : 0;
-      const predicted = Math.max(0, Math.min(100, Math.round(localAverage === null ? baseline : localAverage * sampleWeight + baseline * (1 - sampleWeight))));
-      const ageDays = local?.latestAt ? (nowMs - local.latestAt) / 86400000 : Infinity;
-      const confidence = local && local.count >= 20 && ageDays <= 21 ? "high" : local && local.count >= 5 && ageDays <= 45 ? "medium" : "low";
+      const slot = bySlot.get(key);
+      const baseline = coldStartBaseline(weekday, hour);
+      const learnedAverage = slot && slot.weight > 0 ? slot.weightedSum / slot.weight : null;
+      const sampleWeight = slot ? Math.min(0.95, slot.count / (slot.count + 4)) : 0;
+      const predicted = Math.max(0, Math.min(100, Math.round(learnedAverage === null ? baseline : learnedAverage * sampleWeight + baseline * (1 - sampleWeight))));
+      const ageDays = slot?.latestAt ? (nowMs - slot.latestAt) / 86400000 : Infinity;
+      const confidence = slot && slot.count >= 30 && ageDays <= 21 ? "high" : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
-      const id = uuidv4();
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
-      const existing = await db.get<any>("SELECT id FROM GymCrowdPrediction WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
-      if (existing) {
-        await db.run("UPDATE GymCrowdPrediction SET crowdPercent = ?, crowdLevel = ?, confidence = ?, generatedAt = ?, modelVersion = ? WHERE id = ?", predicted, label, confidence, nowIso(), "fitos-gym-hourly-adaptive-v2", existing.id);
-      } else {
-        await db.run("INSERT INTO GymCrowdPrediction (id, gymId, predictedFor, crowdPercent, crowdLevel, confidence, generatedAt, modelVersion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, gym.id, predictedFor, predicted, label, confidence, nowIso(), "global-prior-gym-calibrated-v1");
+      const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
+      // Freeze a forecast once the target hour starts or an actual value is recorded.
+      const targetStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00:00`);
+      if (targetStart.getTime() > nowMs && !existing?.evaluatedAt) {
+        if (existing) {
+          await db.run("UPDATE GymCrowdForecastSnapshot SET predictedCrowdPercent = ?, modelVersion = ?, generatedAt = ? WHERE id = ?", predicted, modelVersion, nowIso(), existing.id);
+        } else {
+          await db.run("INSERT INTO GymCrowdForecastSnapshot (id, gymId, predictedFor, predictedCrowdPercent, modelVersion, generatedAt) VALUES (?, ?, ?, ?, ?, ?)", uuidv4(), gym.id, predictedFor, predicted, modelVersion, nowIso());
+        }
       }
-      output.push({ date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: local?.count ?? 0 });
+      output.push({ date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset" });
     }
   }
   const days = [...new Set(output.map((item) => item.date))].map((date) => ({
     date,
     hours: output.filter((item) => item.date === date),
   }));
-  return { days, predictions: output, timezone: timeZone, openingHoursKnown: Boolean(periods?.length), observationsUsed: history.length, dataSource: "fitos-user-observations-plus-transparent-cold-start-prior", modelVersion: "fitos-gym-hourly-adaptive-v2" };
+  const evaluation = await getCrowdEvaluation(gym.id);
+  return {
+    days,
+    predictions: output,
+    timezone: timeZone,
+    openingHoursKnown: Boolean(periods?.length),
+    trainingSamples: trainingRows.length,
+    trainingSource: "authorized_official_dataset_only",
+    modelVersion,
+    evaluation,
+  };
 }
 
 export function registerGymIntelligenceRoutes(router: Router): void {
@@ -242,6 +274,50 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     return res.json({ gym: { id: gym.id, name: gym.name, city: gym.city, openingHoursKnown: result.openingHoursKnown }, ...result, refreshedAt: nowIso() });
   });
 
+  // Import only independently licensed or otherwise authorized official datasets.
+  // Google Maps/Popular Times content is explicitly not an accepted training source.
+  router.post("/dataset/import", async (req, res) => {
+    const ingestKey = process.env.GYM_CROWD_DATASET_INGEST_KEY;
+    if (!ingestKey || req.header("x-gym-dataset-key") !== ingestKey) {
+      return res.status(401).json({ error: "Dataset ingestion is not authorized." });
+    }
+    const parsed = z.object({
+      gymId: z.string().min(1),
+      sourceName: z.string().trim().min(2).max(120),
+      sourceReference: z.string().trim().min(2).max(500),
+      license: z.string().trim().min(5).max(500),
+      records: z.array(z.object({
+        observedAt: z.string().datetime(),
+        crowdPercent: z.number().min(0).max(100),
+        recordId: z.string().trim().min(1).max(160),
+      })).min(1).max(5000),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid dataset payload. Provide gymId, source metadata, license, and up to 5000 timestamped crowd records." });
+    if (/google|maps|popular.?times/i.test(`${parsed.data.sourceName} ${parsed.data.sourceReference}`)) {
+      return res.status(400).json({ error: "Google Maps/Popular Times content cannot be imported or stored as model-training data. Use an independently licensed dataset." });
+    }
+    const gym = await db.get<any>("SELECT id FROM Gym WHERE id = ?", parsed.data.gymId);
+    if (!gym) return res.status(404).json({ error: "Gym not found." });
+    let inserted = 0;
+    for (const record of parsed.data.records) {
+      const existing = await db.get<any>("SELECT id FROM GymCrowdOfficialObservation WHERE gymId = ? AND sourceReference = ? AND sourceRecordId = ?", parsed.data.gymId, parsed.data.sourceReference, record.recordId);
+      if (existing) continue;
+      await db.run(
+        "INSERT INTO GymCrowdOfficialObservation (id, gymId, observedAt, crowdPercent, sourceName, sourceReference, license, sourceRecordId, importedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        uuidv4(), parsed.data.gymId, record.observedAt, record.crowdPercent, parsed.data.sourceName, parsed.data.sourceReference, parsed.data.license, record.recordId, nowIso()
+      );
+      inserted += 1;
+    }
+    const total = await db.get<any>("SELECT COUNT(*) AS count FROM GymCrowdOfficialObservation WHERE gymId = ?", parsed.data.gymId);
+    return res.status(202).json({
+      accepted: true,
+      inserted,
+      totalTrainingSamples: Number(total?.count ?? 0),
+      retraining: "next_forecast_request",
+      message: "Official dataset rows saved. The next forecast request rebuilds the model using this dataset only; member reports are excluded from training.",
+    });
+  });
+
   router.post("/:gymId/observations", async (req: AuthedRequest, res) => {
     const parsed = observationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "crowdPercent must be between 0 and 100; source must be manual." });
@@ -249,6 +325,15 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     if (!membership || membership.gymId !== req.params.gymId) return res.status(403).json({ error: "You must be a member of this gym to submit an observation." });
     const observedAt = nowIso();
     const hourStart = new Date(observedAt); hourStart.setMinutes(0, 0, 0);
+    const observedHour = hourStart.toISOString().slice(0, 19);
+    const snapshot = await db.get<any>("SELECT * FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", req.params.gymId, observedHour);
+    const absoluteError = snapshot ? Math.abs(Number(snapshot.predictedCrowdPercent) - parsed.data.crowdPercent) : null;
+    if (snapshot && !snapshot.evaluatedAt) {
+      await db.run(
+        "UPDATE GymCrowdForecastSnapshot SET actualCrowdPercent = ?, actualSource = 'member_report', absoluteError = ?, evaluatedAt = ? WHERE id = ?",
+        parsed.data.crowdPercent, absoluteError, observedAt, snapshot.id
+      );
+    }
     const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000).toISOString();
     const previous = await db.get<any>("SELECT id FROM GymCrowdObservation WHERE gymId = ? AND userId = ? AND observedAt >= ? AND observedAt < ?", req.params.gymId, req.userId!, hourStart.toISOString(), hourEnd);
     if (previous) {
@@ -256,6 +341,24 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     } else {
       await db.run("INSERT INTO GymCrowdObservation (id, gymId, userId, observedAt, crowdPercent, occupiedCount, capacity, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", uuidv4(), req.params.gymId, req.userId!, observedAt, parsed.data.crowdPercent, parsed.data.occupiedCount ?? null, parsed.data.capacity ?? null, parsed.data.source, observedAt);
     }
-    return res.status(201).json({ accepted: true, message: "Observation added. The next forecast request will recalculate predictions using this observation." });
+    const evaluation = await getCrowdEvaluation(req.params.gymId);
+    return res.status(201).json({
+      accepted: true,
+      evaluated: Boolean(snapshot && !snapshot.evaluatedAt),
+      predictedCrowdPercent: snapshot ? Number(snapshot.predictedCrowdPercent) : null,
+      actualCrowdPercent: parsed.data.crowdPercent,
+      absoluteError,
+      evaluation,
+      trainingImpact: "none_member_reports_are_evaluation_only",
+      message: snapshot
+        ? "Actual crowd report compared with the saved forecast. This feedback updates evaluation metrics, not training data."
+        : "Actual crowd report saved. No forecast snapshot existed for this hour, so no prediction error could be calculated.",
+    });
+  });
+
+  router.get("/:gymId/evaluation", async (req: AuthedRequest, res) => {
+    const membership = await db.get<any>("SELECT gymId FROM GymMembership WHERE userId = ?", req.userId!);
+    if (!membership || membership.gymId !== req.params.gymId) return res.status(403).json({ error: "You must be a member of this gym." });
+    return res.json({ gymId: req.params.gymId, ...(await getCrowdEvaluation(req.params.gymId)) });
   });
 }
