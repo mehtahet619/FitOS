@@ -135,6 +135,7 @@ const camelCaseColumns: Record<string, string> = {
   actualsource: "actualSource",
   absoluteerror: "absoluteError",
   evaluatedat: "evaluatedAt",
+  evaluatedcount: "evaluatedCount",
 };
 
 export function normalizePostgresRow<T extends QueryResultRow>(row: T): T {
