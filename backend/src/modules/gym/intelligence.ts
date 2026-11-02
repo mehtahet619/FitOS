@@ -245,8 +245,15 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     if (!parsed.success) return res.status(400).json({ error: "crowdPercent must be between 0 and 100; source must be manual." });
     const membership = await db.get<any>("SELECT gymId FROM GymMembership WHERE userId = ?", req.userId!);
     if (!membership || membership.gymId !== req.params.gymId) return res.status(403).json({ error: "You must be a member of this gym to submit an observation." });
-    const observedAt = parsed.data.observedAt || nowIso();
-    await db.run("INSERT INTO GymCrowdObservation (id, gymId, userId, observedAt, crowdPercent, occupiedCount, capacity, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", uuidv4(), req.params.gymId, req.userId!, observedAt, parsed.data.crowdPercent, parsed.data.occupiedCount ?? null, parsed.data.capacity ?? null, parsed.data.source, nowIso());
+    const observedAt = nowIso();
+    const hourStart = new Date(observedAt); hourStart.setMinutes(0, 0, 0);
+    const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000).toISOString();
+    const previous = await db.get<any>("SELECT id FROM GymCrowdObservation WHERE gymId = ? AND userId = ? AND observedAt >= ? AND observedAt < ?", req.params.gymId, req.userId!, hourStart.toISOString(), hourEnd);
+    if (previous) {
+      await db.run("UPDATE GymCrowdObservation SET crowdPercent = ?, occupiedCount = ?, capacity = ?, createdAt = ? WHERE id = ?", parsed.data.crowdPercent, parsed.data.occupiedCount ?? null, parsed.data.capacity ?? null, observedAt, previous.id);
+    } else {
+      await db.run("INSERT INTO GymCrowdObservation (id, gymId, userId, observedAt, crowdPercent, occupiedCount, capacity, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", uuidv4(), req.params.gymId, req.userId!, observedAt, parsed.data.crowdPercent, parsed.data.occupiedCount ?? null, parsed.data.capacity ?? null, parsed.data.source, observedAt);
+    }
     return res.status(201).json({ accepted: true, message: "Observation added. The next forecast request will recalculate predictions using this observation." });
   });
 }
