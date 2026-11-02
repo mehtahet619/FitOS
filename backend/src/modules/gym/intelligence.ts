@@ -118,19 +118,11 @@ async function predictGymWeek(gym: any, timeZone: string) {
     "SELECT observedAt, crowdPercent FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 5000",
     gym.id
   );
-  const globalRows = await db.all<any>("SELECT observedAt, crowdPercent FROM GymCrowdObservation ORDER BY observedAt DESC LIMIT 10000");
-  const globalSlots = new Map<string, { sum: number; count: number }>();
-  for (const row of globalRows) {
-    const date = new Date(row.observedAt);
-    if (!Number.isFinite(date.getTime())) continue;
-    const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
-    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
-    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
-    const key = `${weekday}:${hour}`;
-    const slot = globalSlots.get(key) ?? { sum: 0, count: 0 };
-    slot.sum += Number(row.crowdPercent); slot.count += 1; globalSlots.set(key, slot);
-  }
-  const bySlot = new Map<string, { sum: number; count: number }>();
+  // FitOS owns this dataset. Only voluntary, gym-specific FitOS observations
+  // are used for calibration. No Google Popular Times, camera, Roboflow, or
+  // third-party crowd feed is queried or used as model input.
+  const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number }>();
+  const nowMs = Date.now();
   for (const row of history) {
     const date = new Date(row.observedAt);
     if (!Number.isFinite(date.getTime())) continue;
@@ -138,9 +130,14 @@ async function predictGymWeek(gym: any, timeZone: string) {
     const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
     const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
     const key = `${weekday}:${hour}`;
-    const slot = bySlot.get(key) ?? { sum: 0, count: 0 };
-    slot.sum += Number(row.crowdPercent);
+    const ageDays = Math.max(0, (nowMs - date.getTime()) / 86400000);
+    // Recent observations matter more; the 45-day half-life adapts to changes.
+    const weight = Math.pow(0.5, ageDays / 45);
+    const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0 };
+    slot.weightedSum += Number(row.crowdPercent) * weight;
+    slot.weight += weight;
     slot.count += 1;
+    slot.latestAt = Math.max(slot.latestAt, date.getTime());
     bySlot.set(key, slot);
   }
   const periods = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null;
@@ -154,18 +151,23 @@ async function predictGymWeek(gym: any, timeZone: string) {
       if (!hourIsOpen(periods, weekday, hour)) continue;
       const key = `${weekday}:${hour}`;
       const local = bySlot.get(key);
-      const globalPrior = globalSlots.get(key);
-      const localAverage = local && local.count ? local.sum / local.count : null;
-      const globalAverage = globalPrior && globalPrior.count >= 5 ? globalPrior.sum / globalPrior.count : 50;
-      const localWeight = local ? Math.min(0.9, local.count / (local.count + 8)) : 0;
-      const predicted = Math.max(0, Math.min(100, Math.round(localAverage === null ? globalAverage : localAverage * localWeight + globalAverage * (1 - localWeight))));
-      const confidence = local && local.count >= 20 ? "high" : local && local.count >= 5 ? "medium" : "low";
+      // Transparent cold-start prior: a generic time-of-week pattern, not
+      // scraped or imported crowd data. It is always marked low confidence.
+      const weekend = weekday === 0 || weekday === 6;
+      const baseline = weekend
+        ? (hour >= 8 && hour <= 11 ? 58 : hour >= 16 && hour <= 19 ? 48 : hour >= 12 && hour <= 15 ? 35 : 22)
+        : (hour >= 6 && hour <= 8 ? 62 : hour >= 17 && hour <= 20 ? 72 : hour >= 9 && hour <= 11 ? 42 : hour >= 12 && hour <= 16 ? 28 : hour >= 21 && hour <= 22 ? 38 : 18);
+      const localAverage = local && local.weight > 0 ? local.weightedSum / local.weight : null;
+      const sampleWeight = local ? Math.min(0.92, local.count / (local.count + 6)) : 0;
+      const predicted = Math.max(0, Math.min(100, Math.round(localAverage === null ? baseline : localAverage * sampleWeight + baseline * (1 - sampleWeight))));
+      const ageDays = local?.latestAt ? (nowMs - local.latestAt) / 86400000 : Infinity;
+      const confidence = local && local.count >= 20 && ageDays <= 21 ? "high" : local && local.count >= 5 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const id = uuidv4();
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
       const existing = await db.get<any>("SELECT id FROM GymCrowdPrediction WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
       if (existing) {
-        await db.run("UPDATE GymCrowdPrediction SET crowdPercent = ?, crowdLevel = ?, confidence = ?, generatedAt = ?, modelVersion = ? WHERE id = ?", predicted, label, confidence, nowIso(), "global-prior-gym-calibrated-v1", existing.id);
+        await db.run("UPDATE GymCrowdPrediction SET crowdPercent = ?, crowdLevel = ?, confidence = ?, generatedAt = ?, modelVersion = ? WHERE id = ?", predicted, label, confidence, nowIso(), "fitos-gym-hourly-adaptive-v2", existing.id);
       } else {
         await db.run("INSERT INTO GymCrowdPrediction (id, gymId, predictedFor, crowdPercent, crowdLevel, confidence, generatedAt, modelVersion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, gym.id, predictedFor, predicted, label, confidence, nowIso(), "global-prior-gym-calibrated-v1");
       }
@@ -176,7 +178,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     date,
     hours: output.filter((item) => item.date === date),
   }));
-  return { days, predictions: output, timezone: timeZone, openingHoursKnown: Boolean(periods?.length), observationsUsed: history.length, modelVersion: "global-prior-gym-calibrated-v1" };
+  return { days, predictions: output, timezone: timeZone, openingHoursKnown: Boolean(periods?.length), observationsUsed: history.length, dataSource: "fitos-user-observations-plus-transparent-cold-start-prior", modelVersion: "fitos-gym-hourly-adaptive-v2" };
 }
 
 export function registerGymIntelligenceRoutes(router: Router): void {
