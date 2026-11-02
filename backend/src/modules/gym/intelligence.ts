@@ -102,14 +102,24 @@ async function predictGymWeek(gym: any, timeZone: string) {
     "SELECT observedAt, crowdPercent FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 5000",
     gym.id
   );
-  const global = await db.all<any>(
-    "SELECT strftime('%w', observedAt) AS weekday, CAST(strftime('%H', observedAt) AS INTEGER) AS hour, AVG(crowdPercent) AS average, COUNT(*) AS samples FROM GymCrowdObservation GROUP BY weekday, hour"
-  ).catch(() => [] as any[]);
+  const globalRows = await db.all<any>("SELECT observedAt, crowdPercent FROM GymCrowdObservation ORDER BY observedAt DESC LIMIT 10000");
+  const globalSlots = new Map<string, { sum: number; count: number }>();
+  for (const row of globalRows) {
+    const date = new Date(row.observedAt);
+    if (!Number.isFinite(date.getTime())) continue;
+    const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
+    const key = `${weekday}:${hour}`;
+    const slot = globalSlots.get(key) ?? { sum: 0, count: 0 };
+    slot.sum += Number(row.crowdPercent); slot.count += 1; globalSlots.set(key, slot);
+  }
   const bySlot = new Map<string, { sum: number; count: number }>();
   for (const row of history) {
     const date = new Date(row.observedAt);
     if (!Number.isFinite(date.getTime())) continue;
-    const weekday = Number(new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).formatToParts(date).find(p => p.type === "weekday")?.value ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date)) : date.getUTCDay());
+    const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
     const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
     const key = `${weekday}:${hour}`;
     const slot = bySlot.get(key) ?? { sum: 0, count: 0 };
@@ -128,9 +138,9 @@ async function predictGymWeek(gym: any, timeZone: string) {
       if (!hourIsOpen(periods, weekday, hour)) continue;
       const key = `${weekday}:${hour}`;
       const local = bySlot.get(key);
-      const globalPrior = global.find((row: any) => Number(row.weekday) === weekday && Number(row.hour) === hour);
+      const globalPrior = globalSlots.get(key);
       const localAverage = local && local.count ? local.sum / local.count : null;
-      const globalAverage = globalPrior && Number(globalPrior.samples) >= 5 ? Number(globalPrior.average) : 35;
+      const globalAverage = globalPrior && globalPrior.count >= 5 ? globalPrior.sum / globalPrior.count : 50;
       const localWeight = local ? Math.min(0.9, local.count / (local.count + 8)) : 0;
       const predicted = Math.max(0, Math.min(100, Math.round(localAverage === null ? globalAverage : localAverage * localWeight + globalAverage * (1 - localWeight))));
       const confidence = local && local.count >= 20 ? "high" : local && local.count >= 5 ? "medium" : "low";
@@ -183,7 +193,12 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     if (!parsed.success) return res.status(400).json({ error: "A valid gymId is required." });
     const gym = await db.get<any>("SELECT * FROM Gym WHERE id = ?", parsed.data.gymId);
     if (!gym) return res.status(404).json({ error: "Gym not found. Search for the gym again." });
-    await db.run("INSERT INTO GymMembership (id, userId, gymId, timeZone, createdAt) VALUES (?, ?, ?, ?, ?) ON CONFLICT(userId) DO UPDATE SET gymId = excluded.gymId, timeZone = excluded.timeZone", uuidv4(), req.userId!, gym.id, parsed.data.timeZone, nowIso());
+    const existingMembership = await db.get<any>("SELECT id FROM GymMembership WHERE userId = ?", req.userId!);
+    if (existingMembership) {
+      await db.run("UPDATE GymMembership SET gymId = ?, timeZone = ? WHERE userId = ?", gym.id, parsed.data.timeZone, req.userId!);
+    } else {
+      await db.run("INSERT INTO GymMembership (id, userId, gymId, timeZone, createdAt) VALUES (?, ?, ?, ?, ?)", uuidv4(), req.userId!, gym.id, parsed.data.timeZone, nowIso());
+    }
     const members = await db.get<any>("SELECT COUNT(*) AS count FROM GymMembership WHERE gymId = ?", gym.id);
     return res.json({ gym, memberCount: Number(members?.count ?? 0), datasetReused: Number(members?.count ?? 0) > 1 });
   });
