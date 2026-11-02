@@ -233,7 +233,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     return res.json({ gym: membership ?? null });
   });
 
-  router.get("/:gymId/forecast", async (req, res) => {
+  router.get("/:gymId/forecast", async (req: AuthedRequest, res) => {
     const gym = await db.get<any>("SELECT g.*, m.timeZone FROM Gym g LEFT JOIN GymMembership m ON m.gymId = g.id AND m.userId = ? WHERE g.id = ?", req.userId!, req.params.gymId);
     if (!gym) return res.status(404).json({ error: "Gym not found." });
     const result = await predictGymWeek(gym, gym.timeZone || "Asia/Kolkata");
