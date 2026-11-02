@@ -321,11 +321,15 @@ export function registerGymIntelligenceRoutes(router: Router): void {
   router.post("/:gymId/observations", async (req: AuthedRequest, res) => {
     const parsed = observationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "crowdPercent must be between 0 and 100; source must be manual." });
-    const membership = await db.get<any>("SELECT gymId FROM GymMembership WHERE userId = ?", req.userId!);
+    const membership = await db.get<any>("SELECT gymId, timeZone FROM GymMembership WHERE userId = ?", req.userId!);
     if (!membership || membership.gymId !== req.params.gymId) return res.status(403).json({ error: "You must be a member of this gym to submit an observation." });
     const observedAt = nowIso();
-    const hourStart = new Date(observedAt); hourStart.setMinutes(0, 0, 0);
-    const observedHour = hourStart.toISOString().slice(0, 19);
+    const hourStart = new Date(observedAt);
+    hourStart.setMinutes(0, 0, 0);
+    const timeZone = membership.timeZone || "Asia/Kolkata";
+    const localObservedDate = localDateAt(hourStart, timeZone);
+    const localObservedHour = localWeekdayHour(hourStart, timeZone).hour;
+    const observedHour = `${localObservedDate}T${String(localObservedHour).padStart(2, "0")}:00:00`;
     const snapshot = await db.get<any>("SELECT * FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", req.params.gymId, observedHour);
     const absoluteError = snapshot ? Math.abs(Number(snapshot.predictedCrowdPercent) - parsed.data.crowdPercent) : null;
     if (snapshot && !snapshot.evaluatedAt) {
