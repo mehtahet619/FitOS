@@ -54,7 +54,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 
 | Var | Purpose |
 |---|---|
-| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |
+| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |\n| `GYM_CROWD_DATASET_INGEST_KEY` | Secret required by the official crowd dataset ingestion endpoint. Never expose it in the frontend. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
@@ -294,12 +294,24 @@ The smoke test makes a real Roboflow inference request using a public sample ima
 
 ### Gym Crowd Intelligence
 
-The crowd module stores one shared Gym record per Google Place ID, one selected GymMembership per FitOS account, raw GymCrowdObservation rows, and GymCrowdPrediction rows. Forecast requests recompute the next seven local calendar days from the gym's weekday/hour observations, with a global weekday/hour prior once enough observations exist. Newly submitted observations affect the next forecast request, including tomorrow's hourly predictions. Model output is versioned and carries sample count and confidence.
+City and gym discovery remain dynamic through Google Places API: GET /gym/cities?q=Bharuch returns city suggestions, then GET /gym/search?city=Bharuch&q=gyms returns gyms in that selected city. The same flow works for Vadodara and other supported cities. This discovery integration is separate from crowd training.
 
-The crowd forecasting engine has **no external crowd-data dependency**. It does not call Roboflow, Google Popular Times, CCTV, camera services, or third-party occupancy APIs. The model uses voluntary FitOS crowd reports submitted by members of the selected gym. Reports are grouped by gym, weekday and hour, with recent reports weighted more heavily (45-day half-life) so the forecast adapts as patterns change. Repeated reports by the same member in the same hour update that member's existing report instead of inflating the sample count.
+**Training/evaluation separation**
+- The predictor trains only from rows in GymCrowdOfficialObservation, populated through the authenticated-by-secret dataset ingestion endpoint.
+- Member-submitted reports in GymCrowdObservation are never training data. They are used only to compare an already-saved hourly prediction with the observed crowd level.
+- GymCrowdForecastSnapshot freezes the prediction for each gym-local hour. When an actual report arrives for that hour, FitOS records the actual value, absolute error, and evaluation timestamp.
+- GET /gym/:gymId/evaluation returns evaluated-hour count, MAE, and RMSE.
+- New authorized official dataset rows are appended and deduplicated. The next forecast request rebuilds the weekday/hour model from the updated official dataset, using a 45-day recency half-life. This is the retraining loop; prediction outputs are never fed back as training labels.
+- A generic weekday/weekend cold-start estimate is shown with low confidence until official records exist.
 
-For a gym with little or no history, FitOS uses a transparent generic weekday/weekend time-of-day prior and marks it **low confidence**. It is an estimate, not scraped or measured attendance. Confidence rises only as fresh, gym-specific FitOS observations accumulate. Every forecast request rebuilds the next seven days of hourly predictions from the latest observations. The response identifies its data source and model version.
+**Important source limitation:** Google Places API does not expose Google Popular Times as a supported numeric training-data feed. Google Maps/Popular Times content is rejected by the ingestion endpoint and must not be scraped or copied into FitOS's ML dataset. Supply a separate independently licensed/authorized official dataset instead. FitOS does not use Roboflow, CCTV, cameras, or external crowd APIs for this feature.
 
-Google Places is used only for optional city/gym discovery and regular opening hours where available. It is not a crowd-data source and its content is not used to train the prediction model. If opening hours are unavailable, the API marks openingHoursKnown=false and returns all 24 hours rather than silently assuming a schedule.
+Configure:
+```env
+GOOGLE_PLACES_API_KEY=...
+GYM_CROWD_DATASET_INGEST_KEY=long-random-secret
+```
 
-Endpoints: GET /gym/cities?q=an, GET /gym/search?city=Anand&q=gyms, POST /gym/create, POST /gym/select, GET /gym/selected, GET /gym/:gymId/forecast, and POST /gym/:gymId/observations. Gym discovery requires GOOGLE_PLACES_API_KEY with Places API (New) enabled; manual gym creation and crowd forecasting do not require a Google key.
+Dataset ingestion: POST /gym/dataset/import with header x-gym-dataset-key and JSON body containing gymId, sourceName, sourceReference, license, and records. Each record requires observedAt (ISO timestamp), crowdPercent (0-100), and recordId. Up to 5000 records can be sent per request. The source metadata and license are retained for audit. Google Maps/Popular Times source names or references are rejected.
+
+Other endpoints: POST /gym/create, POST /gym/select, GET /gym/selected, GET /gym/:gymId/forecast, POST /gym/:gymId/observations, and GET /gym/:gymId/evaluation. Manual gym creation and crowd forecasting do not require a Google key; dynamic city/gym discovery does.
