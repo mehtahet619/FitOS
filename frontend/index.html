@@ -402,30 +402,7 @@
       <div id="workout-content"><div class="empty-state">Loading…</div></div>
     </div>
 
-    <!-- DIET -->
-    <div id="screen-diet" class="screen">
-      <div class="header diet-page-header">
-        <h1>Diet</h1>
-        <p>Scan packaged food, review nutrition, and track your daily intake.</p>
-      </div>
-      <div id="diet-content" hidden></div>
-      <section id="fitos-food-tracker" class="food-tracker" aria-labelledby="food-tracker-title">
-        <div class="food-tracker-heading"><p class="eyebrow">SCAN · TRACK · IMPROVE</p><h2 id="food-tracker-title">AI Food Scanner & Nutrition Tracker</h2><p>Scan packaged food, review verified label data, and log what you eat. Open Food Facts data may be incomplete—check the serving and nutrition before saving.</p></div>
-        <div class="food-tracker-tabs" role="tablist" aria-label="Food tools"><button type="button" class="active" data-food-view="scan" role="tab" aria-selected="true">Scan food</button><button type="button" data-food-view="log" role="tab" aria-selected="false">Today’s log</button><button type="button" data-food-view="nearby" role="tab" aria-selected="false">Food nearby</button></div>
-        <div id="food-view-scan" class="food-view">
-          <div class="food-tool-card"><h3>Packaged food barcode</h3><p>EAN/UPC barcode lookup through Open Food Facts. Camera starts only after you tap the button.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-camera-start">Open barcode camera</button><button type="button" class="btn btn-outline" id="food-camera-stop" disabled>Stop camera</button></div><video id="food-barcode-video" playsinline muted hidden></video><p id="food-camera-status" class="food-status" aria-live="polite"></p><form id="food-barcode-form" class="food-inline-form"><label for="food-barcode-input">Or enter barcode</label><div class="food-input-row"><input id="food-barcode-input" inputmode="numeric" autocomplete="off" maxlength="32" placeholder="EAN-13 / UPC-A" /><button type="submit" class="btn btn-dark">Look up</button></div></form></div>
-          <div class="food-tool-card"><h3>Search Open Food Facts</h3><form id="food-search-form" class="food-inline-form"><label for="food-search-input">Product name or brand</label><div class="food-input-row"><input id="food-search-input" maxlength="100" placeholder="e.g. plain Greek yogurt" /><button type="submit" class="btn btn-dark">Search</button></div></form><div id="food-search-results"></div></div>
-          <div class="food-tool-card"><h3>Manual nutrition entry</h3><p>Use this if a product is missing or its label data is incomplete. Enter the values from the package label; nothing is guessed.</p><form id="food-manual-form" class="food-manual-grid"><label>Food name<input name="name" required maxlength="120" /></label><label>Serving amount (g/ml)<input name="serving" type="number" min="1" max="10000" value="100" required /></label><p class="food-data-note" style="grid-column:1/-1">Enter the label values for the serving amount above.</p><label>Calories (kcal)<input name="calories" type="number" min="0" max="10000" step="0.1" required /></label><label>Protein (g)<input name="protein" type="number" min="0" max="1000" step="0.1" required /></label><label>Carbohydrate (g)<input name="carbs" type="number" min="0" max="1000" step="0.1" required /></label><label>Fat (g)<input name="fat" type="number" min="0" max="1000" step="0.1" required /></label><button type="submit" class="btn btn-mint">Review manual entry</button></form></div>
-          <div id="food-product-review" class="food-tool-card" hidden></div>
-        </div>
-        <div id="food-view-log" class="food-view" hidden><div id="food-daily-summary" class="food-daily-summary"></div><div class="food-tool-card"><div class="food-section-heading"><h3>Meal history</h3><button type="button" class="btn btn-outline" id="food-refresh-log">Refresh</button></div><div id="food-log-list"></div></div></div>
-        <div id="food-view-nearby" class="food-view" hidden><div class="food-tool-card"><h3>Nearby food finder</h3><p>Your location is requested only after you tap “Use my location”. You can enter a location manually if you prefer not to share GPS.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-nearby-location">Use my location</button></div><form id="food-nearby-manual-form" class="food-inline-form"><label for="food-nearby-query">Search near a place (provider support required)</label><div class="food-input-row"><input id="food-nearby-query" maxlength="120" placeholder="Area, city, or address" /><button type="submit" class="btn btn-dark">Search</button></div></form><p id="food-nearby-status" class="food-status" aria-live="polite"></p><div id="food-nearby-results"></div></div></div>
-        <p class="food-data-note">Data source: Open Food Facts community product database. Nutrition values are shown with their reported basis and may be missing or user-submitted. FitOS does not treat missing values as zero. Always confirm the selected serving before logging. Food logging is general wellness information, not medical advice.</p>
-      </section>
-    </div>
-
-    <!-- VISION -->
-    <div id="screen-vision" class="screen">
+    <div id="fitos-vision-tools" class="fitos-vision-tools">
       <div class="header">
         <h1>Vision Coach</h1>
         <p>CV rep counter, form scoring, and model gates</p>
@@ -495,7 +472,34 @@
       </div>
     </div>
 
+    <!-- DIET -->
+    <div id="screen-diet" class="screen">
+      <div class="header diet-page-header">
+        <h1>Diet</h1>
+        <p>Scan packaged food, review nutrition, and track your daily intake.</p>
+      </div>
+      <div id="diet-content" hidden></div>
+      <section id="fitos-food-tracker" class="food-tracker" aria-labelledby="food-tracker-title">
+        <div class="food-tracker-heading"><p class="eyebrow">SCAN · TRACK · IMPROVE</p><h2 id="food-tracker-title">AI Food Scanner & Nutrition Tracker</h2><p>Scan packaged food, review verified label data, and log what you eat. Open Food Facts data may be incomplete—check the serving and nutrition before saving.</p></div>
+        <div class="food-tracker-tabs" role="tablist" aria-label="Food tools"><button type="button" class="active" data-food-view="scan" role="tab" aria-selected="true">Scan food</button><button type="button" data-food-view="log" role="tab" aria-selected="false">Today’s log</button><button type="button" data-food-view="nearby" role="tab" aria-selected="false">Food nearby</button></div>
+        <div id="food-view-scan" class="food-view">
+          <div class="food-tool-card"><h3>Packaged food barcode</h3><p>EAN/UPC barcode lookup through Open Food Facts. Camera starts only after you tap the button.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-camera-start">Open barcode camera</button><button type="button" class="btn btn-outline" id="food-camera-stop" disabled>Stop camera</button></div><video id="food-barcode-video" playsinline muted hidden></video><p id="food-camera-status" class="food-status" aria-live="polite"></p><form id="food-barcode-form" class="food-inline-form"><label for="food-barcode-input">Or enter barcode</label><div class="food-input-row"><input id="food-barcode-input" inputmode="numeric" autocomplete="off" maxlength="32" placeholder="EAN-13 / UPC-A" /><button type="submit" class="btn btn-dark">Look up</button></div></form></div>
+          <div class="food-tool-card"><h3>Search Open Food Facts</h3><form id="food-search-form" class="food-inline-form"><label for="food-search-input">Product name or brand</label><div class="food-input-row"><input id="food-search-input" maxlength="100" placeholder="e.g. plain Greek yogurt" /><button type="submit" class="btn btn-dark">Search</button></div></form><div id="food-search-results"></div></div>
+          <div class="food-tool-card"><h3>Manual nutrition entry</h3><p>Use this if a product is missing or its label data is incomplete. Enter the values from the package label; nothing is guessed.</p><form id="food-manual-form" class="food-manual-grid"><label>Food name<input name="name" required maxlength="120" /></label><label>Serving amount (g/ml)<input name="serving" type="number" min="1" max="10000" value="100" required /></label><p class="food-data-note" style="grid-column:1/-1">Enter the label values for the serving amount above.</p><label>Calories (kcal)<input name="calories" type="number" min="0" max="10000" step="0.1" required /></label><label>Protein (g)<input name="protein" type="number" min="0" max="1000" step="0.1" required /></label><label>Carbohydrate (g)<input name="carbs" type="number" min="0" max="1000" step="0.1" required /></label><label>Fat (g)<input name="fat" type="number" min="0" max="1000" step="0.1" required /></label><button type="submit" class="btn btn-mint">Review manual entry</button></form></div>
+          <div id="food-product-review" class="food-tool-card" hidden></div>
+        </div>
+        <div id="food-view-log" class="food-view" hidden><div id="food-daily-summary" class="food-daily-summary"></div><div class="food-tool-card"><div class="food-section-heading"><h3>Meal history</h3><button type="button" class="btn btn-outline" id="food-refresh-log">Refresh</button></div><div id="food-log-list"></div></div></div>
+        <div id="food-view-nearby" class="food-view" hidden><div class="food-tool-card"><h3>Nearby food finder</h3><p>Your location is requested only after you tap “Use my location”. You can enter a location manually if you prefer not to share GPS.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-nearby-location">Use my location</button></div><form id="food-nearby-manual-form" class="food-inline-form"><label for="food-nearby-query">Search near a place (provider support required)</label><div class="food-input-row"><input id="food-nearby-query" maxlength="120" placeholder="Area, city, or address" /><button type="submit" class="btn btn-dark">Search</button></div></form><p id="food-nearby-status" class="food-status" aria-live="polite"></p><div id="food-nearby-results"></div></div></div>
+        <p class="food-data-note">Data source: Open Food Facts community product database. Nutrition values are shown with their reported basis and may be missing or user-submitted. FitOS does not treat missing values as zero. Always confirm the selected serving before logging. Food logging is general wellness information, not medical advice.</p>
+      </section>
+    </div>
+
     <!-- GYM -->
+    <div id="screen-friends" class="screen">
+      <div class="header"><h1>Friends leaderboard</h1><p>Invite friends and compare completed workouts privately.</p></div>
+      <div id="friends-content"></div>
+    </div>
+
     <div id="screen-gym" class="screen">
       <div class="header">
         <h1>Gym Check-in</h1>
@@ -528,8 +532,8 @@
     <button class="nav-item" data-tab="diet" type="button">
       <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2v7a4 4 0 0 0 4 4h1V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm-3 0v7"/></svg></span><span>Diet</span>
     </button>
-    <button class="nav-item" data-tab="vision" type="button">
-      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Vision</span>
+    <button class="nav-item" data-tab="friends" type="button">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 8v6m3-3h-6"/></svg></span><span>Friends</span>
     </button>
     <button class="nav-item" data-tab="gym-scan" type="button">
       <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="4"/></svg></span><span>Scan</span>
@@ -547,8 +551,8 @@
 <script src="analytics.js?v=fitos-growth-v1"></script>
 <script src="api.js"></script>
 <script src="pricing-guesses.js?v=fitos-price-guess-v2"></script>
-<script src="app.js?v=fitos-20261022-public-homepage-fix-v2"></script>
-<script src="gamification.js?v=fitos-friends-leaderboard-v1" defer></script>
+<script src="app.js?v=fitos-friends-tab-vision-workout-v1"></script>
+<script src="gamification.js?v=fitos-friends-tab-vision-workout-v1" defer></script>
 <script src="nutrition-guidance.js?v=fitos-nutrition-guidance-v2"></script>
 <script src="barcode-scanner.js?v=fitos-barcode-zxing-v1"></script>
 <script src="food-tracker.js?v=fitos-smart-food-search-v3"></script>
