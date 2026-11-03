@@ -63,7 +63,41 @@
       const rows = document.createElement("div"); rows.id = "fitos-private-friend-rows"; rows.textContent = "Loading private leaderboard…"; board.appendChild(rows);
       // Rewards card stays first; the friends leaderboard follows it.
       host.appendChild(board);
-      void Api.get("/auth/me").then(async me => { if (!me?.authenticated) return; const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite"); if (pending) { try { await Api.post("/friends/accept-invite", {code:pending}); sessionStorage.removeItem("fitos_pending_invite"); } catch (e) { if ([400,404,409].includes(e.status)) sessionStorage.removeItem("fitos_pending_invite"); } } const data = await Api.get("/friends/leaderboard"); rows.replaceChildren(); (data.members || []).forEach((m,i) => { const line = document.createElement("p"); line.textContent = "#" + (i+1) + " " + (m.name || "FitOS member") + (m.isYou ? " (You)" : "") + " · " + m.weeklyWorkouts + " this week · " + (m.workouts*100) + " XP"; rows.appendChild(line); }); }).catch(() => { rows.textContent = "Leaderboard unavailable. Refresh the page to retry."; });
+      void Api.get("/auth/me").then(async me => { if (!me?.authenticated) return; const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite"); if (pending) { try { await Api.post("/friends/accept-invite", {code:pending}); sessionStorage.removeItem("fitos_pending_invite"); } catch (e) { if ([400,404,409].includes(e.status)) sessionStorage.removeItem("fitos_pending_invite"); } } const data = await Api.get("/friends/leaderboard");
+        rows.replaceChildren();
+        rows.className = "fitos-friend-grid";
+        const members = Array.isArray(data.members) ? data.members : [];
+        if (!members.length) {
+          const empty = document.createElement("div");
+          empty.className = "fitos-friends-empty";
+          empty.textContent = "No leaderboard entries yet. Invite a friend to start comparing workouts.";
+          rows.appendChild(empty);
+        }
+        members.forEach((m, i) => {
+          const item = document.createElement("article");
+          item.className = "fitos-friend-card" + (m.isYou ? " is-you" : "");
+          const top = document.createElement("div");
+          top.className = "fitos-friend-card-top";
+          const rank = document.createElement("span");
+          rank.className = "fitos-friend-rank";
+          rank.textContent = "#" + (i + 1);
+          const avatar = document.createElement("span");
+          avatar.className = "fitos-friend-avatar";
+          avatar.textContent = (m.name || "F").trim().charAt(0).toUpperCase();
+          top.append(rank, avatar);
+          const name = document.createElement("div");
+          name.className = "fitos-friend-name";
+          name.textContent = (m.name || "FitOS member") + (m.isYou ? " (You)" : "");
+          const stats = document.createElement("div");
+          stats.className = "fitos-friend-stats";
+          const workouts = document.createElement("span");
+          workouts.textContent = String(Number(m.weeklyWorkouts) || 0) + " workouts";
+          const xp = document.createElement("strong");
+          xp.textContent = (Number(m.workouts) || 0) * 100 + " XP";
+          stats.append(workouts, xp);
+          item.append(top, name, stats);
+          rows.appendChild(item);
+        }); }).catch(() => { rows.textContent = "Leaderboard unavailable. Refresh the page to retry."; });
 
       document.getElementById("fitos-gamification-share").addEventListener("click", async () => {
         const message = SHARE_TEXT;
