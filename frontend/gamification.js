@@ -6,6 +6,8 @@
   const STORAGE_KEY = "fitos_gamification_v2";
   const SHARE_TEXT = "Bhai abhi to gym chalne";
   const SHARE_URL = "https://adaptive-fit-web.onrender.com/";
+  let inviteUrl = SHARE_URL;
+  let leaderboard = null;
   const XP_PER_LEVEL = 500;
 
   function readXp() {
@@ -59,11 +61,12 @@
 
       card.querySelector("#fitos-gamification-share").addEventListener("click", async () => {
         const message = SHARE_TEXT;
+        try { const data = await Api.get("/friends/leaderboard"); inviteUrl = data.inviteUrl || SHARE_URL; } catch (error) { console.warn("[FitOS] Invite link unavailable", error); }
         const button = card.querySelector("#fitos-gamification-share");
         try {
-          if (navigator.share) await navigator.share({ title: "AdaptiveFit", text: message, url: SHARE_URL });
+          if (navigator.share) await navigator.share({ title: "AdaptiveFit", text: message, url: inviteUrl });
           else if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(message + "\\n" + SHARE_URL);
+            await navigator.clipboard.writeText(message + "\\n" + inviteUrl);
             button.textContent = "Copied!";
           } else window.prompt("Copy your invite:", message + "\\n" + SHARE_URL);
         } catch (error) {
