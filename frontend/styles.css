@@ -2135,3 +2135,22 @@ body.gym-choice-open { overflow: hidden; }
 .gym-crowd-track i.is-moderate { background:#e4ad4e; }
 .gym-crowd-track i.is-busy { background:#df6b61; }
 @media (max-width:380px) { .gym-crowd-hour { grid-template-columns:40px minmax(35px,1fr) 34px; } .gym-crowd-hour small { display:none; } }
+
+/* FitOS gamification: compact card aligned with the existing cream, white and mint UI. */
+.fitos-gamification-card{background:#fff;border:1px solid #e5e9e3;border-radius:20px;padding:18px;margin:16px 0;color:#202923;box-shadow:0 2px 10px rgba(25,50,35,.04)}
+.fitos-gamification-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.fitos-gamification-eyebrow{font-size:11px;font-weight:800;letter-spacing:.09em;color:#68766e}
+.fitos-gamification-xp{font-size:30px;line-height:1.15;font-weight:850;margin-top:5px;font-variant-numeric:tabular-nums}
+.fitos-gamification-level{font-size:13px;color:#68766e;margin-top:3px}
+.fitos-gamification-share{border:1px solid #bfe9d8;background:#effaf5;color:#176b50;border-radius:12px;padding:10px 13px;font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+.fitos-gamification-track{height:8px;background:#edf1ed;border-radius:20px;overflow:hidden;margin-top:16px}
+.fitos-gamification-track span{display:block;height:100%;width:0;background:#65cda5;border-radius:20px;transition:width .25s ease}
+.fitos-gamification-next{font-size:12px;color:#68766e;margin-top:7px}
+.fitos-gamification-recent{font-size:13px;font-weight:650;color:#286b52;margin-top:12px}
+.fitos-gamification-rules{border-top:1px solid #edf0ec;margin-top:14px;padding-top:11px;font-size:13px;color:#536158}
+.fitos-gamification-rules summary{font-weight:700;cursor:pointer;color:#27372e}
+.fitos-gamification-rules ul{padding-left:19px;margin:10px 0 0;display:grid;gap:7px}
+.fitos-gamification-rules li{padding-right:4px}
+.fitos-gamification-rules li strong{float:right;color:#176b50;white-space:nowrap}
+.fitos-gamification-note{font-size:11px;color:#8a948d;margin:12px 0 0}
+@media(max-width:420px){.fitos-gamification-card{padding:15px}.fitos-gamification-xp{font-size:27px}.fitos-gamification-share{padding:9px 10px}}
