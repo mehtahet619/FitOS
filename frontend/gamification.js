@@ -4,7 +4,8 @@
   // Lightweight, UI-only gamification widget. It never intercepts fetch or
   // participates in the app's login/dashboard boot sequence.
   const STORAGE_KEY = "fitos_gamification_v2";
-  const SHARE_MESSAGE = "Akele hi aage badhoge dost ko bhi to saath le chalo";
+  const SHARE_TEXT = "Bhai abhi to gym chalne";
+  const SHARE_URL = "https://adaptive-fit-web.onrender.com/";
   const XP_PER_LEVEL = 500;
 
   function readXp() {
@@ -33,7 +34,11 @@
             <div class="fitos-gamification-xp" id="fitos-gamification-xp">0 XP</div>
             <div class="fitos-gamification-level" id="fitos-gamification-level">Level 1</div>
           </div>
-          <button type="button" class="fitos-gamification-share" id="fitos-gamification-share">Share progress</button>
+          <div class="fitos-gamification-invite">
+            <div class="fitos-gamification-invite-copy">Akele hi aage badh gaya? Apne doston ko bhi saath le chalo.</div>
+            <div class="fitos-gamification-friends" aria-hidden="true"><span></span><span></span><span></span></div>
+            <button type="button" class="fitos-gamification-share" id="fitos-gamification-share">Invite friends</button>
+          </div>
         </div>
         <div class="fitos-gamification-track"><span id="fitos-gamification-progress"></span></div>
         <div class="fitos-gamification-next" id="fitos-gamification-next">500 XP to next level</div>
@@ -53,14 +58,14 @@
       host.appendChild(card);
 
       card.querySelector("#fitos-gamification-share").addEventListener("click", async () => {
-        const message = SHARE_MESSAGE + " " + readXp().toLocaleString() + " XP on FitOS. Join me on my fitness journey!";
+        const message = SHARE_TEXT;
         const button = card.querySelector("#fitos-gamification-share");
         try {
-          if (navigator.share) await navigator.share({ title: "My FitOS progress", text: message });
+          if (navigator.share) await navigator.share({ title: "AdaptiveFit", text: message, url: SHARE_URL });
           else if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(message);
+            await navigator.clipboard.writeText(message + "\\n" + SHARE_URL);
             button.textContent = "Copied!";
-          } else window.prompt("Copy your FitOS message:", message);
+          } else window.prompt("Copy your invite:", message + "\\n" + SHARE_URL);
         } catch (error) {
           if (error?.name !== "AbortError") console.warn("[FitOS] Share unavailable.", error);
         }
