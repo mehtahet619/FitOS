@@ -267,19 +267,19 @@ function updateAuthMode() {
 }
 
 const EQUIPMENT_ICONS = {
-  "No Equipment": "🧍",
-  "Dumbbells": "🏋️",
-  "Barbell": "🏋️‍♂️",
-  "Bench": "🛋️",
-  "Pull-up Bar": "🧗",
-  "Resistance Bands": "➰",
-  "Cable Machine": "🔗",
-  "Squat Rack": "🏗️",
-  "Treadmill": "🏃",
-  "Exercise Bike": "🚴",
-  "Smith Machine": "⚙️",
-  "Leg Press": "🦵",
-  "Lat Pulldown": "⬇️",
+  "No Equipment": "",
+  "Dumbbells": "",
+  "Barbell": "",
+  "Bench": "",
+  "Pull-up Bar": "",
+  "Resistance Bands": "",
+  "Cable Machine": "",
+  "Squat Rack": "",
+  "Treadmill": "",
+  "Exercise Bike": "",
+  "Smith Machine": "",
+  "Leg Press": "",
+  "Lat Pulldown": "",
 };
 
 /* ---------------- Helpers ---------------- */
@@ -594,7 +594,7 @@ async function loadEquipmentChips() {
     chip.type = "button";
     chip.className = `chip${State.selectedEquipment.has(eq.name) ? " active" : ""}`;
     chip.dataset.equipmentName = eq.name;
-    chip.textContent = `${EQUIPMENT_ICONS[eq.name] || "🔧"} ${eq.name}`;
+    chip.textContent = `${EQUIPMENT_ICONS[eq.name] || ""} ${eq.name}`;
     chip.addEventListener("click", () => {
       if (State.selectedEquipment.has(eq.name)) {
         State.selectedEquipment.delete(eq.name);
@@ -1461,8 +1461,8 @@ function renderPlanStructurePrompt() {
 function renderActivePlanCard(plan) {
   const nextWod = plan.nextWorkout;
   const lockBadge = plan.planSwitchAllowed
-    ? `<span class="pill pill-success" style="margin-left:6px;">🔓 Switching unlocked</span>`
-    : `<span class="pill pill-muted" style="margin-left:6px;">🔒 Switching locked</span>`;
+    ? `<span class="pill pill-success" style="margin-left:6px;"> Switching unlocked</span>`
+    : `<span class="pill pill-muted" style="margin-left:6px;"> Switching locked</span>`;
   const cycleDone = plan.cycleStatus === "COMPLETED";
   const cycleLabel = cycleDone ? "Complete ✓" : `${plan.completedUnits?.length || 0} / ${plan.units?.length || 0} done`;
 
@@ -1470,8 +1470,8 @@ function renderActivePlanCard(plan) {
   if (cycleDone) {
     actionButtons = `
       <div class="btn-row">
-        <button class="btn btn-primary" id="start-new-cycle-btn">🔄 Start next ${plan.activePlan.structureLabel} cycle</button>
-        <button class="btn btn-outline" id="switch-plan-btn">🔀 Switch to a different structure</button>
+        <button class="btn btn-primary" id="start-new-cycle-btn"> Start next ${plan.activePlan.structureLabel} cycle</button>
+        <button class="btn btn-outline" id="switch-plan-btn"> Switch to a different structure</button>
       </div>
     `;
   }
@@ -1505,7 +1505,7 @@ function renderActivePlanCard(plan) {
         ? `<div class="card-sub workout-recent-line">Recently trained (last 48h): ${plan.recentlyTrainedMuscles.map((m) => m.muscle).join(", ")}</div>`
         : ""}
       ${plan.decision?.warning
-        ? `<div class="banner banner-info" style="margin-top:10px;">⚠️ ${plan.decision.warning}</div>`
+        ? `<div class="banner banner-info" style="margin-top:10px;"> ${plan.decision.warning}</div>`
         : ""}
       <div style="margin-top:14px;">${actionButtons}</div>
     </section>
@@ -1691,7 +1691,7 @@ function wirePlanActions(plan) {
       } catch (e) {
         $("workout-content").innerHTML = `<div class="banner banner-error">${e.message}</div>` + $("workout-content").innerHTML;
         restartBtn.disabled = false;
-        restartBtn.textContent = `🔄 Start next ${plan.activePlan.structureLabel} cycle`;
+        restartBtn.textContent = ` Start next ${plan.activePlan.structureLabel} cycle`;
       }
     });
   }
@@ -2039,7 +2039,7 @@ function renderWorkout(workout, plan) {
           ${hasDemoVideo && demo.thumbnailUrl
             ? `<img src="${escapeWorkoutText(demo.thumbnailUrl)}" alt="${escapeWorkoutText(exercise.exerciseName)} demonstration video thumbnail" loading="lazy" />`
             : `<span class="exercise-demo-thumbnail-fallback">${hasDemoVideo ? "Play demonstration" : "Load demonstration"}</span>`}
-          <span class="exercise-demo-play" aria-hidden="true">▶</span>
+          <span class="exercise-demo-play" aria-hidden="true"></span>
         </button>
         <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
         <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · ${hasDemoVideo ? "Inline demonstration" : "Find exercise demonstration"}</span></div>
@@ -2525,22 +2525,22 @@ async function findHealthyFood() {
     const details = error.body && error.body.stage
       ? `${error.body.error} (${error.body.stage}: ${error.body.restaurantsFound} restaurants, ${error.body.rawMenuRecordsFound} raw menu records, ${error.body.normalizedDishesFound} dishes)`
       : error.message;
-    el.innerHTML = `<div class="meal-plan-error"><strong>😅 We couldn't find exact dishes right now.</strong><span>${details}</span><button class="btn btn-primary" id="try-healthy-again">Try Again</button></div>`;
+    el.innerHTML = `<div class="meal-plan-error"><strong> We couldn't find exact dishes right now.</strong><span>${details}</span><button class="btn btn-primary" id="try-healthy-again">Try Again</button></div>`;
     $("try-healthy-again").addEventListener("click", findHealthyFood);
   }
 }
 
-function healthyFinderLoaderMarkup() { return `<div class="meal-plan-loader" aria-live="polite"><div class="floating-food">🍎 🥗 🍗 🥦 🍕 🍌</div><div class="loader-orbit">🥗</div><div class="loader-progress-label">Finding healthy food... <strong id="healthy-progress">10%</strong></div><div class="loader-progress"><span id="healthy-progress-bar"></span></div><div class="loader-stage"><strong id="healthy-stage-title">📍 Finding restaurants near you</strong><span id="healthy-stage-copy">Looking for delicious options nearby...</span></div><div class="meal-fact"><strong id="healthy-fact-title">💡 Did you know?</strong><span id="healthy-fact-copy">High-protein meals can help you stay full longer.</span></div><div class="meal-skeletons"><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div></div></div>`; }
+function healthyFinderLoaderMarkup() { return `<div class="meal-plan-loader" aria-live="polite"><div class="floating-food">     </div><div class="loader-orbit"></div><div class="loader-progress-label">Finding healthy food... <strong id="healthy-progress">10%</strong></div><div class="loader-progress"><span id="healthy-progress-bar"></span></div><div class="loader-stage"><strong id="healthy-stage-title"> Finding restaurants near you</strong><span id="healthy-stage-copy">Looking for delicious options nearby...</span></div><div class="meal-fact"><strong id="healthy-fact-title"> Did you know?</strong><span id="healthy-fact-copy">High-protein meals can help you stay full longer.</span></div><div class="meal-skeletons"><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>HEALTHY DISH</i><b></b><b></b><small>Calories · Protein</small></div></div></div>`; }
 function startHealthyFinderLoader() {
-  const stages = [["📍 Finding restaurants near you", "Looking for delicious options nearby...", 22], ["🍽️ Discovering available dishes", "Exploring menus and cuisines...", 42], ["📖 Reading menus", "Collecting real dishes from nearby restaurants...", 58], ["🧠 AI is analyzing nutrition", "Ranking real dishes only...", 74], ["🥗 Finding the healthiest options", "Comparing nutrition and ingredients...", 84], ["✨ Ranking your best choices", "Almost ready...", 90]];
-  const facts = [["💡 Did you know?", "High-protein meals can help you stay full longer."], ["💧 Hydration tip", "Water supports performance and recovery."], ["🥦 Nutrition fact", "Vegetable-rich meals add fibre and micronutrients."]]; let step = 0; let fact = 0;
+  const stages = [[" Finding restaurants near you", "Looking for delicious options nearby...", 22], [" Discovering available dishes", "Exploring menus and cuisines...", 42], [" Reading menus", "Collecting real dishes from nearby restaurants...", 58], [" AI is analyzing nutrition", "Ranking real dishes only...", 74], [" Finding the healthiest options", "Comparing nutrition and ingredients...", 84], [" Ranking your best choices", "Almost ready...", 90]];
+  const facts = [[" Did you know?", "High-protein meals can help you stay full longer."], [" Hydration tip", "Water supports performance and recovery."], [" Nutrition fact", "Vegetable-rich meals add fibre and micronutrients."]]; let step = 0; let fact = 0;
   const timer = setInterval(() => { const s = stages[Math.min(step++, stages.length - 1)]; if ($("healthy-stage-title")) { $("healthy-stage-title").textContent = s[0]; $("healthy-stage-copy").textContent = s[1]; $("healthy-progress").textContent = `${s[2]}%`; $("healthy-progress-bar").style.width = `${s[2]}%`; } }, 1500);
   const factTimer = setInterval(() => { fact = (fact + 1) % facts.length; if ($("healthy-fact-title")) { $("healthy-fact-title").textContent = facts[fact][0]; $("healthy-fact-copy").textContent = facts[fact][1]; } }, 3500);
   return (success) => { clearInterval(timer); clearInterval(factTimer); if (success && $("healthy-progress")) { $("healthy-progress").textContent = "100%"; $("healthy-progress-bar").style.width = "100%"; } };
 }
 function renderHealthyFood(data) {
   const el = $("diet-content");
-  el.innerHTML = `<div class="food-results-head"><div><h2>🥗 Healthy options near you</h2><p>✓ Found ${data.restaurantsFound} restaurants · ✓ Found ${data.dishesFound} available dishes</p></div></div><div class="food-filters"><button class="pill filter active" data-filter="all">All</button><button class="pill filter" data-filter="low">🔥 Low Calorie</button><button class="pill filter" data-filter="protein">💪 High Protein</button><button class="pill filter" data-filter="veg">🥗 Vegetarian</button><button class="pill filter" data-filter="budget">💰 Budget</button></div><div id="healthy-dishes"></div><button class="btn btn-outline" id="show-more-dishes">✨ Show More Healthy Options</button><div class="banner banner-info" style="margin-top:14px;">Approximate estimates, not medical advice.</div>`;
+  el.innerHTML = `<div class="food-results-head"><div><h2> Healthy options near you</h2><p>✓ Found ${data.restaurantsFound} restaurants · ✓ Found ${data.dishesFound} available dishes</p></div></div><div class="food-filters"><button class="pill filter active" data-filter="all">All</button><button class="pill filter" data-filter="low"> Low Calorie</button><button class="pill filter" data-filter="protein"> High Protein</button><button class="pill filter" data-filter="veg"> Vegetarian</button><button class="pill filter" data-filter="budget"> Budget</button></div><div id="healthy-dishes"></div><button class="btn btn-outline" id="show-more-dishes"> Show More Healthy Options</button><div class="banner banner-info" style="margin-top:14px;">Approximate estimates, not medical advice.</div>`;
   const cards = data.recommendations; let visible = 5;
   const render = () => {
     const filter = document.querySelector(".filter.active")?.dataset.filter || "all";
@@ -2557,7 +2557,7 @@ function renderHealthyFood(data) {
       const reasons = (Array.isArray(d.reasons) ? d.reasons : []).map((reason) => `<span>✓ ${reason}</span>`).join("");
       const confidence = d.nutritionConfidence === "verified" ? "Verified by source" : d.nutritionConfidence === "llm_estimated" ? "AI estimate; not verified" : "Estimated/unverified";
       const restaurantLink = typeof d.restaurantUrl === "string" && /^https?:\/\//i.test(d.restaurantUrl) ? d.restaurantUrl : "";
-      return `<article class="healthy-dish-card" tabindex="0"><div class="dish-rank">${i < 3 ? ["🥇","🥈","🥉"][i] : `#${i + 1}`} Recommendation</div><h3>${d.name}</h3><strong>${d.restaurantName}</strong><div class="dish-score">⭐ Health Score: ${score}</div><div class="dish-nutrition">🔥 ${calories} · 💪 ${protein} · 💰 ${price}</div><div class="dish-reasons">${reasons}</div><p>Nutrition confidence: ${confidence}</p>${restaurantLink ? `<a class="btn btn-outline" href="${restaurantLink}" target="_blank" rel="noopener noreferrer">📍 Open Restaurant Listing</a>` : `<span class="card-sub">Restaurant listing unavailable</span>`}</article>`;
+      return `<article class="healthy-dish-card" tabindex="0"><div class="dish-rank">${i < 3 ? ["","",""][i] : `#${i + 1}`} Recommendation</div><h3>${d.name}</h3><strong>${d.restaurantName}</strong><div class="dish-score"> Health Score: ${score}</div><div class="dish-nutrition"> ${calories} ·  ${protein} ·  ${price}</div><div class="dish-reasons">${reasons}</div><p>Nutrition confidence: ${confidence}</p>${restaurantLink ? `<a class="btn btn-outline" href="${restaurantLink}" target="_blank" rel="noopener noreferrer"> Open Restaurant Listing</a>` : `<span class="card-sub">Restaurant listing unavailable</span>`}</article>`;
     }).join("") || `<div class="empty-state">No dishes match this filter with the available data. Try All or check the restaurant menu.</div>`;
   };
   render();
@@ -2566,33 +2566,33 @@ function renderHealthyFood(data) {
 }
 
 const MEAL_FACTS = [
-  ["🥦 Fun fact", "Protein helps repair and build muscle after workouts."],
-  ["🍌 Did you know?", "Bananas are a great source of quick energy before a workout."],
-  ["💧 Hydration tip", "Drinking enough water can improve workout performance."],
-  ["🍚 Nutrition fact", "Carbohydrates are your body's preferred energy source for intense exercise."],
-  ["🥚 Protein fact", "Eggs contain all nine essential amino acids."],
-  ["🥜 Smart snack", "Combining protein and carbohydrates can help with post-workout recovery."],
+  [" Fun fact", "Protein helps repair and build muscle after workouts."],
+  [" Did you know?", "Bananas are a great source of quick energy before a workout."],
+  [" Hydration tip", "Drinking enough water can improve workout performance."],
+  [" Nutrition fact", "Carbohydrates are your body's preferred energy source for intense exercise."],
+  [" Protein fact", "Eggs contain all nine essential amino acids."],
+  [" Smart snack", "Combining protein and carbohydrates can help with post-workout recovery."],
 ];
 
 function mealPlanLoaderMarkup() {
   return `<div class="meal-plan-loader" aria-live="polite">
-    <div class="floating-food" aria-hidden="true">🍎 🥗 🍗 🥦 🍕 🍌</div>
-    <div class="loader-orbit">🍽️</div>
+    <div class="floating-food" aria-hidden="true">     </div>
+    <div class="loader-orbit"></div>
     <div class="loader-progress-label">Generating your meal plan... <strong id="meal-progress">10%</strong></div>
     <div class="loader-progress"><span id="meal-progress-bar"></span></div>
-    <div class="loader-stage"><strong id="meal-stage-title">🔍 Finding restaurants near you</strong><span id="meal-stage-copy">Looking for delicious options nearby...</span></div>
-    <div class="meal-fact"><strong id="meal-fact-title">🥦 Fun fact</strong><span id="meal-fact-copy">Protein helps repair and build muscle after workouts.</span></div>
+    <div class="loader-stage"><strong id="meal-stage-title"> Finding restaurants near you</strong><span id="meal-stage-copy">Looking for delicious options nearby...</span></div>
+    <div class="meal-fact"><strong id="meal-fact-title"> Fun fact</strong><span id="meal-fact-copy">Protein helps repair and build muscle after workouts.</span></div>
     <div class="meal-skeletons"><div class="meal-skeleton"><i>BREAKFAST</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>LUNCH</i><b></b><b></b><small>Calories · Protein</small></div><div class="meal-skeleton"><i>DINNER</i><b></b><b></b><small>Calories · Protein</small></div></div>
   </div>`;
 }
 
 function startMealPlanLoader() {
   const stages = [
-    ["🔍 Finding restaurants near you", "Looking for delicious options nearby...", 25],
-    ["🍽️ Checking available food options", "Exploring menus and cuisines...", 45],
-    ["🧠 Building your personalized meal plan", "Matching meals with your fitness goals...", 65],
-    ["📊 Estimating nutrition", "Calculating calories and protein...", 80],
-    ["✨ Almost ready", "Putting together today's perfect meals...", 90],
+    [" Finding restaurants near you", "Looking for delicious options nearby...", 25],
+    [" Checking available food options", "Exploring menus and cuisines...", 45],
+    [" Building your personalized meal plan", "Matching meals with your fitness goals...", 65],
+    [" Estimating nutrition", "Calculating calories and protein...", 80],
+    [" Almost ready", "Putting together today's perfect meals...", 90],
   ];
   let stage = 0;
   let fact = 0;
@@ -2662,7 +2662,7 @@ function renderNearby(data, foodName) {
       (r) => `
       <div class="restaurant-row">
         <div class="restaurant-name">${r.place.name}</div>
-        <div class="restaurant-meta">${r.place.distanceKm.toFixed(1)} km · ⭐ ${r.place.rating} · ${r.place.isOpenNow ? "Open" : "Closed"}</div>
+        <div class="restaurant-meta">${r.place.distanceKm.toFixed(1)} km ·  ${r.place.rating} · ${r.place.isOpenNow ? "Open" : "Closed"}</div>
       </div>`
     )
     .join("");
@@ -2765,11 +2765,11 @@ function renderGym(status, history, selectedGym) {
   const checkedIn = status.checkedIn;
   el.innerHTML = `
     <div class="card gym-intelligence-card">
-      <div class="card-label">📊 Gym crowd intelligence</div>
+      <div class="card-label"> Gym crowd intelligence</div>
       ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
     </div>
     <div class="card">
-      <div class="card-label">📇 Attendance</div>
+      <div class="card-label"> Attendance</div>
       ${
         checkedIn
           ? `<div class="banner banner-success">Checked in today at ${new Date(status.attendance.checkedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (${status.attendance.method})</div>`
@@ -2930,7 +2930,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       </div>
       <div id="gym-tour-workspace"></div>
       <div class="card" style="margin-top:14px;">
-        <div class="card-label">✏️ Manage equipment manually</div>
+        <div class="card-label"> Manage equipment manually</div>
         <p class="card-sub">Add or remove equipment any time. Scanned and manually selected equipment share the same saved gym profile.</p>
         <div class="chip-group" id="gym-manual-equipment" style="flex-wrap:wrap;gap:8px;"></div>
         <div class="field" style="margin-top:12px;">
@@ -3222,7 +3222,7 @@ function renderGymScan(equipment, plan) {
 
   el.innerHTML = `
     <div class="card">
-      <div class="card-label">📷 Scan Your Gym</div>
+      <div class="card-label"> Scan Your Gym</div>
       <p class="card-sub" style="margin-bottom:16px;">Point your camera at the gym equipment to auto-detect what's available.</p>
       <div class="camera-panel" style="aspect-ratio: 4/3; margin-bottom: 16px; border-radius: 12px; overflow: hidden;">
         <video id="gym-scan-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>
@@ -3231,14 +3231,14 @@ function renderGymScan(equipment, plan) {
         </div>
       </div>
       <div class="btn-row" style="margin-bottom:16px;">
-        <button class="btn btn-primary" id="gym-scan-start">📷 Start Scan</button>
+        <button class="btn btn-primary" id="gym-scan-start"> Start Scan</button>
         <button class="btn btn-outline" id="gym-scan-cancel" style="display:none;">Stop &amp; Review</button>
       </div>
       <div id="gym-scan-results" style="display:none; margin-top:16px;"></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <div class="card-label">✏️ Or Select Equipment Manually</div>
+      <div class="card-label"> Or Select Equipment Manually</div>
       <p class="card-sub" style="margin-bottom:12px;">Save what your gym has, then choose what is available for today's workout.</p>
       <div class="chip-group" style="flex-wrap:wrap; gap:8px;">${equipmentHtml}</div>
       <div class="btn-row" style="margin-top:16px;">
@@ -3250,7 +3250,7 @@ function renderGymScan(equipment, plan) {
 
     ${hasActivePlan ? `
       <div class="card" style="margin-top:16px; background:#fff8e1; border-color:#ffe0b2;">
-        <div class="card-label">📋 Active Plan: ${plan.activePlan?.structureLabel || plan.activePlan}</div>
+        <div class="card-label"> Active Plan: ${plan.activePlan?.structureLabel || plan.activePlan}</div>
         <div class="card-sub">Next: ${nextWorkout || "New cycle available"}</div>
         <div class="card-sub">Cycle: ${plan.cycleStatus}</div>
       </div>
@@ -3383,7 +3383,7 @@ function renderGymScan(equipment, plan) {
 
     resultsDiv.innerHTML = `
       <div class="card">
-        <div class="card-label">✅ Detected Equipment</div>
+        <div class="card-label"> Detected Equipment</div>
         <p class="card-sub" style="margin-bottom:8px;">Uncheck any incorrect detections, then confirm.</p>
         <div style="max-height:200px; overflow-y:auto;">${detectionHtml}</div>
         <div class="btn-row" style="margin-top:12px;">
@@ -3393,7 +3393,7 @@ function renderGymScan(equipment, plan) {
       </div>
       ${suggestionsHtml ? `
         <div class="card" style="margin-top:12px;">
-          <div class="card-label">💡 Suggested Exercises</div>
+          <div class="card-label"> Suggested Exercises</div>
           ${suggestionsHtml}
         </div>
       ` : ""}
@@ -3431,7 +3431,7 @@ function renderGymScan(equipment, plan) {
           if (cb) cb.checked = true;
         });
         
-        resultsDiv.innerHTML = `<div class="banner banner-success">✅ Added ${confirmedNames.join(", ")} to your gym!</div>`;
+        resultsDiv.innerHTML = `<div class="banner banner-success"> Added ${confirmedNames.join(", ")} to your gym!</div>`;
         setTimeout(() => { resultsDiv.style.display = "none"; }, 3000);
       } catch (e) {
         resultsDiv.innerHTML = `<div class="banner banner-error">${e.message}</div>`;
