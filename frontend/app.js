@@ -681,7 +681,7 @@ document.addEventListener("click", async (event) => {
 
 function switchTab(tab, updateUrl = true) {
   if (AuthState.status !== "AUTHENTICATED") { navigate("/login", true); return; }
-  const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", gym: "/gym", vision: "/vision" };
+  const pathForTab = { today: "/homepage", workout: "/workout", diet: "/nutrition", "gym-scan": "/equipment", friends: "/friends", gym: "/gym" };
   if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
   if (tab === "history") { void showHistory(); return; }
   showScreen("screen-" + tab);
