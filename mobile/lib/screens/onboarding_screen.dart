@@ -148,9 +148,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("🏋️ What equipment do you have?", style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(" What equipment do you have?", style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 10),
-                  OutlineButton(label: "📷 Scan with camera instead", onPressed: _openScan),
+                  OutlineButton(label: " Scan with camera instead", onPressed: _openScan),
                   const SizedBox(height: 12),
                   _loadingEquipment
                       ? const Center(child: CircularProgressIndicator())
