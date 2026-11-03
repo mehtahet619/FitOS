@@ -188,7 +188,7 @@ class _DietScreenState extends State<DietScreen> {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              "${place["name"]} · ${(place["distanceKm"] as num).toStringAsFixed(1)} km · ⭐ ${place["rating"]}",
+              "${place["name"]} · ${(place["distanceKm"] as num).toStringAsFixed(1)} km ·  ${place["rating"]}",
               style: const TextStyle(fontSize: 12),
             ),
           );

@@ -89,7 +89,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("🔥 Calories", style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text(" Calories", style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(_nutrition != null ? "${_nutrition!["totals"]["calories"]}" : "—", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                   ],
@@ -102,7 +102,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("📇 Gym", style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text(" Gym", style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(_gym?["checkedIn"] == true ? "✓ checked in" : "—", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   ],
@@ -114,7 +114,7 @@ class _TodayScreenState extends State<TodayScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("📊 Weekly Volume", style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text(" Weekly Volume", style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text("${progress["weeklyVolumeKg"] ?? 0} kg", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                 Text("${progress["workoutsThisWeek"] ?? 0} workouts this week", style: const TextStyle(color: AppColors.muted, fontSize: 12)),
