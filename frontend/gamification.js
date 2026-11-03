@@ -57,7 +57,12 @@
             <li>Beat a personal record <strong>+75 XP</strong></li>
           </ul>
         </details>`;
-      host.appendChild(card);\n      const board = document.createElement("section"); board.id = "fitos-private-leaderboard"; board.className = "fitos-private-leaderboard";\n      const heading = document.createElement("h3"); heading.textContent = "My friends leaderboard"; board.appendChild(heading);\n      const rows = document.createElement("div"); rows.id = "fitos-private-friend-rows"; rows.textContent = "Loading private leaderboard…"; board.appendChild(rows);\n      card.appendChild(board);\n      void Api.get("/auth/me").then(async me => { if (!me?.authenticated) return; const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite"); if (pending) { try { await Api.post("/friends/accept-invite", {code:pending}); sessionStorage.removeItem("fitos_pending_invite"); } catch (e) { if ([400,404,409].includes(e.status)) sessionStorage.removeItem("fitos_pending_invite"); } } const data = await Api.get("/friends/leaderboard"); rows.replaceChildren(); (data.members || []).forEach((m,i) => { const line = document.createElement("p"); line.textContent = "#" + (i+1) + " " + (m.name || "FitOS member") + (m.isYou ? " (You)" : "") + " · " + m.weeklyWorkouts + " this week · " + (m.workouts*100) + " XP"; rows.appendChild(line); }); }).catch(() => { rows.textContent = "Leaderboard unavailable. Refresh the page to retry."; });
+      host.appendChild(card);
+      const board = document.createElement("section"); board.id = "fitos-private-leaderboard"; board.className = "fitos-private-leaderboard";
+      const heading = document.createElement("h3"); heading.textContent = "My friends leaderboard"; board.appendChild(heading);
+      const rows = document.createElement("div"); rows.id = "fitos-private-friend-rows"; rows.textContent = "Loading private leaderboard…"; board.appendChild(rows);
+      card.appendChild(board);
+      void Api.get("/auth/me").then(async me => { if (!me?.authenticated) return; const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite"); if (pending) { try { await Api.post("/friends/accept-invite", {code:pending}); sessionStorage.removeItem("fitos_pending_invite"); } catch (e) { if ([400,404,409].includes(e.status)) sessionStorage.removeItem("fitos_pending_invite"); } } const data = await Api.get("/friends/leaderboard"); rows.replaceChildren(); (data.members || []).forEach((m,i) => { const line = document.createElement("p"); line.textContent = "#" + (i+1) + " " + (m.name || "FitOS member") + (m.isYou ? " (You)" : "") + " · " + m.weeklyWorkouts + " this week · " + (m.workouts*100) + " XP"; rows.appendChild(line); }); }).catch(() => { rows.textContent = "Leaderboard unavailable. Refresh the page to retry."; });
 
       card.querySelector("#fitos-gamification-share").addEventListener("click", async () => {
         const message = SHARE_TEXT;
@@ -66,9 +71,11 @@
         try {
           if (navigator.share) await navigator.share({ title: "AdaptiveFit", text: message, url: inviteUrl });
           else if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(message + "\\n" + inviteUrl);
+            await navigator.clipboard.writeText(message + "\
+" + inviteUrl);
             button.textContent = "Copied!";
-          } else window.prompt("Copy your invite:", message + "\\n" + SHARE_URL);
+          } else window.prompt("Copy your invite:", message + "\
+" + SHARE_URL);
         } catch (error) {
           if (error?.name !== "AbortError") console.warn("[FitOS] Share unavailable.", error);
         }
