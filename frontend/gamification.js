@@ -141,11 +141,16 @@
     if (!exercise.completedSets.includes(setNumber)) exercise.completedSets.push(setNumber);
     const weight = Number(payload.weightKg) || 0;
     const reps = Number(payload.reps) || 0;
-    const previous = state.personalRecords[exercise.exerciseId] || { weight: 0, reps: 0 };
-    const improved = weight > Number(previous.weight || 0) || (weight === Number(previous.weight || 0) && reps > Number(previous.reps || 0));
-    if (improved && (weight > 0 || reps > 0)) {
-      state.personalRecords[exercise.exerciseId] = { weight: Math.max(weight, Number(previous.weight) || 0), reps: weight >= (Number(previous.weight) || 0) ? reps : Number(previous.reps) || 0 };
-      award("personalRecord", REWARDS.personalRecord, exercise.exerciseId + ":" + localDate(), "New personal record");
+    const previous = state.personalRecords[exercise.exerciseId];
+    if (!previous) {
+      // The first observed lift establishes a baseline; it is not proof of a PR.
+      state.personalRecords[exercise.exerciseId] = { weight, reps };
+    } else {
+      const improved = weight > Number(previous.weight || 0) || (weight === Number(previous.weight || 0) && reps > Number(previous.reps || 0));
+      if (improved && (weight > 0 || reps > 0)) {
+        state.personalRecords[exercise.exerciseId] = { weight: Math.max(weight, Number(previous.weight) || 0), reps: weight >= (Number(previous.weight) || 0) ? reps : Number(previous.reps) || 0 };
+        award("personalRecord", REWARDS.personalRecord, exercise.exerciseId + ":" + localDate(), "New personal record");
+      }
     }
     if (exercise.completedSets.length >= exercise.targetSets) {
       award("exercise", REWARDS.exercise, workoutId + ":" + payload.workoutExerciseId, "Exercise completed");
