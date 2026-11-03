@@ -64,6 +64,9 @@
       const friendsHost = document.getElementById("friends-content");
       if (friendsHost) {
         const invite = card.querySelector(".fitos-gamification-invite");
+        // The Today dashboard can be re-rendered, which recreates this card.
+        // Replace the Friends contents instead of appending another copy each time.
+        friendsHost.replaceChildren();
         if (invite) friendsHost.appendChild(invite);
         friendsHost.appendChild(board);
       } else {
