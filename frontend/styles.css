@@ -2154,3 +2154,15 @@ body.gym-choice-open { overflow: hidden; }
 .fitos-gamification-rules li strong{float:right;color:#176b50;white-space:nowrap}
 .fitos-gamification-note{font-size:11px;color:#8a948d;margin:12px 0 0}
 @media(max-width:420px){.fitos-gamification-card{padding:15px}.fitos-gamification-xp{font-size:27px}.fitos-gamification-share{padding:9px 10px}}
+
+.fitos-gamification-invite{display:flex;flex-direction:column;align-items:flex-end;gap:7px;max-width:210px;text-align:right}
+.fitos-gamification-invite-copy{font-size:11px;line-height:1.35;font-weight:750;color:#286b52}
+.fitos-gamification-friends{height:23px;display:flex;align-items:flex-end;justify-content:flex-end;gap:5px;padding-right:5px}
+.fitos-gamification-friends span{display:block;position:relative;width:12px;height:12px;border-radius:50%;background:#65cda5;animation:fitos-friend-bounce 1.15s ease-in-out infinite}
+.fitos-gamification-friends span:after{content:"";position:absolute;left:1px;top:13px;width:10px;height:8px;border-radius:6px 6px 3px 3px;background:#bfe9d8}
+.fitos-gamification-friends span:nth-child(2){background:#e8b77d;animation-delay:.16s}
+.fitos-gamification-friends span:nth-child(2):after{background:#f3d9b8}
+.fitos-gamification-friends span:nth-child(3){background:#8b9fd1;animation-delay:.32s}
+.fitos-gamification-friends span:nth-child(3):after{background:#cbd4ee}
+@keyframes fitos-friend-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@media(prefers-reduced-motion:reduce){.fitos-gamification-friends span{animation:none}}
