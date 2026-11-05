@@ -2688,7 +2688,6 @@ function renderNearby(data, foodName) {
 
 /* ================= GYM ================= */
 async function continueAfterGymAttendance() {
-  navigate("/vision");
   try {
     const profile = await Api.get("/equipment/gym-profile");
     if (!profile?.gymTourCompleted) {
@@ -2973,6 +2972,113 @@ function renderGymTour(equipment, plan, savedProfile) {
   let detectionInFlight = false;
   let frameHandle = null;
   const evidence = new Map();
+  let crowdStream = null;
+  let crowdTimer = null;
+  let crowdBusy = false;
+  let crowdActive = false;
+
+  const stopCrowdAnalysis = () => {
+    crowdActive = false;
+    if (crowdTimer) window.clearTimeout(crowdTimer);
+    crowdTimer = null;
+    if (crowdStream) crowdStream.getTracks().forEach((track) => track.stop());
+    crowdStream = null;
+    const video = $("gym-crowd-video");
+    if (video) video.srcObject = null;
+    const start = $("gym-crowd-start");
+    const stop = $("gym-crowd-stop");
+    if (start) start.hidden = false;
+    if (stop) stop.hidden = true;
+  };
+
+  const initCrowdAnalysis = () => {
+    const video = $("gym-crowd-video");
+    const status = $("gym-crowd-status");
+    const count = $("gym-crowd-count");
+    const level = $("gym-crowd-level");
+    const start = $("gym-crowd-start");
+    const stop = $("gym-crowd-stop");
+    if (!video || !start || !stop) return;
+
+    stopCrowdAnalysis();
+    const update = (message, peopleCount = null, crowdLevel = "Waiting") => {
+      if (status) status.textContent = message;
+      if (count) count.textContent = Number.isFinite(peopleCount) ? String(peopleCount) : "—";
+      if (level) level.textContent = crowdLevel;
+    };
+
+    const analyzeFrame = async () => {
+      if (!crowdActive || crowdBusy || video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA || !video.videoWidth) {
+        if (crowdActive) crowdTimer = window.setTimeout(analyzeFrame, 700);
+        return;
+      }
+      crowdBusy = true;
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) throw new Error("Could not prepare a camera frame.");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageBase64 = canvas.toDataURL("image/jpeg", 0.62).split(",")[1];
+        const result = await Api.post("/equipment/crowd-analysis", { imageBase64 }, { timeoutMs: 12000 });
+        if (!result?.configured) {
+          update(result?.message || "Crowd analysis is not configured.", null, "Unavailable");
+        } else {
+          update(
+            "Live estimate · Roboflow people counting",
+            Number(result.peopleCount),
+            String(result.crowdLevel || "Analyzed"),
+          );
+        }
+      } catch (error) {
+        update(error?.message || "Crowd analysis is temporarily unavailable. Retrying…", null, "Unavailable");
+      } finally {
+        crowdBusy = false;
+        if (crowdActive) crowdTimer = window.setTimeout(analyzeFrame, 2500);
+      }
+    };
+
+    start.addEventListener("click", async () => {
+      start.disabled = true;
+      update("Requesting camera access…");
+      try {
+        crowdStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 960 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        video.srcObject = crowdStream;
+        await video.play();
+        crowdActive = true;
+        start.hidden = true;
+        stop.hidden = false;
+        update("Camera connected. Starting people count…");
+        void analyzeFrame();
+      } catch (error) {
+        stopCrowdAnalysis();
+        update(error?.name === "NotAllowedError"
+          ? "Camera permission denied. Allow camera access and try again."
+          : error?.message || "Could not start the camera.", null, "Unavailable");
+      } finally {
+        start.disabled = false;
+      }
+    });
+
+    stop.addEventListener("click", () => {
+      stopCrowdAnalysis();
+      update("Crowd analysis stopped.");
+    });
+  };
+
+  const crowdScreen = document.getElementById("screen-gym-scan");
+  const crowdScreenObserver = typeof MutationObserver !== "undefined" && crowdScreen
+    ? new MutationObserver(() => {
+        if (!crowdScreen.classList.contains("active")) stopCrowdAnalysis();
+      })
+    : null;
+  crowdScreenObserver?.observe(crowdScreen, { attributes: true, attributeFilter: ["class"] });
+  window.addEventListener("pagehide", stopCrowdAnalysis);
 
   const render = () => {
     const profileReady = profile?.gymTourCompleted === true;
@@ -2994,6 +3100,23 @@ function renderGymTour(equipment, plan, savedProfile) {
           <button class="btn btn-primary" id="gym-tour-start" style="margin-top:14px;">Start Gym Tour</button>
         `}
       </div>
+      <section class="card gym-crowd-analysis" id="gym-crowd-analysis" style="margin-top:14px;">
+        <div class="card-label">Crowd Analysis</div>
+        <p class="card-sub">Use a live camera view to estimate how many people are in the gym. This is a separate feature from equipment scanning.</p>
+        <div class="camera-panel" style="aspect-ratio:4/3;margin:12px 0;">
+          <video id="gym-crowd-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+          <div class="camera-feedback" id="gym-crowd-status" style="display:flex;align-items:center;justify-content:center;">Start crowd analysis to connect the camera.</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="gym-crowd-start" type="button">Start Crowd Analysis</button>
+          <button class="btn btn-outline" id="gym-crowd-stop" type="button" hidden>Stop</button>
+        </div>
+        <div class="card-grid-2" style="margin-top:14px;">
+          <div><div class="card-sub">People detected</div><strong id="gym-crowd-count">—</strong></div>
+          <div><div class="card-sub">Crowd level</div><strong id="gym-crowd-level">Waiting</strong></div>
+        </div>
+        <p class="card-sub" style="margin-top:10px;">People count is an estimate based on the camera frame. It does not guarantee that an individual machine is available.</p>
+      </section>
       <div id="gym-tour-workspace"></div>
       <div class="card" style="margin-top:14px;">
         <div class="card-label"> Manage equipment manually</div>
@@ -3009,6 +3132,7 @@ function renderGymTour(equipment, plan, savedProfile) {
         <button class="btn btn-primary" id="gym-manual-save" style="margin-top:12px;">Save equipment selection</button>
       </div>
     `;
+    initCrowdAnalysis();
     const manualGroup = $("gym-manual-equipment");
     [...new Set([...equipmentNames, ...known])].forEach((name) => {
       const button = document.createElement("button");
