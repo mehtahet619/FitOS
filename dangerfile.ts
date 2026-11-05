@@ -33,18 +33,44 @@ void (async () => {
   if (!owner || !repo) {
     fail("GITHUB_REPOSITORY is missing; cannot summarize required checks.");
   }
-  const checkRuns = await danger.github.api.checks.listForRef({
-    owner,
-    repo,
-    ref: danger.github.pr.head.sha,
-  });
-  const latestChecks = new Map<string, { conclusion?: string | null; status?: string | null }>(
-    checkRuns.data.check_runs.map((check) => [check.name, { conclusion: check.conclusion, status: check.status }]),
-  );
+  let latestChecks = new Map<string, { conclusion?: string | null; status?: string | null }>();
+  let checkRunsLoaded = false;
+  let lastCheckRunsError: unknown;
+
+  // GitHub's Checks API can return transient 5xx responses. Retry those rather
+  // than failing the entire Danger job for a temporary GitHub API outage.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const checkRuns = await danger.github.api.checks.listForRef({
+        owner,
+        repo,
+        ref: danger.github.pr.head.sha,
+      });
+      latestChecks = new Map<string, { conclusion?: string | null; status?: string | null }>(
+        checkRuns.data.check_runs.map((check) => [check.name, { conclusion: check.conclusion, status: check.status }]),
+      );
+      checkRunsLoaded = true;
+      break;
+    } catch (error) {
+      lastCheckRunsError = error;
+      const status = (error as { status?: number }).status;
+      const isRetryable = status === 429 || (typeof status === "number" && status >= 500);
+      if (!isRetryable || attempt === 3) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+    }
+  }
+
+  if (!checkRunsLoaded) {
+    const status = (lastCheckRunsError as { status?: number } | undefined)?.status;
+    warn(
+      `Could not load required-check details from GitHub's Checks API after retries (HTTP ${status ?? "unknown"}). This is treated as an API availability warning, not a code-check failure.`,
+    );
+  }
   const checkSummary = requiredChecks
     .map((checkName) => {
       const check = latestChecks.get(checkName);
-      return `- ${checkName}: **${check?.conclusion || check?.status || "not found"}**`;
+      const result = checkRunsLoaded ? check?.conclusion || check?.status || "not found" : "unavailable (GitHub API)";
+      return `- ${checkName}: **${result}**`;
     })
     .join("\n");
 

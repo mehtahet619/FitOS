@@ -115,7 +115,8 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
         .map((value) => value.trim())
         .filter((value) => value.length > 0 && value.length <= 40)
       : [];
-    if (!exercise || exercise.length > 100 || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)) continue;
+    const inventedQualifier = /\b(constant tension|eccentric emphasis|controlled tempo|slow tempo|explosive tempo|partial reps|partial range|full range|time under tension)\b/i.test(exercise);
+    if (!exercise || exercise.length > 100 || inventedQualifier || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)) continue;
     const family = exerciseFamilyKey(exercise);
     if (!family || families.has(normalizeExerciseValue(family))) continue;
     names.add(nameKey);
@@ -140,6 +141,20 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
   }
 
   if (result.length < input.count) throw new Error(`OpenRouter returned only ${result.length} valid of ${input.count} requested exercises.`);
+
+  // A shoulder session must cover the three major deltoid functions. A list
+  // of different press variations is not a balanced shoulder workout.
+  const targetsShoulders = input.targetMuscles.some((muscle) => normalizeExerciseValue(muscle) === "shoulders");
+  if (targetsShoulders && input.targetMuscles.length === 1 && input.count >= 3) {
+    const names = result.map((exercise) => normalizeExerciseValue(exercise.exercise));
+    const hasPress = names.some((name) => /\b(press|pike push up|push press)\b/.test(name));
+    const hasLateral = names.some((name) => /\b(lateral raise|side raise|upright row)\b/.test(name));
+    const hasRearDelt = names.some((name) => /\b(rear delt|reverse fly|reverse pec deck|face pull)\b/.test(name));
+    if (!hasPress || !hasLateral || !hasRearDelt) {
+      throw new Error("Shoulder workout lacks required movement coverage: include a press, a lateral-delt movement, and a rear-delt movement.");
+    }
+  }
+
   if (input.targetMuscles.length >= 5) {
     const covered = new Set(result.map((exercise) => exercise.primaryMuscle).map(normalizeExerciseValue));
     const missingTargets = input.targetMuscles.filter((muscle) => !covered.has(normalizeExerciseValue(muscle)));
@@ -152,13 +167,32 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
 
 async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInput): Promise<string> {
   const prompt = [
-    `Create a complete strength-training workout for these target muscles: ${input.targetMuscles.join(", ")}.`,
-    `The total session duration is ${input.sessionDurationMinutes} minutes.`,
-    `Generate exactly ${input.count} distinct exercises that fit this duration.`,
-    `Available equipment: ${input.equipment.map(({ name }) => name).join(", ")}.`,
-    "Train the full target muscle, not just one small area. For a single muscle, cover its relevant heads, regions, and functions with genuinely different exercises and angles. For multiple muscles, distribute primary exercises across every requested muscle.",
-    "Do not fill the workout with near-identical curls, presses, rows, or equipment variations. Choose movements that provide complementary muscle coverage.",
-    "Use only the listed equipment or bodyweight. Every exercise must have one primary muscle from the requested target muscles. Secondary muscles are descriptive only and do not count as target coverage.",
+    "You are selecting real, established resistance-training exercises, not inventing exercise names.",
+    `Workout target muscles: ${input.targetMuscles.join(", ")}.`,
+    `Session duration: ${input.sessionDurationMinutes} minutes. Return exactly ${input.count} exercises.`,
+    `Available equipment (use only these): ${input.equipment.map(({ name }) => name).join(", ")}.`,
+    "QUALITY RULES:",
+    "- Every exercise must be a conventional, recognizable exercise name used in strength training.",
+    "- Never add decorative or invented qualifiers such as Constant Tension, Eccentric Emphasis, Controlled Tempo, Partial Reps, or similar wording to make a variation look like a separate exercise.",
+    "- Do not count grip, stance, tempo, equipment, or unilateral variations of the same movement as different movement patterns.",
+    "- Select complementary movements that train distinct functions/regions of the requested muscle, not merely different names.",
+    "- The muscle field must be one of the requested target muscles and must represent the exercise's actual primary target. Secondary muscles are descriptive only.",
+    "- Use only the listed equipment or bodyweight. Do not claim unavailable equipment.",
+    ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "shoulders" && input.count >= 3 ? [
+      "MANDATORY SHOULDER COVERAGE:",
+      "- Include one overhead/shoulder press pattern for anterior deltoid and general pressing strength.",
+      "- Include one lateral raise or side raise pattern for the lateral deltoid.",
+      "- Include one rear-delt fly, reverse pec-deck, or face-pull pattern for the posterior deltoid.",
+      "- Do not return multiple presses in place of lateral- or rear-delt work. Pike push-ups, Arnold presses, and shoulder presses are all pressing patterns and cannot satisfy more than the press requirement.",
+      "- If the equipment list prevents a required movement, choose the closest valid movement possible with listed equipment; never fabricate an exercise.",
+    ] : []),
+    ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "chest" && input.count >= 3 ? [
+      "CHEST COVERAGE: combine a press pattern with a fly/adduction pattern and, when possible, an incline or decline angle. Do not fill every slot with bench-press variations.",
+    ] : []),
+    ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "back" && input.count >= 3 ? [
+      "BACK COVERAGE: combine vertical pulling, horizontal rowing, and a distinct posterior-chain or scapular movement when appropriate. Do not fill every slot with row variations.",
+    ] : []),
+    "Before responding, internally verify that all exercises are distinct movement patterns and that the mandatory coverage rules are met. If not, replace the weakest choices.",
     "Return only valid JSON in this exact shape: { \"exercises\": [{ \"exercise\": string, \"machine\": string, \"muscle\": string, \"secondaryMuscles\": string[], \"instructions\": string, \"sets\": number, \"repRangeLow\": number, \"repRangeHigh\": number }] }.",
     "Use exact muscle and equipment names from the input. Use 2-4 working sets and realistic rep ranges. No warmup, explanation, markdown, or extra exercises.",
   ].join("\n");
