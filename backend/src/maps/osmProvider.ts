@@ -16,6 +16,8 @@ const OVERPASS_ENDPOINTS = [
 ];
 const PHOTON_URL = process.env.PHOTON_BASE_URL || "https://photon.komoot.io";
 const OSRM_URL = process.env.OSRM_BASE_URL || "https://router.project-osrm.org";
+const PHOTON_TIMEOUT_MS = 8000;
+const OVERPASS_TIMEOUT_MS = 9000;
 
 function cached<T>(key: string): T | undefined {
   const hit = cache.get(key);
@@ -46,7 +48,7 @@ async function photonSearch(q: string, limit = 10): Promise<JsonRecord[]> {
   url.searchParams.set("q", q);
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("lang", "en");
-  const payload = await getJson(url.toString());
+  const payload = await getJson(url.toString(), PHOTON_TIMEOUT_MS);
   return remember(key, Array.isArray(payload.features) ? payload.features : []);
 }
 export async function searchOsmCities(input: string): Promise<string[]> {
@@ -95,7 +97,7 @@ async function overpass(query: string): Promise<JsonRecord[]> {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", Accept: "application/json", "User-Agent": USER_AGENT },
         body: new URLSearchParams({ data: query }).toString(),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`Overpass request failed (${response.status})`);
       const payload = await response.json() as { elements?: JsonRecord[] };
@@ -134,15 +136,15 @@ export async function searchOsmGyms(city: string, query = "gyms"): Promise<OsmPl
   const filter = /yoga|pilates/.test(q)
     ? '["sport"~"yoga|pilates"]'
     : '["leisure"="fitness_centre"]';
-  const overpassQuery = `[out:json][timeout:18];(nwr(around:15000,${center.latitude},${center.longitude})${filter};nwr(around:15000,${center.latitude},${center.longitude})["amenity"="gym"];);out center tags 100;`;
+  const overpassQuery = `[out:json][timeout:8];(nwr(around:10000,${center.latitude},${center.longitude})${filter};nwr(around:10000,${center.latitude},${center.longitude})["amenity"="gym"];nwr(around:10000,${center.latitude},${center.longitude})["sport"="fitness"];);out center tags 80;`;
   const elements = await overpass(overpassQuery);
-  return normalizeElements(elements, center.latitude, center.longitude, city).slice(0, 60);
+  return normalizeElements(elements, center.latitude, center.longitude, city).slice(0, 30);
 }
 export async function searchOsmFood(latitude: number, longitude: number, radiusMeters = 10000): Promise<OsmPlace[]> {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
     throw new Error("Invalid latitude/longitude supplied to OpenStreetMap search.");
   }
-  const query = `[out:json][timeout:18];(nwr(around:${Math.min(15000, Math.max(500, radiusMeters))},${latitude},${longitude})["amenity"~"restaurant|cafe|fast_food|food_court"];nwr(around:${Math.min(15000, Math.max(500, radiusMeters))},${latitude},${longitude})["shop"~"greengrocer|health_food"];);out center tags 100;`;
+  const query = `[out:json][timeout:8];(nwr(around:${Math.min(15000, Math.max(500, radiusMeters))},${latitude},${longitude})["amenity"~"restaurant|cafe|fast_food|food_court"];nwr(around:${Math.min(15000, Math.max(500, radiusMeters))},${latitude},${longitude})["shop"~"greengrocer|health_food"];);out center tags 100;`;
   return normalizeElements(await overpass(query), latitude, longitude, "");
 }
 export async function getOsmRoute(input: {
