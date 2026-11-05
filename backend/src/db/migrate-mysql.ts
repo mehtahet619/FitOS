@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import type { QueryResultRow } from "pg";
 import { MySqlDatabase } from "./mysql";
 
@@ -246,6 +247,17 @@ async function main(): Promise<void> {
 
     const schemaPath = path.resolve(__dirname, "../../src/db/schema.sql");
     const schema = fs.readFileSync(schemaPath, "utf8");
+
+    // Skip repeated DDL round-trips on every boot. FORCE_MIGRATE=true forces a full run.
+    const fingerprint = createHash("sha256").update(schema).update(fs.readFileSync(__filename)).digest("hex");
+    await database.exec(
+      "CREATE TABLE IF NOT EXISTS SchemaMigrationState (id VARCHAR(32) PRIMARY KEY, fingerprint VARCHAR(64) NOT NULL, appliedAt VARCHAR(40) NOT NULL)"
+    );
+    const applied = await database.get<{ fingerprint: string }>("SELECT fingerprint FROM SchemaMigrationState WHERE id = ?", "mysql");
+    if (process.env.FORCE_MIGRATE !== "true" && applied?.fingerprint === fingerprint) {
+      console.log("MySQL/TiDB schema already up to date; skipping migration.");
+      return;
+    }
     for (const statement of prepareMySqlSchema(schema)) {
       if (statement) await executeMySqlStatement(database, statement);
     }
@@ -269,6 +281,11 @@ async function main(): Promise<void> {
     await executeMySqlStatement(database, `ALTER TABLE Exercise ADD COLUMN IF NOT EXISTS imageUrl TEXT, ADD COLUMN IF NOT EXISTS requiresEquipment INTEGER NOT NULL DEFAULT 1`);
     await executeMySqlStatement(database, `ALTER TABLE GymEquipmentFeedback MODIFY COLUMN imageBase64 LONGTEXT NOT NULL`);
     await executeMySqlStatement(database, `ALTER TABLE GymEquipmentProfile ADD COLUMN IF NOT EXISTS lastConfirmedDate VARCHAR(32) NULL`);
+
+    await database.run(
+      "INSERT INTO SchemaMigrationState (id, fingerprint, appliedAt) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE fingerprint = ?, appliedAt = ?",
+      "mysql", fingerprint, new Date().toISOString(), fingerprint, new Date().toISOString()
+    );
 
     const rows = await database.all<QueryResultRow>("SHOW TABLES");
     const tableNames = rows.flatMap((row) => Object.values(row).filter((value): value is string => typeof value === "string"));

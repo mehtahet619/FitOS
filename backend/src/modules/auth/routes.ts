@@ -10,6 +10,9 @@ import { validateRegistrationEmail } from "./emailValidation";
 import { logOtpFailure, logOtpStage } from "./otpDiagnostics";
 import { getOtpLimiter, getOtpRedisConfigStatus } from "./tokenBucket";
 
+// Existing cost-12 hashes continue to verify; new hashes use a lower CPU cost on free instances.
+const BCRYPT_ROUNDS = Math.min(14, Math.max(10, Number(process.env.BCRYPT_ROUNDS) || 10));
+
 export const authRouter = Router();
 const OTP_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -132,7 +135,7 @@ authRouter.post("/register/request-otp", async (req, res) => {
   if (!await otpRateLimit(req, res, validated.email, "registration")) return res;
   const found = await db.get<{ id: string; email: string; name: string | null; passwordHash: string | null; emailVerified: number }>(`SELECT id,email,name,passwordHash,emailVerified FROM "User" WHERE LOWER(email)=?`, validated.email);
   if (found?.emailVerified) return res.status(409).json({ code: "ACCOUNT_EXISTS", message: "An account with this email already exists. Please sign in." });
-  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  const passwordHash = await bcrypt.hash(parsed.data.password, BCRYPT_ROUNDS);
   if (!found && await db.get(`SELECT id FROM "User" WHERE email=?`, validated.email)) return res.status(409).json({ code: "ACCOUNT_EXISTS", message: "An account with this email already exists. Please sign in." });
   try {
     await sendRegistrationChallenge(validated.email, parsed.data.name, passwordHash, found?.id ?? null);

@@ -3,6 +3,8 @@ import { createPool, Pool, PoolConnection } from "mysql2/promise";
 import type { QueryResultRow } from "pg";
 import type { DatabaseLike } from "./types";
 
+const QUERY_TIMEOUT_MS = Number(process.env.MYSQL_QUERY_TIMEOUT_MS ?? 8_000);
+
 function toMySqlSql(sql: string): string {
   const firstInsertColumn = sql.match(/INSERT\s+INTO\s+\S+\s*\(\s*`?([A-Za-z0-9_]+)`?/i)?.[1] ?? "id";
   return sql
@@ -29,7 +31,7 @@ export class MySqlDatabase implements DatabaseLike {
       uri: connectionString.replace(/^tidb:\/\//, "mysql://"),
       waitForConnections: true,
       connectionLimit: Number(process.env.MYSQL_POOL_MAX ?? 10),
-      connectTimeout: 20_000,
+      connectTimeout: 10_000,
       enableKeepAlive: true,
       multipleStatements: true,
       ssl: { rejectUnauthorized: true },
@@ -37,7 +39,7 @@ export class MySqlDatabase implements DatabaseLike {
   }
 
   async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
-    const [rows] = await this.pool.query<RowDataPacket[]>(toMySqlSql(sql), params);
+    const [rows] = await this.pool.query<RowDataPacket[]>({ sql: toMySqlSql(sql), values: params, timeout: QUERY_TIMEOUT_MS });
     return normalizeRows<T>(rows);
   }
 
@@ -47,7 +49,7 @@ export class MySqlDatabase implements DatabaseLike {
   }
 
   async run(sql: string, ...params: unknown[]): Promise<{ changes: number }> {
-    const [result] = await this.pool.query<ResultSetHeader>(toMySqlSql(sql), params);
+    const [result] = await this.pool.query<ResultSetHeader>({ sql: toMySqlSql(sql), values: params, timeout: QUERY_TIMEOUT_MS });
     return { changes: result.affectedRows };
   }
 
@@ -80,7 +82,7 @@ class MySqlTransaction implements DatabaseLike {
   constructor(private readonly connection: PoolConnection) {}
 
   async all<T extends QueryResultRow = QueryResultRow>(sql: string, ...params: unknown[]): Promise<T[]> {
-    const [rows] = await this.connection.query<RowDataPacket[]>(toMySqlSql(sql), params);
+    const [rows] = await this.connection.query<RowDataPacket[]>({ sql: toMySqlSql(sql), values: params, timeout: QUERY_TIMEOUT_MS });
     return normalizeRows<T>(rows);
   }
 
@@ -90,7 +92,7 @@ class MySqlTransaction implements DatabaseLike {
   }
 
   async run(sql: string, ...params: unknown[]): Promise<{ changes: number }> {
-    const [result] = await this.connection.query<ResultSetHeader>(toMySqlSql(sql), params);
+    const [result] = await this.connection.query<ResultSetHeader>({ sql: toMySqlSql(sql), values: params, timeout: QUERY_TIMEOUT_MS });
     return { changes: result.affectedRows };
   }
 

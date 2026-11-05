@@ -253,6 +253,7 @@ export class ApifySwiggyMapsProvider {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
@@ -268,6 +269,7 @@ export class ApifySwiggyMapsProvider {
             ...input,
             proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["DATACENTER"] },
           }),
+          signal: AbortSignal.timeout(15_000),
         });
         if (!response.ok) {
           const fallbackText = await response.text().catch(() => "");
@@ -495,7 +497,7 @@ export class ApifySwiggyMapsProvider {
     while (Date.now() - startTime < this.timeoutMs) {
       const url = `${this.apifyApiUrl}/actor-runs/${runId}?token=${this.apiKey}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!response.ok) {
         throw new Error(`Apify run status check failed (${response.status})`);
       }
