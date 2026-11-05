@@ -2214,3 +2214,126 @@ body.gym-choice-open { overflow: hidden; }
 .fitos-osm-map .leaflet-container { width: 100%; height: 100%; min-height: 280px; font: inherit; }
 .fitos-osm-map .leaflet-popup-content button { margin-top: 8px; white-space: normal; }
 .fitos-osm-map .leaflet-control-attribution { font-size: 10px; }
+
+
+/* ---------- Accessible light / dark theme ---------- */
+:root {
+  color-scheme: light;
+  --surface: #f4f2ec;
+  --surface-raised: #ffffff;
+  --surface-soft: #f7f8f5;
+  --text-primary: #14161a;
+  --text-secondary: #68716d;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101512;
+  --card: #1a211d;
+  --ink: #edf3ee;
+  --muted: #a0aaa3;
+  --border: #303b34;
+  --black-panel: #090e0b;
+  --surface: #101512;
+  --surface-raised: #1a211d;
+  --surface-soft: #202923;
+  --text-primary: #edf3ee;
+  --text-secondary: #a0aaa3;
+  --shadow: 0 2px 14px rgba(0,0,0,.22);
+}
+html[data-theme="dark"] body,
+html[data-theme="dark"] #app { background: var(--bg); color: var(--ink); }
+html[data-theme="dark"] .screen { background: var(--bg); color: var(--ink); }
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .food-tool-card,
+html[data-theme="dark"] .guide-card,
+html[data-theme="dark"] .faq-list details,
+html[data-theme="dark"] .friends-empty,
+html[data-theme="dark"] .fitos-friend-card,
+html[data-theme="dark"] .fitos-friends-empty {
+  background: var(--card);
+  color: var(--ink);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .card-label,
+html[data-theme="dark"] .header h1,
+html[data-theme="dark"] .today-header h1,
+html[data-theme="dark"] .guide-card h3,
+html[data-theme="dark"] .faq-list summary,
+html[data-theme="dark"] .fitos-private-leaderboard h3 { color: var(--ink); }
+html[data-theme="dark"] .card-sub,
+html[data-theme="dark"] .header p,
+html[data-theme="dark"] .today-header p,
+html[data-theme="dark"] .guide-card p,
+html[data-theme="dark"] .faq-list p { color: var(--muted); }
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  color: var(--ink);
+  background: #151c18;
+  border-color: var(--border);
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #849088; }
+html[data-theme="dark"] .btn-outline,
+html[data-theme="dark"] .button-glass {
+  color: var(--ink);
+  background: #202923;
+  border-color: var(--border);
+}
+html[data-theme="dark"] .bottom-nav {
+  background: rgba(24,31,27,.96);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .nav-item { color: #aab5ad; }
+html[data-theme="dark"] .nav-item.active { color: #86e3c4; }
+html[data-theme="dark"] .empty-state,
+html[data-theme="dark"] .banner:not(.banner-error):not(.banner-success) {
+  color: var(--muted);
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .site-header { background: rgba(16,21,18,.92); border-color: var(--border); }
+html[data-theme="dark"] .site-navigation a:not(.button),
+html[data-theme="dark"] .site-brand { color: var(--ink); }
+html[data-theme="dark"] .landing-page { background: #101512; color: #edf3ee; }
+html[data-theme="dark"] .landing-page .how-section,
+html[data-theme="dark"] .landing-page .guide-section { background: #151c18; }
+html[data-theme="dark"] .landing-page .how-copy,
+html[data-theme="dark"] .landing-page .guide-card { color: #edf3ee; }
+html[data-theme="dark"] .landing-page .guide-card { background: #1a211d; border-color: #303b34; }
+html[data-theme="dark"] .landing-page .guide-card p { color: #a0aaa3; }
+html[data-theme="dark"] .landing-page .nutrition-note { background: #202923; color: #edf3ee; }
+html[data-theme="dark"] .landing-page .nutrition-note p { color: #a0aaa3; }
+.theme-toggle {
+  position: fixed;
+  z-index: 120;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid rgba(120,130,122,.28);
+  border-radius: 999px;
+  color: #202923;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 3px 14px rgba(20,30,24,.12);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+.theme-toggle:hover { transform: translateY(-1px); }
+.theme-toggle-icon { font-size: 17px; line-height: 1; }
+html[data-theme="dark"] .theme-toggle {
+  color: #edf3ee;
+  background: rgba(32,41,35,.96);
+  border-color: #465349;
+}
+@media(max-width:680px) {
+  .theme-toggle { min-height: 38px; padding: 7px 11px; }
+  .theme-toggle-label { display: none; }
+}

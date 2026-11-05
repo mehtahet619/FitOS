@@ -3577,6 +3577,38 @@ function renderGymScan(equipment, plan) {
   });
 }
 
+/* ---------------- Theme preference ---------------- */
+(() => {
+  const root = document.documentElement;
+  const toggle = document.getElementById("theme-toggle");
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  const readSavedTheme = () => {
+    try { return localStorage.getItem("fitos-theme"); } catch { return null; }
+  };
+  const applyTheme = (theme) => {
+    const isDark = theme === "dark";
+    root.dataset.theme = isDark ? "dark" : "light";
+    root.style.colorScheme = isDark ? "dark" : "light";
+    if (themeMeta) themeMeta.setAttribute("content", isDark ? "#101512" : "#f4f2ec");
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", String(isDark));
+      toggle.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+      toggle.title = isDark ? "Switch to light mode" : "Switch to dark mode";
+      const icon = toggle.querySelector(".theme-toggle-icon");
+      const label = toggle.querySelector(".theme-toggle-label");
+      if (icon) icon.textContent = isDark ? "☀" : "☾";
+      if (label) label.textContent = isDark ? "Light mode" : "Dark mode";
+    }
+  };
+  const savedTheme = readSavedTheme();
+  applyTheme(savedTheme === "dark" ? "dark" : "light");
+  toggle?.addEventListener("click", () => {
+    const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+    try { localStorage.setItem("fitos-theme", nextTheme); } catch {}
+  });
+})();
+
 /* ---------------- Public landing interactions ---------------- */
 const siteMenuButton = document.querySelector(".site-menu-toggle");
 const siteNavigation = document.getElementById("site-navigation");
