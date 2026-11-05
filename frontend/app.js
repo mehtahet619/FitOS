@@ -237,16 +237,13 @@ async function routeCurrent() {
   $("main-app").style.display = "flex"; $("bottom-nav").style.display = "flex";
   if (path === "/profile" || path === "/settings") {
     const needsProfile = AuthState.profileComplete === false;
-    $("onboarding-account").textContent = needsProfile
-      ? `Signed in as ${AuthState.user?.email || "your account"}. Complete your profile to continue.`
-      : AuthState.user?.email ? `Signed in as ${AuthState.user.email}.` : "";
+    $("onboarding-title").textContent = needsProfile ? "Set up your plan" : "Your profile";
+    $("onboarding-account").textContent = AuthState.user?.email ? `Signed in as ${AuthState.user.email}.` : "";
     banner($("onboarding-banner"), "info", needsProfile
-      ? "Finish setup before generating workouts. Your workout plan and equipment selections will remain saved."
-      : "");
-    if (needsProfile && !$("ob-name").value && AuthState.user?.name) {
-      $("ob-name").value = AuthState.user.name;
-    }
+      ? "Complete your profile to personalize workouts and nutrition."
+      : "Your saved details are protected. Select Edit profile only when you want to change them.");
     showScreen("screen-onboarding"); $("main-app").style.display = "none"; $("bottom-nav").style.display = "none";
+    await loadProfileForScreen({ editable: needsProfile });
     void loadEquipmentChips();
     return;
   }
@@ -556,7 +553,66 @@ $("reset-submit").addEventListener("click", async () => {
   catch (e) { banner($("reset-banner"), "error", e.message); }
 });
 
-/* ---------------- Onboarding screen ---------------- */
+/* ---------------- Onboarding / profile screen ---------------- */
+let profileEditMode = false;
+let profileSnapshot = null;
+
+function setProfileEditMode(editable) {
+  profileEditMode = editable;
+  const card = $("screen-onboarding")?.querySelector(".card");
+  card?.querySelectorAll("input, select").forEach((field) => { field.disabled = !editable; });
+  $("onboarding-edit")?.toggleAttribute("hidden", editable);
+  $("onboarding-submit")?.toggleAttribute("hidden", !editable);
+  $("onboarding-cancel")?.toggleAttribute("hidden", !editable || AuthState.profileComplete === false);
+  $("onboarding-submit").textContent = AuthState.profileComplete === false ? "Save & continue" : "Save changes";
+}
+
+function fillProfileForm(profile) {
+  const values = {
+    "ob-name": profile.name,
+    "ob-age": profile.age,
+    "ob-gender": profile.gender,
+    "ob-height": profile.heightCm,
+    "ob-weight": profile.weightKg,
+    "ob-level": profile.fitnessLevel,
+    "ob-goal": profile.primaryGoal,
+    "ob-days": profile.daysPerWeek,
+    "ob-diet": profile.dietaryPref,
+    "ob-budget": profile.dailyBudget,
+    "ob-allergies": Array.isArray(profile.allergies) ? profile.allergies.join(", ") : (profile.allergies || ""),
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const field = $(id);
+    if (field && value !== null && value !== undefined) field.value = String(value);
+  });
+}
+
+async function loadProfileForScreen({ editable = false } = {}) {
+  setProfileEditMode(true);
+  try {
+    const profile = await Api.get("/user/profile");
+    profileSnapshot = { ...profile };
+    fillProfileForm(profile);
+    setProfileEditMode(editable);
+  } catch (error) {
+    if (error?.status === 404 || AuthState.profileComplete === false) {
+      profileSnapshot = null;
+      if (AuthState.user?.name) $("ob-name").value = AuthState.user.name;
+      setProfileEditMode(true);
+      return;
+    }
+    banner($("onboarding-banner"), "error", error.message || "Could not load your saved profile. Please retry.");
+    setProfileEditMode(false);
+  }
+}
+
+$("onboarding-edit")?.addEventListener("click", () => setProfileEditMode(true));
+$("onboarding-cancel")?.addEventListener("click", () => {
+  if (profileSnapshot) fillProfileForm(profileSnapshot);
+  setProfileEditMode(false);
+  banner($("onboarding-banner"), "info", "Changes discarded. Your saved profile is unchanged.");
+});
+
 async function loadEquipmentChips() {
   const container = $("equipment-chips");
   if (!container) return;
@@ -623,6 +679,7 @@ $("onboarding-scan-btn").addEventListener("click", () => {
 });
 
 $("onboarding-submit").addEventListener("click", async () => {
+  if (!profileEditMode) return;
   const bannerEl = $("onboarding-banner");
   banner(bannerEl, "info", "");
   const payload = {
@@ -649,7 +706,12 @@ $("onboarding-submit").addEventListener("click", async () => {
     if (State.equipmentLoaded) {
       await Api.post("/equipment/user/equipment", { equipmentNames: Array.from(State.selectedEquipment) });
     }
-    enterMainApp();
+    profileSnapshot = { ...payload };
+    AuthState.profileComplete = true;
+    if (AuthState.user) { AuthState.user.profileComplete = true; AuthState.user.name = payload.name; }
+    setProfileEditMode(false);
+    banner(bannerEl, "success", "Profile saved successfully.");
+    if (location.pathname !== "/profile" && location.pathname !== "/settings") enterMainApp(); 
   } catch (e) {
     banner(bannerEl, "error", e.message || "Could not save profile.");
   }
