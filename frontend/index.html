@@ -323,12 +323,16 @@
   <!-- ============ ONBOARDING SCREEN ============ -->
   <div id="screen-onboarding" class="screen">
     <div class="header">
-      <h1>Set up your plan</h1>
+      <h1 id="onboarding-title">Set up your plan</h1>
       <p>This tunes your workouts, nutrition targets, and equipment matching.</p>
       <p id="onboarding-account" class="muted"></p>
     </div>
     <div id="onboarding-banner"></div>
-    <button class="btn btn-outline" data-logout type="button">Log out</button>
+    <div class="btn-row" style="gap:10px;margin-bottom:12px;">
+      <button class="btn btn-outline" id="onboarding-edit" type="button" hidden>Edit profile</button>
+      <button class="btn btn-outline" id="onboarding-cancel" type="button" hidden>Cancel</button>
+      <button class="btn btn-outline" data-logout type="button">Log out</button>
+    </div>
     <div class="card">
       <div class="field"><label>Name</label><input id="ob-name" placeholder="Het" /></div>
       <div class="card-grid-2">
@@ -373,7 +377,7 @@
       <div id="onboarding-scan-area"></div>
       <div class="chip-group" id="equipment-chips"></div>
     </div>
-      <button class="btn btn-primary" id="onboarding-submit">Save & continue</button>
+      <button class="btn btn-primary" id="onboarding-submit" hidden>Save & continue</button>
   </div>
 
   <!-- ============ MAIN APP (tabs) ============ -->
