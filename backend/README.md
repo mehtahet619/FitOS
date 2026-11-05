@@ -304,11 +304,13 @@ City autocomplete uses Photon backed by OpenStreetMap: `GET /gym/cities?q=Bharuc
 - New authorized official dataset rows are appended and deduplicated. The next forecast request rebuilds the weekday/hour model from the updated official dataset, using a 45-day recency half-life. This is the retraining loop; prediction outputs are never fed back as training labels.
 - A generic weekday/weekend cold-start estimate is shown with low confidence until official records exist.
 
-**Important source limitation:** Google Places API does not expose Google Popular Times as a supported numeric training-data feed. Google Maps/Popular Times content is rejected by the ingestion endpoint and must not be scraped or copied into FitOS's ML dataset. Supply a separate independently licensed/authorized official dataset instead. FitOS does not use Roboflow, CCTV, cameras, or external crowd APIs for this feature.
+**Important source limitation:** Public OSM place data contains no crowd time-series feed. Google Maps/Popular Times content is rejected by the ingestion endpoint and must not be scraped or copied into FitOS's ML dataset. Supply a separate independently licensed/authorized official dataset instead. FitOS does not use Roboflow, CCTV, cameras, or external crowd APIs for this feature.
 
 Configure:
 ```env
-GOOGLE_PLACES_API_KEY=...
+MAPS_PROVIDER=osm
+PHOTON_BASE_URL=https://photon.komoot.io
+OSRM_BASE_URL=https://router.project-osrm.org
 GYM_CROWD_DATASET_INGEST_KEY=long-random-secret
 ```
 
