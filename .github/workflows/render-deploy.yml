@@ -78,15 +78,9 @@ jobs:
     needs: [lint, typecheck, test, build, secretlint, codeql]
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy API to Render
-        env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
-        run: |
-          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "::error::RENDER_API_DEPLOY_HOOK is not configured in repository secrets."
-            exit 1
-          fi
-          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
+      # API deployment is manual from Render.
+      # Do not invoke RENDER_API_DEPLOY_HOOK here: manual deployments are the
+      # source of truth for the API, and this avoids duplicate deploys on push.
       - name: Deploy frontend to Render
         env:
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_WEB_DEPLOY_HOOK }}
