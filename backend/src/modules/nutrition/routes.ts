@@ -8,6 +8,21 @@ import { getMapsProvider } from "../../maps/provider";
 export const nutritionRouter = Router();
 nutritionRouter.use(requireAuth);
 
+// Return saved macro targets to clients that load nutrition guidance separately.
+nutritionRouter.get("/targets", async (req: AuthedRequest, res) => {
+  const nutritionProfile = await db.get<any>(
+    `SELECT calorieTarget, proteinTargetG, carbTargetG, fatTargetG FROM NutritionProfile WHERE userId = ?`,
+    req.userId!
+  );
+  if (!nutritionProfile) return res.status(404).json({ error: "Nutrition targets are not available until onboarding is complete." });
+  return res.json({
+    calorieTarget: nutritionProfile.calorieTarget,
+    proteinTargetG: nutritionProfile.proteinTargetG,
+    carbTargetG: nutritionProfile.carbTargetG,
+    fatTargetG: nutritionProfile.fatTargetG,
+  });
+});
+
 const DISCLAIMER =
   "These are approximate general-wellness estimates, not medical or clinical advice. Consult a qualified professional for medical or dietary conditions.";
 
@@ -191,7 +206,7 @@ nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
   log("profile-query:start");
   const nutritionProfile = await db.get<any>(`SELECT * FROM NutritionProfile WHERE userId = ?`, userId);
   log("profile-query:end");
-  if (!nutritionProfile) return res.status(404).json({ error: "No nutrition profile yet" });
+  if (!nutritionProfile) return res.json(null);
 
   log("recommendation-query:start");
   const rec = await db.get<any>(
@@ -199,7 +214,7 @@ nutritionRouter.get("/today", async (req: AuthedRequest, res) => {
     nutritionProfile.id
   );
   log("recommendation-query:end");
-  if (!rec) return res.status(404).json({ error: "No nutrition plan generated today yet. POST /nutrition/generate" });
+  if (!rec) return res.json(null);
 
   log("meals-query:start");
   const meals = await db.all<any>(

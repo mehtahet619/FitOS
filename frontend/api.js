@@ -88,6 +88,11 @@ const Api = (() => {
 
   async function request(path, opts = {}) {
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    // Use the short-lived access token when available; HttpOnly cookies remain the fallback.
+    const accessToken = localStorage.getItem("accessToken");
+    if (accessToken && !headers.Authorization && !headers.authorization) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
 
     const isSessionCheck = path === "/auth/me";
     const method = opts.method || "GET";
