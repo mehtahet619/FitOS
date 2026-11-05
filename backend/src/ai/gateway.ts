@@ -1,3 +1,4 @@
+import { recordAiRequest } from "./metrics";
 /**
  * Shared AI transport for FitOS.
  *
@@ -141,6 +142,12 @@ export async function requestAiText(input: AiTextRequest): Promise<string> {
 
         const payload: unknown = await response.json();
         const text = extractText(input.provider, payload);
+        recordAiRequest({
+          operation: input.operation,
+          provider: input.provider.name,
+          outcome: "success",
+          latencyMs: Date.now() - startedAt,
+        });
         console.info(JSON.stringify({
           event: "fitos_ai_request",
           operation: input.operation,
@@ -161,6 +168,12 @@ export async function requestAiText(input: AiTextRequest): Promise<string> {
 
     throw new Error(`${input.provider.name} request failed after retry.`);
   } catch (error) {
+    recordAiRequest({
+      operation: input.operation,
+      provider: input.provider.name,
+      outcome: "error",
+      latencyMs: Date.now() - startedAt,
+    });
     console.warn(JSON.stringify({
       event: "fitos_ai_request",
       operation: input.operation,
