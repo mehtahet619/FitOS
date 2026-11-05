@@ -1,3 +1,4 @@
+import { requestAiText } from "../../ai/gateway";
 export interface ExerciseAssistantContext {
   name: string;
   primaryMuscle: string;
@@ -135,27 +136,17 @@ export function isExerciseAssistantConfigured(): boolean {
 }
 
 async function askProvider(provider: ExerciseAssistantProvider, messages: ReturnType<typeof buildExerciseAssistantMessages>): Promise<string> {
-  const anthropic = provider.name === "Anthropic";
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(anthropic
-        ? { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" }
-        : { Authorization: `Bearer ${provider.apiKey}` }),
-    },
-    body: JSON.stringify(anthropic
-      ? { model: provider.model, max_tokens: 700, system: messages.system, messages: [{ role: "user", content: messages.user }] }
-      : { model: provider.model, max_tokens: 700, temperature: 0.3, messages: [{ role: "system", content: messages.system }, { role: "user", content: messages.user }] }),
-    signal: AbortSignal.timeout(12_000),
+  const answer = await requestAiText({
+    operation: "exercise.assistant",
+    provider,
+    system: messages.system,
+    user: messages.user,
+    maxTokens: 700,
+    temperature: 0.3,
+    timeoutMs: 12_000,
+    retries: 1,
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const payload = await response.json() as any;
-  const answer = anthropic
-    ? payload.content?.find((block: any) => block.type === "text")?.text
-    : payload.choices?.[0]?.message?.content;
-  if (typeof answer !== "string" || !answer.trim()) throw new Error("Provider returned no answer.");
-  return answer.trim().slice(0, 4000);
+  return answer.slice(0, 4000);
 }
 
 export async function answerExerciseQuestion(context: ExerciseAssistantContext, question: string): Promise<string> {
