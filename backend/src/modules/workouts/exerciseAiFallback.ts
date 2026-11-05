@@ -199,7 +199,7 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     maxTokens: 3000,
     temperature: 0.1,
     json: true,
-    timeoutMs: 25_000,
+    timeoutMs: 8_000,
     retries: 1,
   });
 }
