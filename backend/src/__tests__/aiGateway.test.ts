@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { requestAiText } from "../ai/gateway";
+import { renderAiPrometheusMetrics } from "../ai/metrics";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -33,6 +34,8 @@ describe("shared AI gateway", () => {
     })).resolves.toBe("verified response");
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(renderAiPrometheusMetrics()).toContain('fitos_ai_requests_total{operation="test.retry",provider="OpenRouter",outcome="success"} 1');
+    expect(renderAiPrometheusMetrics()).toContain("fitos_ai_request_duration_seconds_bucket");
   });
 
   it("does not retry authentication failures", async () => {
