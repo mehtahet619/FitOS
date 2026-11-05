@@ -2182,3 +2182,18 @@ body.gym-choice-open { overflow: hidden; }
 .fitos-friend-stats strong{color:#286b52;font-size:16px;font-weight:850;font-variant-numeric:tabular-nums}
 .fitos-friends-empty{grid-column:1/-1;padding:18px;border:1px dashed #cbd8cf;border-radius:16px;background:#fff;color:#68766e;font-size:14px;line-height:1.5}
 @media(max-width:360px){.fitos-friend-grid{grid-template-columns:1fr}.fitos-friend-card{padding:16px}}
+
+/* Saved profile fields stay visibly read-only until Edit profile is selected. */
+#screen-onboarding .card input:disabled,
+#screen-onboarding .card select:disabled {
+  background: #f4f5f1;
+  color: #59645d;
+  border-color: #e3e7e1;
+  opacity: 1;
+  cursor: default;
+}
+#screen-onboarding #onboarding-submit[hidden],
+#screen-onboarding #onboarding-edit[hidden],
+#screen-onboarding #onboarding-cancel[hidden] {
+  display: none !important;
+}
