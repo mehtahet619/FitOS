@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { DatabaseLike } from "../../db/types";
 import { canonicalMuscleKey } from "./muscleTaxonomy";
 import { exerciseFamilyKey, getAiExerciseFallback, type ExerciseFallbackEquipment, type RecommendedExercise } from "./exerciseAiFallback";
+import { exerciseRecommendationService } from "./exerciseRecommendation";
 
 function normalizeExerciseValue(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
@@ -268,20 +269,48 @@ export async function generateWorkout(
 
 
   const requestedCount = exerciseCountForDuration(durationMin);
-  const aiExercises = await getAiExerciseFallback({
+  const fallbackEquipment = await getFallbackEquipment(database, equipmentMode, availableEquipmentIds);
+  let aiExercises = await getAiExerciseFallback({
     targetMuscles: unitMuscles,
     sessionDurationMinutes: durationMin,
     count: requestedCount,
-    equipment: await getFallbackEquipment(database, equipmentMode, availableEquipmentIds),
+    equipment: fallbackEquipment,
     excludedExerciseNames: options?.excludedExerciseNames,
     excludedFamilyKeys: options?.excludedExerciseFamilyKeys,
   });
+
+  // OpenRouter is an enhancement, not a hard dependency for workout creation.
+  // If it fails or returns too few valid exercises, use FitOS's bundled catalogue.
   if (aiExercises.length !== requestedCount) {
-    throw new Error(
-      process.env.OPENROUTER_API_KEY
-        ? `OpenRouter generated ${aiExercises.length} of ${requestedCount} required exercises. Please retry.`
-        : "OpenRouter is not configured. Set OPENROUTER_API_KEY to generate workouts."
-    );
+    console.warn(`[workouts] AI returned ${aiExercises.length}/${requestedCount}; falling back to the bundled exercise catalogue.`);
+    const catalogue = exerciseRecommendationService.getRecommendedExercises({
+      targetMuscles: unitMuscles,
+      sessionDurationMinutes: durationMin,
+      requestedCount,
+      equipmentMode,
+      availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
+      excludedExerciseNames: options?.excludedExerciseNames,
+      excludedExerciseFamilyKeys: options?.excludedExerciseFamilyKeys,
+      selectionSeed: options?.selectionSeed,
+    });
+    aiExercises = catalogue.exercises.map((exercise) => ({
+      sourceIndex: exercise.sourceIndex,
+      exercise: exercise.exercise,
+      machine: exercise.machine,
+      muscle: exercise.primaryMuscle,
+      primaryMuscle: exercise.primaryMuscle,
+      muscleCategories: exercise.muscleCategories,
+      timeTakenOneSet: exercise.timeTakenOneSet || "25-45 sec",
+      targetedMuscle: exercise.targetedMuscle || exercise.primaryMuscle,
+      targetedMuscles: exercise.targetedMuscles.length ? exercise.targetedMuscles : [exercise.primaryMuscle],
+      instructions: "Use controlled form and a comfortable range of motion. Stop if you feel pain.",
+      sets: 3,
+      repRangeLow: 8,
+      repRangeHigh: 12,
+    }));
+    if (aiExercises.length === 0) {
+      throw new Error(`No bundled catalogue exercises match the requested muscles and available equipment (requested ${requestedCount}).`);
+    }
   }
   const seenMovementFamilies = new Set<string>();
   const selectedExercises = aiExercises.filter((exercise) => {
