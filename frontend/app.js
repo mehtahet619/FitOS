@@ -2721,15 +2721,14 @@ function renderNearby(data, foodName) {
     return;
   }
   const rows = data.places
-    .map(
-      (r) => `
+    .map((r) => `
       <div class="restaurant-row">
-        <div class="restaurant-name">${r.place.name}</div>
-        <div class="restaurant-meta">${r.place.distanceKm.toFixed(1)} km ·  ${r.place.rating} · ${r.place.isOpenNow ? "Open" : "Closed"}</div>
-      </div>`
-    )
+        <div class="restaurant-name">${gymEscapeHtml(r.place.name)}</div>
+        <div class="restaurant-meta">${Number(r.place.distanceKm || 0).toFixed(1)} km away · ${r.place.rating ? `${r.place.rating} rating` : "Rating unavailable"} · Open status unavailable</div>
+      </div>`)
     .join("");
-  el.innerHTML = `<div class="card"><div class="card-label">Nearby for "${foodName}"</div>${rows}</div>`;
+  el.innerHTML = `<div class="card"><div class="card-label">Nearby for "${gymEscapeHtml(foodName)}"</div><div id="food-nearby-osm-map" class="fitos-osm-map"></div>${rows}<p class="card-sub">Map data © OpenStreetMap contributors</p></div>`;
+  renderOsmPlacesMap("food-nearby-osm-map", data.places.map((item) => item.place));
 }
 
 /* ================= GYM ================= */
@@ -2752,6 +2751,55 @@ async function continueAfterGymAttendance() {
   } catch (error) {
     console.error("[GymAttendance] Could not confirm today's gym equipment:", error);
   }
+}
+
+function renderOsmPlacesMap(containerId, places) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const valid = (places || []).filter((place) => Number.isFinite(Number(place.latitude)) && Number.isFinite(Number(place.longitude)));
+  if (!valid.length || !window.L) {
+    container.innerHTML = '<div class="empty-state">Map coordinates are unavailable for these places.</div>';
+    return;
+  }
+  window.__fitosOsmMaps = window.__fitosOsmMaps || {};
+  if (window.__fitosOsmMaps[containerId]) window.__fitosOsmMaps[containerId].remove();
+  const first = valid[0];
+  const map = L.map(container, { scrollWheelZoom: false }).setView([Number(first.latitude), Number(first.longitude)], 13);
+  window.__fitosOsmMaps[containerId] = map;
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
+  }).addTo(map);
+  const bounds = [];
+  valid.forEach((place, index) => {
+    const point = [Number(place.latitude), Number(place.longitude)];
+    bounds.push(point);
+    const marker = L.marker(point).addTo(map);
+    const name = gymEscapeHtml(place.name || "Nearby place");
+    const distance = Number.isFinite(Number(place.distanceKm)) ? `${Number(place.distanceKm).toFixed(1)} km away` : "";
+    marker.bindPopup(`<strong>${name}</strong><br>${distance}<br><button type="button" class="btn btn-outline fitos-osm-route" data-route-index="${index}">Route from my location</button>`);
+    marker.on("popupopen", (event) => {
+      const button = event.popup.getElement()?.querySelector(".fitos-osm-route");
+      if (!button) return;
+      button.addEventListener("click", async () => {
+        button.disabled = true; button.textContent = "Finding route…";
+        try {
+          const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 }));
+          const origin = position.coords;
+          const route = await Api.get(`/gym/route?fromLat=${origin.latitude}&fromLng=${origin.longitude}&toLat=${point[0]}&toLng=${point[1]}&profile=driving`);
+          if (route.geometry?.coordinates?.length) {
+            const line = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+            L.polyline(line, { weight: 5, opacity: 0.85 }).addTo(map);
+            map.fitBounds(L.latLngBounds(line), { padding: [24, 24] });
+          }
+          button.textContent = `${route.distanceKm} km · ${route.durationMinutes} min drive`;
+        } catch (error) {
+          button.textContent = error.message || "Route unavailable";
+        } finally { button.disabled = false; }
+      }, { once: true });
+    });
+  });
+  if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] });
+  setTimeout(() => map.invalidateSize(), 100);
 }
 
 function gymEscapeHtml(value) {
@@ -2781,7 +2829,7 @@ async function loadGymSelectionForm() {
   $("gym-search-button")?.addEventListener("click", async () => {
     const city = cityInput.value.trim(); if (!city) { searchStatus.textContent = "Select a city first."; return; }
     const button = $("gym-search-button"); button.disabled = true; searchStatus.textContent = "Searching…";
-    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found.` : "No gyms found. Add yours below."; }
+    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; renderOsmPlacesMap("gym-discovery-map", result.gyms || []); searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found.` : "No gyms found. Add yours below."; }
     catch (error) { searchStatus.textContent = error.message; } finally { button.disabled = false; }
   });
   saveButton?.addEventListener("click", async () => { if (!gymSelect.value) { searchStatus.textContent = "Select a gym first."; return; } saveButton.disabled = true; try { await Api.post("/gym/select", { gymId: gymSelect.value, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; saveButton.disabled = false; } });
@@ -2829,7 +2877,7 @@ function renderGym(status, history, selectedGym) {
   el.innerHTML = `
     <div class="card gym-intelligence-card">
       <div class="card-label"> Gym crowd intelligence</div>
-      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
+      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><div id="gym-discovery-map" class="fitos-osm-map"></div><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
     </div>
     <div class="card">
       <div class="card-label"> Attendance</div>

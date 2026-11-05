@@ -88,7 +88,7 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   }).sort((x, y) => y.combinedScore - x.combinedScore || x.distanceKm - y.distanceKm).slice(0, 20);
   return res.json({ success: true, configured: true, cacheHit, restaurantsFound: places.length, dishesFound: dishes.length,
     recommendations, ranking: "80% dish health score + 20% proximity score (within 10 km)",
-    dataSource: "live provider menu data; nutrition estimates are labeled" });
+    dataSource: "verified menu provider data; nutrition estimates are labeled" });
 });
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -115,7 +115,7 @@ foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
     return res.json({
       configured: false,
       message:
-        "No live places provider is connected in this MVP, so no restaurant data is shown (the app never invents listings). Wire up MAPS_PROVIDER=google_places with an API key to populate this.",
+        "No live food discovery provider is available right now. FitOS uses OpenStreetMap for nearby place discovery; verified menu items require a separate menu provider.",
       forQuery: food?.name ?? "healthy food",
       places: [],
     });
@@ -130,7 +130,7 @@ foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
     DEFAULT_WEIGHTS
   );
 
-  return res.json({ configured: true, forQuery: food?.name ?? "healthy food", places: ranked });
+  return res.json({ configured: true, provider: "openstreetmap", attribution: "© OpenStreetMap contributors", forQuery: food?.name ?? "healthy food", places: ranked });
 });
 
 foodRouter.get("/search", async (req, res) => {

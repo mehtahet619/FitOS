@@ -3,16 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { AuthedRequest } from "../../common/auth";
-
-type Place = {
-  id: string;
-  displayName?: { text?: string };
-  formattedAddress?: string;
-  location?: { latitude?: number; longitude?: number };
-  rating?: number;
-  userRatingCount?: number;
-  regularOpeningHours?: { periods?: Array<{ open?: { day?: number; hour?: number; minute?: number }; close?: { day?: number; hour?: number; minute?: number } }> };
-};
+import { searchOsmCities, searchOsmGyms, getOsmRoute, OsmPlace } from "../../maps/osmProvider";
 
 const observationSchema = z.object({
   crowdPercent: z.number().min(0).max(100),
@@ -22,65 +13,22 @@ const observationSchema = z.object({
   capacity: z.number().int().positive().optional(),
 });
 
-function googleKey(): string | undefined {
-  return process.env.GOOGLE_PLACES_API_KEY || undefined;
-}
-
-async function placesCityAutocomplete(input: string): Promise<string[]> {
-  const key = googleKey();
-  if (!key) return [];
-  const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": "suggestions.placePrediction.text.text" },
-    body: JSON.stringify({ input: `${input}, India`, includedPrimaryTypes: ["(cities)"] }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) throw new Error(`Google Places city lookup failed (${response.status})`);
-  const payload = await response.json() as { suggestions?: Array<{ placePrediction?: { text?: { text?: string } } }> };
-  return [...new Set((payload.suggestions ?? []).map(item => item.placePrediction?.text?.text?.trim()).filter((value): value is string => Boolean(value)))].slice(0, 10);
-}
-
-async function placesTextSearch(textQuery: string): Promise<Place[]> {
-  const key = googleKey();
-  if (!key) return [];
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.regularOpeningHours",
-    },
-    body: JSON.stringify({ textQuery, pageSize: 20 }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`Google Places request failed (${response.status}): ${detail.slice(0, 300)}`);
-  }
-  const payload = await response.json() as { places?: Place[] };
-  return payload.places ?? [];
-}
-
-async function upsertPlace(place: Place, city: string): Promise<any> {
+async function upsertPlace(place: OsmPlace, city: string): Promise<any> {
   const placeId = place.id;
   const existing = await db.get<any>("SELECT * FROM Gym WHERE placeId = ?", placeId);
   const now = nowIso();
-  const name = place.displayName?.text?.trim() || "Gym";
-  const address = place.formattedAddress || "";
-  const latitude = place.location?.latitude ?? null;
-  const longitude = place.location?.longitude ?? null;
-  const hours = place.regularOpeningHours?.periods ? JSON.stringify(place.regularOpeningHours.periods) : null;
   if (existing) {
     await db.run(
-      "UPDATE Gym SET name = ?, address = ?, city = ?, latitude = ?, longitude = ?, rating = ?, ratingCount = ?, openingHoursJson = COALESCE(?, openingHoursJson), updatedAt = ? WHERE id = ?",
-      name, address, city, latitude, longitude, place.rating ?? null, place.userRatingCount ?? null, hours, now, existing.id
+      "UPDATE Gym SET name = ?, address = ?, city = ?, latitude = ?, longitude = ?, updatedAt = ? WHERE id = ?",
+      place.name, place.address || "", city || place.city, place.latitude, place.longitude, now, existing.id
     );
     return await db.get<any>("SELECT * FROM Gym WHERE id = ?", existing.id);
   }
   const id = uuidv4();
   await db.run(
     "INSERT INTO Gym (id, placeId, name, address, city, latitude, longitude, rating, ratingCount, openingHoursJson, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    id, placeId, name, address, city, latitude, longitude, place.rating ?? null, place.userRatingCount ?? null, hours, now, now
+    id, placeId, place.name, place.address || "", city || place.city, place.latitude, place.longitude,
+    null, null, null, now, now
   );
   return await db.get<any>("SELECT * FROM Gym WHERE id = ?", id);
 }
@@ -218,25 +166,35 @@ async function predictGymWeek(gym: any, timeZone: string) {
 export function registerGymIntelligenceRoutes(router: Router): void {
   router.get("/cities", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
-    if (query.length < 2) return res.json({ configured: Boolean(googleKey()), cities: [] });
-    if (!googleKey()) return res.status(503).json({ configured: false, error: "Gym discovery requires GOOGLE_PLACES_API_KEY." });
-    const cities = await placesCityAutocomplete(query);
-    return res.json({ configured: true, cities });
+    if (query.length < 2) return res.json({ configured: true, provider: "photon_openstreetmap", cities: [] });
+    const cities = await searchOsmCities(query);
+    return res.json({ configured: true, provider: "photon_openstreetmap", attribution: "© OpenStreetMap contributors", cities });
   });
 
   router.get("/search", async (req, res) => {
     const city = typeof req.query.city === "string" ? req.query.city.trim() : "";
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "gyms";
     if (city.length < 2) return res.status(400).json({ error: "Select a city before searching for gyms." });
-    if (!googleKey()) return res.status(503).json({ configured: false, error: "Gym discovery requires GOOGLE_PLACES_API_KEY." });
-    const places = await placesTextSearch(`${query || "gyms"} in ${city}, India`);
+    const places = await searchOsmGyms(city, query || "gyms");
     const gyms: any[] = [];
     for (const place of places) {
-      if (!place.id || !place.displayName?.text) continue;
       const gym = await upsertPlace(place, city);
-      gyms.push(gym);
+      gyms.push({ ...gym, distanceKm: place.distanceKm, source: "openstreetmap", latitude: place.latitude, longitude: place.longitude, openingHoursText: place.openingHours });
     }
-    return res.json({ configured: true, city, gyms });
+    return res.json({ configured: true, provider: "overpass_openstreetmap", attribution: "© OpenStreetMap contributors", city, gyms });
+  });
+
+  router.get("/route", async (req, res) => {
+    const fromLat = Number(req.query.fromLat), fromLng = Number(req.query.fromLng);
+    const toLat = Number(req.query.toLat), toLng = Number(req.query.toLng);
+    const profile = typeof req.query.profile === "string" ? req.query.profile : "driving";
+    if (!["driving", "walking", "cycling"].includes(profile)) return res.status(400).json({ error: "profile must be driving, walking or cycling." });
+    try {
+      const route = await getOsmRoute({ fromLat, fromLng, toLat, toLng, profile: profile as "driving" | "walking" | "cycling" });
+      return res.json({ ...route, attribution: "Routing by OSRM; map data © OpenStreetMap contributors" });
+    } catch (error) {
+      return res.status(503).json({ error: error instanceof Error ? error.message : "Routing service unavailable.", provider: "osrm" });
+    }
   });
 
   router.post("/create", async (req: AuthedRequest, res) => {
@@ -277,7 +235,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
   });
 
   // Import only independently licensed or otherwise authorized official datasets.
-  // Google Maps/Popular Times content is explicitly not an accepted training source.
+  // Third-party map and crowd estimates are not accepted as model-training sources.
   router.post("/dataset/import", async (req, res) => {
     const ingestKey = process.env.GYM_CROWD_DATASET_INGEST_KEY;
     if (!ingestKey || req.header("x-gym-dataset-key") !== ingestKey) {

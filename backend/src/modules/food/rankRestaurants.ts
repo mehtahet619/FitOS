@@ -26,12 +26,12 @@ export function scorePlace(input: RankInput, weights: RankingWeights = DEFAULT_W
   const { place, foodMatchScore, userBudgetInr } = input;
 
   const distanceScore = Math.max(0, 1 - place.distanceKm / 5); // 0km=1, 5km+=0
-  const ratingScore = Math.max(0, Math.min(1, place.rating / 5));
+  const ratingScore = place.rating == null ? 0.5 : Math.max(0, Math.min(1, place.rating / 5));
   const cheapestDish = place.dishes.length
     ? Math.min(...place.dishes.map((d) => d.estPriceInr))
     : userBudgetInr;
   const priceScore = userBudgetInr > 0 ? Math.max(0, Math.min(1, 1 - cheapestDish / (userBudgetInr * 1.5))) : 0.5;
-  const availabilityScore = place.isOpenNow ? 1 : 0;
+  const availabilityScore = place.isOpenNow == null ? 0.5 : place.isOpenNow ? 1 : 0;
 
   return (
     foodMatchScore * weights.foodMatch +

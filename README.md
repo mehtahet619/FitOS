@@ -19,8 +19,7 @@ one-per-day gym attendance check-in.
 - **Nutrition engine** — Mifflin-St Jeor macro targets + diet/allergy/budget
   filtered meal plans. Deterministic, no LLM.
 - **Food discovery** — provider abstraction that **never invents restaurant
-  data**. Ships with a mock provider returning an honest empty state;
-  swap in a real Google Places implementation via `MAPS_PROVIDER`.
+  data**. Uses Photon for city autocomplete, Overpass for nearby gyms and food places, Leaflet with OpenStreetMap tiles for maps, and OSRM-compatible public routing. Menu-level dish recommendations still require a verified menu provider; OSM listings never fabricate menus.
 - **AI abstraction layer** — the LLM is only used to phrase natural-language
   explanations on top of already-computed deterministic results (e.g. "why
   this exercise was swapped"). Ships with a zero-dependency template

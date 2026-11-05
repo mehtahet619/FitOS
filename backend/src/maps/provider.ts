@@ -6,7 +6,7 @@
  * Supported providers:
  * - "mock" (default) — returns empty results
  * - "apify_swiggy" — scrapes Swiggy restaurants via Apify
- * - "google_places" — Google Places API (not yet implemented)
+ * - "osm" (default) — OpenStreetMap Overpass discovery; menu details are not supplied
  *
  * IMPORTANT: per product requirements, restaurant data must never be
  * invented by the app. MockMapsProvider below returns an EMPTY result set
@@ -16,14 +16,15 @@
  */
 
 import { ApifySwiggyMapsProvider } from "./apifySwiggyProvider";
+import { searchOsmFood } from "./osmProvider";
 
 export interface NearbyPlace {
   id: string;
   name: string;
   distanceKm: number;
-  rating: number;
+  rating: number | null;
   priceRange: string;
-  isOpenNow: boolean;
+  isOpenNow: boolean | null;
   /** Coordinates are optional because the Swiggy actor returns distance but not geocoded restaurant coordinates. */
   latitude?: number;
   longitude?: number;
@@ -79,24 +80,37 @@ export class MockMapsProvider implements MapsProvider {
 }
 
 export function getMapsProvider(): MapsProvider {
-  const configuredProvider = process.env.MAPS_PROVIDER;
+  const configuredProvider = (process.env.MAPS_PROVIDER || "osm").toLowerCase();
   const apiKey = process.env.APIFY_API_KEY;
-  // Prefer live search when credentials exist, even if an old deployment still
-  // has MAPS_PROVIDER=mock. Without credentials, never fabricate listings.
-  // Apify is the only implemented live places provider. If its key is present,
-  // prefer it over stale/unsupported values such as "google_places" (which is
-  // documented but not implemented here); otherwise a configured key silently
-  // falls back to the empty mock provider and Food Nearby can never return dishes.
-  const provider = configuredProvider === "apify_swiggy" || Boolean(apiKey)
-    ? "apify_swiggy" : configuredProvider || "mock";
-  if (provider === "apify_swiggy") {
-    if (!apiKey) {
-      console.warn("MAPS_PROVIDER=apify_swiggy but APIFY_API_KEY not set — no live places provider available");
-      return new MockMapsProvider();
-    }
-    return new ApifySwiggyProvider(apiKey);
+  // OSM is the default free discovery source. If a Swiggy menu scraper is
+  // explicitly configured and credentials exist, retain it for verified menus.
+  if (configuredProvider === "apify_swiggy" && apiKey) return new ApifySwiggyProvider(apiKey);
+  if (configuredProvider === "mock") return new MockMapsProvider();
+  if (configuredProvider !== "osm" && configuredProvider !== "openstreetmap" && configuredProvider !== "apify_swiggy") {
+    console.warn(`Unsupported MAPS_PROVIDER="${configuredProvider}"; using OpenStreetMap.`);
   }
-  return new MockMapsProvider();
+  return new OpenStreetMapFoodProvider();
+}
+
+class OpenStreetMapFoodProvider implements MapsProvider {
+  async findNearbyFood(input: { latitude: number; longitude: number; query: string }): Promise<{ configured: boolean; places: NearbyPlace[] }> {
+    const found = await searchOsmFood(input.latitude, input.longitude);
+    const places: NearbyPlace[] = found.map((place) => ({
+      id: place.id,
+      name: place.name,
+      distanceKm: place.distanceKm,
+      rating: null,
+      priceRange: "Unknown",
+      isOpenNow: null,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      dishes: [],
+      source: "openstreetmap",
+      locality: place.address || place.city || undefined,
+      cuisines: String(place.tags.cuisine || place.tags.amenity || "Food"),
+    }));
+    return { configured: true, places };
+  }
 }
 
 /**
