@@ -2448,3 +2448,63 @@ html[data-theme="dark"] #screen-gym-scan [style*="color: #666"] {
   font-size: 12px;
   font-weight: 700;
 }
+
+/* Gym check-in: readable labels and a map that only occupies space when populated. */
+.gym-intelligence-card .form-label {
+  display: block;
+  color: var(--ink) !important;
+  opacity: 1;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+.gym-intelligence-card .input {
+  min-height: 48px;
+  color: var(--ink);
+  background: var(--surface-raised, #fff);
+}
+.gym-intelligence-card .input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.gym-intelligence-card .btn {
+  min-height: 48px;
+  width: 100%;
+}
+.gym-intelligence-card .fitos-osm-map[hidden] {
+  display: none !important;
+}
+.gym-intelligence-card .fitos-osm-map:not([hidden]) {
+  min-height: 220px;
+  height: 240px;
+  margin: 14px 0 4px;
+  background: var(--surface-soft, #f7f8f5);
+}
+.gym-intelligence-card .fitos-osm-map:not([hidden]) .leaflet-container {
+  min-height: 220px;
+}
+.gym-intelligence-card #gym-search-status {
+  margin-top: 8px;
+  color: var(--text-secondary, #68716d);
+  font-size: 12px;
+  line-height: 1.45;
+}
+@media (max-width: 680px) {
+  .gym-intelligence-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+  .gym-intelligence-card .form-label {
+    margin-top: 14px;
+    margin-bottom: 7px;
+  }
+  .gym-intelligence-card .input {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px;
+  }
+  .gym-intelligence-card .fitos-osm-map:not([hidden]) {
+    height: 220px;
+    min-height: 200px;
+  }
+}
