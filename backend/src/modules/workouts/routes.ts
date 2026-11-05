@@ -653,7 +653,7 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       userId, state.cycleId, currentPlanStepIndex
     );
   }
-  if (!workout) return res.status(404).json({ error: "No workout generated today yet. POST /workouts/generate" });
+  if (!workout) return res.json(null);
   const exercises = await db.all<any>(
     `SELECT we.*, e.name as exerciseName, e.primaryMuscle, e.secondaryMuscles, e.movementPattern, e.instructions FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ? ORDER BY we.orderIndex ASC`,
     workout.id
