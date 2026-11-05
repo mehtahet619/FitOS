@@ -2439,3 +2439,12 @@ html[data-theme="dark"] #screen-gym-scan [style*="color:#666"],
 html[data-theme="dark"] #screen-gym-scan [style*="color: #666"] {
   color: var(--muted) !important;
 }
+
+/* Gym form labels must remain readable in both themes. */
+#screen-gym .gym-intelligence-card .form-label {
+  display: block;
+  margin: 12px 0 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
