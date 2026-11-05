@@ -3,7 +3,6 @@ import '../theme/app_theme.dart';
 import 'today_screen.dart';
 import 'workout_screen.dart';
 import 'diet_screen.dart';
-import 'vision_screen.dart';
 import 'gym_screen.dart';
 import '../api/api_client.dart';
 import 'auth_screen.dart';
@@ -21,7 +20,6 @@ class _HomeShellState extends State<HomeShell> {
     TodayScreen(),
     WorkoutScreen(),
     DietScreen(),
-    VisionScreen(),
     GymScreen(),
   ];
 
@@ -29,7 +27,6 @@ class _HomeShellState extends State<HomeShell> {
     (icon: Icons.home_rounded, label: "Today"),
     (icon: Icons.fitness_center_rounded, label: "Workout"),
     (icon: Icons.restaurant_rounded, label: "Diet"),
-    (icon: Icons.center_focus_strong_rounded, label: "Vision"),
     (icon: Icons.badge_rounded, label: "Gym"),
   ];
 
