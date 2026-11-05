@@ -115,7 +115,8 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
         .map((value) => value.trim())
         .filter((value) => value.length > 0 && value.length <= 40)
       : [];
-    const inventedQualifier = /\b(constant tension|eccentric emphasis|controlled tempo|slow tempo|explosive tempo|partial reps|partial range|full range|time under tension)\b/i.test(exercise);\n    if (!exercise || exercise.length > 100 || inventedQualifier || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)) continue;
+    const inventedQualifier = /\b(constant tension|eccentric emphasis|controlled tempo|slow tempo|explosive tempo|partial reps|partial range|full range|time under tension)\b/i.test(exercise);
+    if (!exercise || exercise.length > 100 || inventedQualifier || !muscle || !machine || excludedNames.has(nameKey) || names.has(nameKey)) continue;
     const family = exerciseFamilyKey(exercise);
     if (!family || families.has(normalizeExerciseValue(family))) continue;
     names.add(nameKey);
