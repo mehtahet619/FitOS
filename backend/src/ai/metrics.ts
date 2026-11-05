@@ -24,7 +24,7 @@ export function recordAiRequest(input: {
   const seconds = Math.max(0, input.latencyMs / 1000);
   const histogramKey = `${operation}|${input.provider}`;
   latencyCounts.set(histogramKey, (latencyCounts.get(histogramKey) ?? 0) + 1);
-  latencySums.set(histogramKey, (sum) + seconds);
+  latencySums.set(histogramKey, (latencySums.get(histogramKey) ?? 0) + seconds);
   for (const bucket of latencyBuckets) {
     if (seconds <= bucket) {
       const keyForBucket = `${histogramKey}|${bucket}`;
