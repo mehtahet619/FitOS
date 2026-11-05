@@ -168,13 +168,25 @@ jobs:
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
           echo "unresolved=$unresolved" >> "$GITHUB_OUTPUT"
 
+      - name: Check repository auto-merge setting
+        id: repository-settings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          enabled=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.allow_auto_merge')
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+
       - name: Enable auto-merge
-        if: steps.policy.outputs.sensitive == 'false' && steps.policy.outputs.unresolved == '0'
+        if: steps.policy.outputs.sensitive == 'false' && steps.policy.outputs.unresolved == '0' && steps.repository-settings.outputs.enabled == 'true'
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
+
+      - name: Explain why auto-merge was skipped
+        if: steps.repository-settings.outputs.enabled != 'true'
+        run: echo "Auto-merge is disabled in repository settings. All required CI checks still run; merge this PR manually after review."
 
   override-review:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/override-review')
