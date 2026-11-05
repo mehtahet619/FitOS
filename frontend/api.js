@@ -105,7 +105,15 @@ const Api = (() => {
     const timeoutMs = Number.isFinite(opts.timeoutMs)
       ? Math.max(1000, opts.timeoutMs)
       : isSessionCheck ? 7000 : path === "/equipment/detect" ? 12000 : path.startsWith("/gym/search") ? 35000 : path.startsWith("/gym/cities") ? 12000 : 10000;
-    let { response, text } = await fetchResponse(path, requestOptions, timeoutMs);
+    let response, text;
+    try {
+      ({ response, text } = await fetchResponse(path, requestOptions, timeoutMs));
+    } catch (error) {
+      // Retry only idempotent reads after a timeout, allowing a sleeping free instance to wake.
+      if (!error.timedOut || method !== "GET") throw error;
+      window.dispatchEvent(new CustomEvent("fitos:api-waking"));
+      ({ response, text } = await fetchResponse(path, requestOptions, 60000));
+    }
 
     // /auth/me intentionally reports an expired access cookie as an
     // unauthenticated session. Try the refresh cookie before boot treats that

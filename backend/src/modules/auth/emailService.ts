@@ -43,6 +43,7 @@ async function sendBrevoMail(mail: { to: string; subject: string; text: string }
     method: "POST",
     headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ sender: parseFrom(from), to: [{ email: mail.to }], subject: mail.subject, textContent: mail.text }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`Brevo rejected the email request (${res.status}): ${(await res.text()).slice(0, 200)}`);
 }

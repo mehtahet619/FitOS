@@ -190,7 +190,11 @@ app.post("/pricing-guesses", async (req: Request, res: Response) => {
 });
 
 // Prometheus scrape endpoint. Keep labels bounded and never expose user/image data.
-app.get("/metrics", (_req, res) => {
+app.get("/metrics", (req, res) => {
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (metricsToken && req.header("Authorization") !== `Bearer ${metricsToken}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
   res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.send(renderEquipmentPrometheusMetrics());
