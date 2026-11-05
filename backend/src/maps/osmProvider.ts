@@ -156,10 +156,12 @@ export async function getOsmRoute(input: {
   const key = `route:${values.join(",")}:${profile}`;
   const hit = cached<any>(key);
   if (hit) return hit;
-  // The public OSRM demo server supports driving only. Do not silently label
-  // driving routes as walking/cycling; return a clear unsupported response.
-  if (profile !== "driving") throw new Error("The public OSRM demo endpoint currently supports driving routes only. Walking and cycling require a compatible routing provider.");
-  const url = `${OSRM_URL}/route/v1/driving/${input.fromLng},${input.fromLat};${input.toLng},${input.toLat}?overview=full&geometries=geojson&steps=true`;
+  const routeBase = profile === "walking"
+    ? "https://routing.openstreetmap.de/routed-foot"
+    : profile === "cycling"
+      ? "https://routing.openstreetmap.de/routed-bike"
+      : OSRM_URL;
+  const url = `${routeBase}/route/v1/driving/${input.fromLng},${input.fromLat};${input.toLng},${input.toLat}?overview=full&geometries=geojson&steps=true`;
   const payload = await getJson(url, 15000);
   const route = payload.routes?.[0];
   if (!route) throw new Error("No route found between these locations.");
