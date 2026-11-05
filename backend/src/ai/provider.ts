@@ -117,7 +117,7 @@ function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnal
   return results;
 }
 
-async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[], preferences?: HealthyFoodPreferences): Promise<HealthyDishAnalysis[]> {
+async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[], preferences: HealthyFoodPreferences | undefined, timeoutMs: number): Promise<HealthyDishAnalysis[]> {
   const system = [
     "You rank real nearby menu dishes for a fitness app.",
     "Use only the supplied dish records and IDs. Never create, rename, or infer a dish, restaurant, price, distance, calories, protein, or other nutrition value.",
@@ -137,7 +137,7 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
     body: JSON.stringify(anthropic
       ? { model: provider.model, max_tokens: 1800, temperature: 0.1, system, messages: [{ role: "user", content: user }] }
       : { model: provider.model, max_tokens: 1800, temperature: 0.1, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
-    signal: AbortSignal.timeout(18_000),
+    signal: AbortSignal.timeout(Math.max(1, timeoutMs)),
   });
   if (!response.ok) throw new Error(`${provider.name} request failed with HTTP ${response.status}`);
   const payload = await response.json() as any;
@@ -149,10 +149,22 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
 class LlmAiProvider extends TemplateAiProvider {
   async analyzeHealthyDishes(input: { dishes: HealthyDishInput[]; preferences?: HealthyFoodPreferences }): Promise<HealthyDishAnalysis[]> {
     if (!input.dishes.length) return [];
+    // Bound the entire ranking operation, not each upstream provider independently.
+    // Previously two sequential 18s requests could hold the API request for ~36s.
+    const totalBudgetMs = 9_000;
+    const perProviderBudgetMs = 5_000;
+    const startedAt = Date.now();
     for (const provider of configuredProviders()) {
-      try { return await analyzeWithProvider(provider, input.dishes, input.preferences); }
-      catch (error) {
-        console.warn(`[food-ai] ${provider.name} ranking failed; trying next provider: ${error instanceof Error ? error.message : String(error)}`);
+      const remainingMs = totalBudgetMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        console.warn("[food-ai] ranking deadline reached; using deterministic fallback");
+        break;
+      }
+      const timeoutMs = Math.min(perProviderBudgetMs, remainingMs);
+      try {
+        return await analyzeWithProvider(provider, input.dishes, input.preferences, timeoutMs);
+      } catch (error) {
+        console.warn(`[food-ai] ${provider.name} ranking failed within ${timeoutMs}ms budget: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     // Keep the feature usable during upstream outages, but never pretend the
