@@ -1,3 +1,4 @@
+import { renderAiPrometheusMetrics } from "./ai/metrics";
 import "dotenv/config";
 import "express-async-errors";
 import express, { NextFunction, Request, Response } from "express";
@@ -197,7 +198,7 @@ app.get("/metrics", (req, res) => {
   }
   res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.send(renderEquipmentPrometheusMetrics());
+  res.send(`${renderEquipmentPrometheusMetrics()}${renderAiPrometheusMetrics()}`);
 });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
