@@ -253,8 +253,8 @@ export function registerGymIntelligenceRoutes(router: Router): void {
       })).min(1).max(5000),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid dataset payload. Provide gymId, source metadata, license, and up to 5000 timestamped crowd records." });
-    if (/popular.?times/i.test(`${parsed.data.sourceName} ${parsed.data.sourceReference}`)) {
-      return res.status(400).json({ error: "Unlicensed crowd-estimation content cannot be imported as model-training data. Use an independently licensed dataset." });
+    if (/google|maps|popular.?times/i.test(`${parsed.data.sourceName} ${parsed.data.sourceReference}`)) {
+      return res.status(400).json({ error: "Google Maps/Popular Times content cannot be imported or stored as model-training data. Use an independently licensed dataset." });
     }
     const gym = await db.get<any>("SELECT id FROM Gym WHERE id = ?", parsed.data.gymId);
     if (!gym) return res.status(404).json({ error: "Gym not found." });
