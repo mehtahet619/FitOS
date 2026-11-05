@@ -148,7 +148,6 @@ const routeMetadata = {
   "/nutrition": ["Food and nutrition planner | FitOS", "Explore meal planning and nearby food discovery in FitOS."],
   "/equipment": ["Gym equipment planner | FitOS", "Review equipment and build workouts for your gym setup."],
   "/gym": ["Gym check-in | FitOS", "Check in to your gym and review gym attendance in FitOS."],
-  "/vision": ["Workout vision coach | FitOS", "Use the camera-based workout vision tools in FitOS."],
   "/history": ["Workout history | FitOS", "Review your logged FitOS training history."],
   "/profile": ["Your profile and training goals | FitOS", "Manage your FitOS fitness profile, goals, and equipment."],
   "/settings": ["FitOS settings | FitOS", "Manage your FitOS profile and preferences."],
@@ -2104,7 +2103,6 @@ function renderWorkout(workout, plan) {
             : `<span class="exercise-demo-thumbnail-fallback">${hasDemoVideo ? "Play demonstration" : "Load demonstration"}</span>`}
           <span class="exercise-demo-play" aria-hidden="true"></span>
         </button>
-        <button class="btn btn-mint" type="button" data-action="watch-exercise">Watch Exercise</button>
         <div class="exercise-demo-meta"><span>${escapeWorkoutText(demo.sourceName || "Exercise guide")} · ${hasDemoVideo ? "Inline demonstration" : "Find exercise demonstration"}</span></div>
         <p class="exercise-demo-unavailable-note" hidden>Demonstration currently unavailable.</p>
         <div class="exercise-demo-player" hidden aria-live="polite"></div>
@@ -2334,49 +2332,6 @@ function renderWorkout(workout, plan) {
     });
   });
 
-  el.querySelectorAll('[data-action="watch-exercise"]').forEach((button) => {
-    button.addEventListener("click", async () => {
-      const row = button.closest(".workout-exercise-row");
-      const exerciseId = row?.querySelector(".exercise-demo")?.dataset.videoId;
-      const exercise = exercises.find((item) => item.exerciseId === exerciseId);
-      if (!exercise) return;
-
-      switchTab("vision");
-
-      const demoPlayer = $("vision-demo-player");
-      const demoButton = $("vision-demo-btn");
-      if (demoPlayer && demoButton) {
-        demoPlayer.replaceChildren();
-        demoPlayer.hidden = false;
-        demoPlayer.textContent = "Finding a demonstration for this exercise…";
-        delete demoButton.dataset.refreshed;
-        demoButton.hidden = false;
-        demoButton.disabled = true;
-        try {
-          if (!exercise.demoVideo || exercise.demoVideo.kind !== "video" || !exercise.demoVideo.videoId) {
-            const result = await Api.get(`/exercises/${encodeURIComponent(exercise.exerciseId)}/demo-video`, { timeoutMs: 12000 });
-            exercise.demoVideo = result?.demoVideo || null;
-          }
-          demoButton.disabled = false;
-          if (exercise.demoVideo?.kind === "video" && exercise.demoVideo.videoId) {
-            await startExerciseDemoPlayer(demoPlayer, demoButton, exercise);
-          } else {
-            showUnavailableExerciseDemo(demoPlayer, exercise, exercise.demoVideo, "A video demonstration isn't available right now. Follow the exercise instructions instead.");
-          }
-        } catch {
-          demoButton.disabled = false;
-          demoPlayer.textContent = "Demonstration temporarily unavailable. Please try again.";
-        }
-      }
-
-      if (window.VisionCoach?.openFor) {
-        await window.VisionCoach.openFor(exercise);
-      } else {
-        const status = $("camera-placeholder");
-        if (status) status.textContent = "Live coaching could not be initialized. Please reload FitOS and try again.";
-      }
-    });
-  });
   el.querySelectorAll('[data-action="ask-exercise"]').forEach((button) => {
     button.addEventListener("click", () => {
       const form = button.closest(".workout-exercise-row")?.querySelector(".exercise-chat-form");
