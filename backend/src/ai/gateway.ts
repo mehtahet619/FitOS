@@ -117,13 +117,18 @@ export async function requestAiText(input: AiTextRequest): Promise<string> {
   try {
     const request = providerRequest(input.provider, input);
 
+    const deadlineAt = startedAt + timeoutMs;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs <= 0) {
+        throw new Error(`${input.provider.name} request timed out after ${timeoutMs}ms.`);
+      }
       try {
         const response = await fetch(input.provider.url, {
           method: "POST",
           headers: request.headers,
           body: JSON.stringify(request.body),
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: AbortSignal.timeout(remainingMs),
         });
         finalStatus = response.status;
 
