@@ -227,7 +227,7 @@ async function callExerciseValidator(provider: ProviderConfig, input: AiExercise
     temperature: 0,
     json: true,
     timeoutMs: 7_000,
-    retries: 1,
+    retries: 0,
   });
 }
 
