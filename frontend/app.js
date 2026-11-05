@@ -701,6 +701,7 @@ $("onboarding-submit").addEventListener("click", async () => {
     banner(bannerEl, "error", "Please fill in all fields.");
     return;
   }
+  const completingSetup = AuthState.profileComplete === false;
   try {
     await Api.put("/user/profile", payload);
     if (State.equipmentLoaded) {
@@ -711,7 +712,7 @@ $("onboarding-submit").addEventListener("click", async () => {
     if (AuthState.user) { AuthState.user.profileComplete = true; AuthState.user.name = payload.name; }
     setProfileEditMode(false);
     banner(bannerEl, "success", "Profile saved successfully.");
-    if (location.pathname !== "/profile" && location.pathname !== "/settings") enterMainApp(); 
+    if (completingSetup) enterMainApp(); 
   } catch (e) {
     banner(bannerEl, "error", e.message || "Could not save profile.");
   }
