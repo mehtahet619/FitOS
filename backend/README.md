@@ -63,7 +63,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email delivery through Resend's HTTPS API. |
 | `AI_PROVIDER` | `template` (default, no key needed) — see `src/ai/provider.ts` to add a real one. |
-| `MAPS_PROVIDER` | `mock` (default, returns honest empty results) or `apify_swiggy` — see **Food Discovery** below. |
+| `MAPS_PROVIDER` | `osm` (default) or optional `apify_swiggy` for verified menu extraction. |\n| `PHOTON_BASE_URL` | Photon geocoding/autocomplete endpoint. |\n| `OSRM_BASE_URL` | OSRM driving-route endpoint. |
 | `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE` | `true` to use the All Gym Equipment YOLOv8n Workflow for sampled live webcam frames. Takes precedence over the older SAM3 workflow flag. |\n| `ROBOFLOW_WORKFLOW_MODE` | `true` to use the existing SAM3 serverless workflow when the gym-equipment flag is off. |
 | `ROBOFLOW_API_KEY` | Your Roboflow workspace API key. Get from https://app.roboflow.com/settings/api |
 | `APIFY_API_KEY` | Your Apify account API token. Get from https://apify.com — required for Swiggy integration. |
@@ -111,7 +111,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 - `GET /nutrition/today` (auth)
 
 ### Food discovery
-- `GET /food/nearby?lat=&lng=&foodId=` (auth) — returns `configured: false` and an honest empty state unless a real `MapsProvider` is wired up; **never invents restaurant data**
+- `GET /food/nearby?lat=&lng=&foodId=` (auth) — nearby OSM restaurants/cafes/food shops with coordinates and Haversine distance; no fabricated ratings, opening status or menus\n- `POST /food/healthy-nearby` (auth) — dish-level recommendations only when a menu provider returns verified menu records; OSM place listings alone do not invent dishes
 - `GET /food/search?q=` (auth)
 
 ### Progress
@@ -294,7 +294,7 @@ The smoke test makes a real Roboflow inference request using a public sample ima
 
 ### Gym Crowd Intelligence
 
-City and gym discovery remain dynamic through Google Places API: GET /gym/cities?q=Bharuch returns city suggestions, then GET /gym/search?city=Bharuch&q=gyms returns gyms in that selected city. The same flow works for Vadodara and other supported cities. This discovery integration is separate from crowd training.
+City autocomplete uses Photon backed by OpenStreetMap: `GET /gym/cities?q=Bharuch`. Gym discovery geocodes the selected city and queries Overpass for mapped fitness centres and gyms: `GET /gym/search?city=Bharuch&q=gyms`. Both endpoints retain their existing response shape and include OpenStreetMap attribution. OSM ratings and opening hours are not assumed when the source does not provide them.\n\nRouting is available through `GET /gym/route?fromLat=23.0&fromLng=72.5&toLat=22.3&toLng=73.1&profile=driving|walking|cycling`. It returns OSRM-compatible GeoJSON geometry, distance and duration. The public demo routing endpoints have availability and fair-use limits; route profile support depends on the public instance.
 
 **Training/evaluation separation**
 - The predictor trains only from rows in GymCrowdOfficialObservation, populated through the authenticated-by-secret dataset ingestion endpoint.
@@ -312,6 +312,6 @@ GOOGLE_PLACES_API_KEY=...
 GYM_CROWD_DATASET_INGEST_KEY=long-random-secret
 ```
 
-Dataset ingestion: POST /gym/dataset/import with header x-gym-dataset-key and JSON body containing gymId, sourceName, sourceReference, license, and records. Each record requires observedAt (ISO timestamp), crowdPercent (0-100), and recordId. Up to 5000 records can be sent per request. The source metadata and license are retained for audit. Google Maps/Popular Times source names or references are rejected.
+Dataset ingestion: POST /gym/dataset/import with header x-gym-dataset-key and JSON body containing gymId, sourceName, sourceReference, license, and records. Each record requires observedAt (ISO timestamp), crowdPercent (0-100), and recordId. Up to 5000 records can be sent per request. The source metadata and license are retained for audit. Popular Times source names or references are rejected. OSM place discovery is not crowd training data and must not be treated as a crowd observation source.
 
-Other endpoints: POST /gym/create, POST /gym/select, GET /gym/selected, GET /gym/:gymId/forecast, POST /gym/:gymId/observations, and GET /gym/:gymId/evaluation. Manual gym creation and crowd forecasting do not require a Google key; dynamic city/gym discovery does.
+Other endpoints: POST /gym/create, POST /gym/select, GET /gym/selected, GET /gym/:gymId/forecast, POST /gym/:gymId/observations, and GET /gym/:gymId/evaluation. Manual gym creation and crowd forecasting do not require any maps API key; dynamic discovery uses public Photon and Overpass services.
