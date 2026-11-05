@@ -150,7 +150,10 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
     temperature: 0.1,
     json: true,
     timeoutMs,
-    retries: 1,
+    // Provider failover already supplies the retry path here. Keep one shared
+    // 9-second budget across OpenRouter and Anthropic instead of retrying each
+    // provider for its full per-provider timeout.
+    retries: 0,
   });
   return parseAnalyses(raw, dishes);
 }
