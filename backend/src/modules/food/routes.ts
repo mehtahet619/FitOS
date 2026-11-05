@@ -115,7 +115,7 @@ foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
     return res.json({
       configured: false,
       message:
-        "No live places provider is connected in this MVP, so no restaurant data is shown (the app never invents listings). Wire up MAPS_PROVIDER=google_places with an API key to populate this.",
+        "No live food discovery provider is available right now. FitOS uses OpenStreetMap for nearby place discovery; verified menu items require a separate menu provider.",
       forQuery: food?.name ?? "healthy food",
       places: [],
     });
@@ -130,7 +130,7 @@ foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
     DEFAULT_WEIGHTS
   );
 
-  return res.json({ configured: true, forQuery: food?.name ?? "healthy food", places: ranked });
+  return res.json({ configured: true, provider: "openstreetmap", attribution: "© OpenStreetMap contributors", forQuery: food?.name ?? "healthy food", places: ranked });
 });
 
 foodRouter.get("/search", async (req, res) => {
