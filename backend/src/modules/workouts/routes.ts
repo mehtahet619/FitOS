@@ -743,10 +743,12 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
       ...equipmentSnapshotIds
     )).map((item) => item.name)
     : [];
-  const targetMuscles = [...new Set([
-    ...musclesForFocus(workout.focus),
-    ...exercises.map((exercise) => primaryMuscleById.get(exercise.exerciseId) || exercise.primaryMuscle).filter(Boolean),
-  ])];
+  const targetMuscles = musclesForFocus(workout.focus);
+  const mismatchedExercises = exercises.filter((exercise) => {
+    const primaryMuscle = primaryMuscleById.get(exercise.exerciseId) || exercise.primaryMuscle;
+    return !targetMuscles.some((target) => primaryMuscleMatchesTarget(target, primaryMuscle));
+  });
+  const hasMuscleMismatch = mismatchedExercises.length > 0;
   return res.json({
     id: workout.id,
     focus: workout.focus,
@@ -757,10 +759,16 @@ workoutRouter.get("/today", async (req: AuthedRequest, res) => {
     equipmentMode: workout.equipmentMode ?? "USER_EQUIPMENT",
     availableEquipmentNames: equipmentSnapshotNames,
     targetMuscles,
-    needsRegeneration: workout.generatorVersion !== AI_WORKOUT_GENERATOR_VERSION,
-    // Legacy pending workouts can be explicitly refreshed even after logging;
-    // the old workout and its set/history rows are retained as superseded.
-    canRegenerate: workout.status === "pending" && workout.generatorVersion !== AI_WORKOUT_GENERATOR_VERSION,
+    needsRegeneration: workout.generatorVersion !== AI_WORKOUT_GENERATOR_VERSION || hasMuscleMismatch,
+    hasMuscleMismatch,
+    mismatchedExercises: mismatchedExercises.map((exercise) => ({
+      exerciseName: exercise.exerciseName,
+      primaryMuscle: primaryMuscleById.get(exercise.exerciseId) || exercise.primaryMuscle,
+    })),
+    // Pending workouts with stale generator data or exercises outside the
+    // selected split can be rebuilt. Existing logged history remains untouched.
+    canRegenerate: workout.status === "pending"
+      && (workout.generatorVersion !== AI_WORKOUT_GENERATOR_VERSION || hasMuscleMismatch),
     exercises: exercisesWithEquip,
   });
 });
@@ -1135,10 +1143,9 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     primaryMuscle: primaryMuscleByExerciseId.get(exercise.id) || exercise.primaryMuscle,
   }));
   const exerciseById = new Map(canonicalExercises.map((exercise) => [exercise.id, exercise]));
-  const workoutTargetMuscles = [...new Set([
-    ...musclesForFocus(workout.focus),
-    ...slots.map((exercise) => exerciseById.get(exercise.exerciseId)?.primaryMuscle || exercise.sourcePrimaryMuscle).filter(Boolean),
-  ])];
+  // The workout split is the source of truth. Existing slot metadata may be
+  // stale or incorrect and must never widen a Shoulders-only session to Triceps.
+  const workoutTargetMuscles = musclesForFocus(workout.focus);
   const targetMuscleByKey = new Map(workoutTargetMuscles.map((muscle) => [normalizeExerciseValue(muscle), muscle]));
   const selectedTargetMuscle = targetMuscleByKey.get(normalizeExerciseValue(targetMuscle));
   if (!selectedTargetMuscle) {
@@ -1310,11 +1317,10 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   // Build recommendation targets from the workout that will exist after this
   // edit. The selected slot's old Exercise ID may carry different muscle and
   // movement metadata from the replacement and must not leak into rebalancing.
-  const updatedTargetMuscles = [...new Set([
-    ...musclesForFocus(workout.focus),
-    ...otherSlots.map((exercise) => exerciseById.get(exercise.exerciseId)?.primaryMuscle || exercise.sourcePrimaryMuscle).filter(Boolean),
-    selectedExercise.primaryMuscle,
-  ])];
+  // Rebalance only against the plan's configured targets. Never infer targets
+  // from other saved slots because a legacy workout may already contain
+  // exercises assigned to the wrong muscle group.
+  const updatedTargetMuscles = musclesForFocus(workout.focus);
   const remainingCoverage = updatedTargetMuscles.filter((muscle) => normalizeExerciseValue(muscle) !== normalizeExerciseValue(selectedTargetMuscle));
   const coverageTargets = remainingCoverage.length ? remainingCoverage : updatedTargetMuscles;
   const recommendationEquipment = fullGym ? [] : [...new Set([
