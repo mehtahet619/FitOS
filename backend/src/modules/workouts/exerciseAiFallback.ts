@@ -1,3 +1,4 @@
+import { requestAiText } from "../../ai/gateway";
 function normalizeExerciseValue(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
@@ -171,59 +172,34 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     `Workout target muscles: ${input.targetMuscles.join(", ")}.`,
     `Session duration: ${input.sessionDurationMinutes} minutes. Return exactly ${input.count} exercises.`,
     `Available equipment (use only these): ${input.equipment.map(({ name }) => name).join(", ")}.`,
-    "QUALITY RULES:",
-    "- Every exercise must be a conventional, recognizable exercise name used in strength training.",
-    "- Never add decorative or invented qualifiers such as Constant Tension, Eccentric Emphasis, Controlled Tempo, Partial Reps, or similar wording to make a variation look like a separate exercise.",
-    "- Do not count grip, stance, tempo, equipment, or unilateral variations of the same movement as different movement patterns.",
-    "- Select complementary movements that train distinct functions/regions of the requested muscle, not merely different names.",
-    "- The muscle field must be one of the requested target muscles and must represent the exercise's actual primary target. Secondary muscles are descriptive only.",
-    "- Use only the listed equipment or bodyweight. Do not claim unavailable equipment.",
+    "Every exercise must be a conventional, recognizable strength-training exercise.",
+    "Do not use grip, stance, tempo, equipment, or unilateral variations as separate movement patterns.",
+    "Select complementary movements that train distinct functions of the requested muscles.",
+    "The muscle field must be one of the requested target muscles and represent the actual primary target.",
+    "Use only listed equipment or bodyweight. Never invent unavailable equipment.",
     ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "shoulders" && input.count >= 3 ? [
-      "MANDATORY SHOULDER COVERAGE:",
-      "- Include one overhead/shoulder press pattern for anterior deltoid and general pressing strength.",
-      "- Include one lateral raise or side raise pattern for the lateral deltoid.",
-      "- Include one rear-delt fly, reverse pec-deck, or face-pull pattern for the posterior deltoid.",
-      "- Do not return multiple presses in place of lateral- or rear-delt work. Pike push-ups, Arnold presses, and shoulder presses are all pressing patterns and cannot satisfy more than the press requirement.",
-      "- If the equipment list prevents a required movement, choose the closest valid movement possible with listed equipment; never fabricate an exercise.",
+      "MANDATORY SHOULDER COVERAGE: include one press, one lateral-delt movement, and one rear-delt movement. Multiple press variations cannot satisfy lateral or rear-delt coverage.",
     ] : []),
     ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "chest" && input.count >= 3 ? [
-      "CHEST COVERAGE: combine a press pattern with a fly/adduction pattern and, when possible, an incline or decline angle. Do not fill every slot with bench-press variations.",
+      "CHEST COVERAGE: combine a press with a fly/adduction pattern and, when possible, an incline or decline angle.",
     ] : []),
     ...(input.targetMuscles.length === 1 && normalizeExerciseValue(input.targetMuscles[0]) === "back" && input.count >= 3 ? [
-      "BACK COVERAGE: combine vertical pulling, horizontal rowing, and a distinct posterior-chain or scapular movement when appropriate. Do not fill every slot with row variations.",
+      "BACK COVERAGE: combine vertical pulling, horizontal rowing, and a distinct posterior-chain or scapular movement when appropriate.",
     ] : []),
-    "Before responding, internally verify that all exercises are distinct movement patterns and that the mandatory coverage rules are met. If not, replace the weakest choices.",
-    "Return only valid JSON in this exact shape: { \"exercises\": [{ \"exercise\": string, \"machine\": string, \"muscle\": string, \"secondaryMuscles\": string[], \"instructions\": string, \"sets\": number, \"repRangeLow\": number, \"repRangeHigh\": number }] }.",
-    "Use exact muscle and equipment names from the input. Use 2-4 working sets and realistic rep ranges. No warmup, explanation, markdown, or extra exercises.",
+    "Return only valid JSON in this shape: { \"exercises\": [{ \"exercise\": string, \"machine\": string, \"muscle\": string, \"secondaryMuscles\": string[], \"instructions\": string, \"sets\": number, \"repRangeLow\": number, \"repRangeHigh\": number }] }.",
+    "Use exact muscle and equipment names from the input. No warmup, explanation, markdown, or extra exercises.",
   ].join("\n");
-  const system = "You are a practical strength coach. Generate a balanced workout that covers the requested muscles within the stated time. Return valid JSON only.";
-  const body = {
-    model: provider.model,
+  return requestAiText({
+    operation: "workout.generate",
+    provider,
+    system: "You are a practical strength coach. Generate a balanced workout that covers the requested muscles within the stated time. Return valid JSON only.",
+    user: prompt,
+    maxTokens: 3000,
     temperature: 0.1,
-    max_tokens: 3000,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: prompt },
-    ],
-  };
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${provider.apiKey}`,
-    "HTTP-Referer": "https://fitos.app",
-    "X-Title": "FitOS",
-  };
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(25_000),
+    json: true,
+    timeoutMs: 25_000,
+    retries: 1,
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const payload = await response.json() as any;
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("Provider returned no text content.");
-  return content;
 }
 
 async function callExerciseValidator(provider: ProviderConfig, input: AiExerciseValidationInput): Promise<string> {
@@ -233,41 +209,24 @@ async function callExerciseValidator(provider: ProviderConfig, input: AiExercise
     allowedMuscles: input.muscles,
     allowedEquipment: input.equipment,
     rules: [
-      "Decide whether this is a real, recognized strength-training exercise, not an invented or nonsensical phrase.",
-      "If valid, return its conventional canonical exercise name, primary muscle, any secondary muscles, and the equipment needed.",
-      "Use only exact values from allowedMuscles and allowedEquipment. If a muscle or equipment cannot be mapped, return valid=false.",
-      "Do not claim an exercise targets a muscle just because it may stabilize it; distinguish primary and secondary muscles.",
+      "Decide whether this is a real, recognized strength-training exercise, not an invented phrase.",
+      "Use only exact values from allowedMuscles and allowedEquipment. If a value cannot be mapped, return valid=false.",
+      "Distinguish primary muscles from secondary muscles.",
       "Return confidence from 0 to 1 and a short reason.",
       "Return only JSON with valid, canonicalName, primaryMuscle, secondaryMuscles, equipmentName, confidence, and reason fields.",
     ],
   };
-  const system = "You validate conventional resistance-training movements conservatively. Do not invent exercises, muscles, or equipment. Return valid JSON only.";
-  const body = {
-    model: provider.model,
+  return requestAiText({
+    operation: "exercise.catalog_validation",
+    provider,
+    system: "You validate conventional resistance-training movements conservatively. Do not invent exercises, muscles, or equipment. Return valid JSON only.",
+    user: JSON.stringify(prompt),
+    maxTokens: 500,
     temperature: 0,
-    max_tokens: 500,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: JSON.stringify(prompt) },
-    ],
-  };
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-      "HTTP-Referer": "https://fitos.app",
-      "X-Title": "FitOS",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(7_000),
+    json: true,
+    timeoutMs: 7_000,
+    retries: 1,
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const payload = await response.json() as any;
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("Provider returned no text content.");
-  return content;
 }
 
 /** Uses configured LLM providers only to validate and structure a new catalogue entry. */
