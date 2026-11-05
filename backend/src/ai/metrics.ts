@@ -24,7 +24,7 @@ export function recordAiRequest(input: {
   const seconds = Math.max(0, input.latencyMs / 1000);
   const histogramKey = `${operation}|${input.provider}`;
   latencyCounts.set(histogramKey, (latencyCounts.get(histogramKey) ?? 0) + 1);
-  latencySums.set(histogramKey, (latencySums.get(histogramKey) ?? 0) + seconds);
+  latencySums.set(histogramKey, (sum) + seconds);
   for (const bucket of latencyBuckets) {
     if (seconds <= bucket) {
       const keyForBucket = `${histogramKey}|${bucket}`;
@@ -45,8 +45,8 @@ export function renderAiPrometheusMetrics(): string {
     "# TYPE fitos_ai_request_duration_seconds histogram",
   ];
 
-  for (const [histogramKey, count] of latencyCounts.entries()) {
-    if (histogramKey.includes("|")) continue;
+  for (const [histogramKey, sum] of latencySums.entries()) {
+    const count = latencyCounts.get(histogramKey) ?? 0;
     const [operation, provider] = histogramKey.split("|");
     for (const bucket of latencyBuckets) {
       const bucketCount = latencyCounts.get(`${histogramKey}|${bucket}`) ?? 0;
