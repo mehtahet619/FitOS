@@ -54,7 +54,8 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 
 | Var | Purpose |
 |---|---|
-| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |\n| `GYM_CROWD_DATASET_INGEST_KEY` | Secret required by the official crowd dataset ingestion endpoint. Never expose it in the frontend. |
+| `DATABASE_URL` | `file:./dev.db` by default. Swap `schema.sql` provider conventions to Postgres for production. |
+| `GYM_CROWD_DATASET_INGEST_KEY` | Secret required by the official crowd dataset ingestion endpoint. Never expose it in the frontend. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Change these before any real deployment. |
 | `OTP_HASH_SECRET` | HMAC key used to hash one-time codes. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
@@ -63,8 +64,11 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Atomic shared OTP rate-limit store. |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email delivery through Resend's HTTPS API. |
 | `AI_PROVIDER` | `template` (default, no key needed) — see `src/ai/provider.ts` to add a real one. |
-| `MAPS_PROVIDER` | `osm` (default) or optional `apify_swiggy` for verified menu extraction. |\n| `PHOTON_BASE_URL` | Photon geocoding/autocomplete endpoint. |\n| `OSRM_BASE_URL` | OSRM driving-route endpoint. |
-| `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE` | `true` to use the All Gym Equipment YOLOv8n Workflow for sampled live webcam frames. Takes precedence over the older SAM3 workflow flag. |\n| `ROBOFLOW_WORKFLOW_MODE` | `true` to use the existing SAM3 serverless workflow when the gym-equipment flag is off. |
+| `MAPS_PROVIDER` | `osm` (default) or optional `apify_swiggy` for verified menu extraction. |
+| `PHOTON_BASE_URL` | Photon geocoding/autocomplete endpoint. |
+| `OSRM_BASE_URL` | OSRM driving-route endpoint. |
+| `ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE` | `true` to use the All Gym Equipment YOLOv8n Workflow for sampled live webcam frames. Takes precedence over the older SAM3 workflow flag. |
+| `ROBOFLOW_WORKFLOW_MODE` | `true` to use the existing SAM3 serverless workflow when the gym-equipment flag is off. |
 | `ROBOFLOW_API_KEY` | Your Roboflow workspace API key. Get from https://app.roboflow.com/settings/api |
 | `APIFY_API_KEY` | Your Apify account API token. Get from https://apify.com — required for Swiggy integration. |
 
@@ -111,7 +115,8 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 - `GET /nutrition/today` (auth)
 
 ### Food discovery
-- `GET /food/nearby?lat=&lng=&foodId=` (auth) — nearby OSM restaurants/cafes/food shops with coordinates and Haversine distance; no fabricated ratings, opening status or menus\n- `POST /food/healthy-nearby` (auth) — dish-level recommendations only when a menu provider returns verified menu records; OSM place listings alone do not invent dishes
+- `GET /food/nearby?lat=&lng=&foodId=` (auth) — nearby OSM restaurants/cafes/food shops with coordinates and Haversine distance; no fabricated ratings, opening status or menus
+- `POST /food/healthy-nearby` (auth) — dish-level recommendations only when a menu provider returns verified menu records; OSM place listings alone do not invent dishes
 - `GET /food/search?q=` (auth)
 
 ### Progress
@@ -122,6 +127,7 @@ DATABASE_URL="tidb://..." npm run migrate:mysql:prod
 - `GET /gym/today` (auth)
 - `POST /gym/checkin` (auth) `{ method: "qr" | "manual" }` — **409 if already checked in today** (one entry per user per calendar date, enforced by a DB unique constraint)
 - `GET /gym/history` (auth)
+- `GET /gym/route?fromLat=&fromLng=&toLat=&toLng=&profile=driving|walking|cycling` (auth) — OSRM-compatible GeoJSON route, distance and duration
 
 ## Design notes
 
@@ -170,7 +176,29 @@ cp runs/detect/train/weights/best.pt backend/models/best.pt
 Detection only determines available equipment; target muscles and exercise
 selection remain owned by the existing workout-plan and CSV flow.
 
-### All Gym Equipment Workflow (live webcam frames)\n\nFitOS can use the published `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic` workflow for live browser-camera detection. The workflow definition declares one `image` input and a `predictions` JSON output. The browser requests camera access and samples frames sequentially through the existing authenticated `POST /equipment/detect` route; each frame is sent to Roboflow from the backend. No Roboflow key is exposed to the browser and users do not need to upload photos. This is sampled live-frame inference over the Workflow HTTP endpoint, not a persistent WebRTC session.\n\nEnable it in `backend/.env` or the backend hosting environment:\n\n```env\nROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE="true"\nROBOFLOW_API_KEY="your_api_key_here"\nEQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"\n```\n\nThe gym-equipment flag takes precedence over `ROBOFLOW_WORKFLOW_MODE`; the existing SAM3 provider remains available by leaving the new flag `false`. Frame requests are sequential, use a 30-second timeout, and retry transient failures at most twice. Results are mapped to canonical equipment already in the FitOS database; unknown model classes are ignored.\n\nSmoke test from `backend/` (requires `ROBOFLOW_API_KEY`):\n\n```bash\nnpx ts-node scripts/smoke-gym-equipment-workflow.ts\n```\n\nThe smoke test checks the declared output structure using a public sample gym image. A zero-detection result can still mean the endpoint ran successfully; validate with your own camera scene.\n\n### Roboflow SAM3 Workflow (opt-in)
+### All Gym Equipment Workflow (live webcam frames)
+
+FitOS can use the published `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic` workflow for live browser-camera detection. The workflow definition declares one `image` input and a `predictions` JSON output. The browser requests camera access and samples frames sequentially through the existing authenticated `POST /equipment/detect` route; each frame is sent to Roboflow from the backend. No Roboflow key is exposed to the browser and users do not need to upload photos. This is sampled live-frame inference over the Workflow HTTP endpoint, not a persistent WebRTC session.
+
+Enable it in `backend/.env` or the backend hosting environment:
+
+```env
+ROBOFLOW_GYM_EQUIPMENT_WORKFLOW_MODE="true"
+ROBOFLOW_API_KEY="your_api_key_here"
+EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"
+```
+
+The gym-equipment flag takes precedence over `ROBOFLOW_WORKFLOW_MODE`; the existing SAM3 provider remains available by leaving the new flag `false`. Frame requests are sequential, use a 30-second timeout, and retry transient failures at most twice. Results are mapped to canonical equipment already in the FitOS database; unknown model classes are ignored.
+
+Smoke test from `backend/` (requires `ROBOFLOW_API_KEY`):
+
+```bash
+npx ts-node scripts/smoke-gym-equipment-workflow.ts
+```
+
+The smoke test checks the declared output structure using a public sample gym image. A zero-detection result can still mean the endpoint ran successfully; validate with your own camera scene.
+
+### Roboflow SAM3 Workflow (opt-in)
 
 Integrates the Roboflow serverless workflow for real-time gym equipment detection from images.
 
@@ -294,7 +322,9 @@ The smoke test makes a real Roboflow inference request using a public sample ima
 
 ### Gym Crowd Intelligence
 
-City autocomplete uses Photon backed by OpenStreetMap: `GET /gym/cities?q=Bharuch`. Gym discovery geocodes the selected city and queries Overpass for mapped fitness centres and gyms: `GET /gym/search?city=Bharuch&q=gyms`. Both endpoints retain their existing response shape and include OpenStreetMap attribution. OSM ratings and opening hours are not assumed when the source does not provide them.\n\nRouting is available through `GET /gym/route?fromLat=23.0&fromLng=72.5&toLat=22.3&toLng=73.1&profile=driving|walking|cycling`. It returns OSRM-compatible GeoJSON geometry, distance and duration. The public demo routing endpoints have availability and fair-use limits; route profile support depends on the public instance.
+City autocomplete uses Photon backed by OpenStreetMap: `GET /gym/cities?q=Bharuch`. Gym discovery geocodes the selected city and queries Overpass for mapped fitness centres and gyms: `GET /gym/search?city=Bharuch&q=gyms`. Both endpoints retain their existing response shape and include OpenStreetMap attribution. OSM ratings and opening hours are not assumed when the source does not provide them.
+
+Routing is available through `GET /gym/route?fromLat=23.0&fromLng=72.5&toLat=22.3&toLng=73.1&profile=driving|walking|cycling`. It returns OSRM-compatible GeoJSON geometry, distance and duration. The public demo routing endpoints have availability and fair-use limits; route profile support depends on the public instance.
 
 **Training/evaluation separation**
 - The predictor trains only from rows in GymCrowdOfficialObservation, populated through the authenticated-by-secret dataset ingestion endpoint.
