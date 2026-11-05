@@ -1,3 +1,5 @@
+import { requestAiText } from "./gateway";
+import { HealthyDishRankingSchema } from "./schemas";
 /**
  * AI provider abstraction for FitOS.
  * Nearby-food ranking uses OpenRouter first and Anthropic Claude as fallback.
@@ -86,8 +88,8 @@ function configuredProviders(): Provider[] {
 }
 
 function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnalysis[] {
-  const parsed = JSON.parse(raw) as { recommendations?: unknown };
-  if (!Array.isArray(parsed.recommendations)) throw new Error("LLM returned no recommendations array.");
+  const parsedJson: unknown = JSON.parse(raw);
+  const parsed = HealthyDishRankingSchema.parse(parsedJson);
   const known = new Map(dishes.map((dish) => [dish.dishId, dish]));
   const seen = new Set<string>();
   const results: HealthyDishAnalysis[] = [];
@@ -123,26 +125,28 @@ async function analyzeWithProvider(provider: Provider, dishes: HealthyDishInput[
     "Use only the supplied dish records and IDs. Never create, rename, or infer a dish, restaurant, price, distance, calories, protein, or other nutrition value.",
     "Prioritize protein only when protein data is explicitly present; consider known calories/macros, ingredient descriptions, and cooking style when supplied.",
     "Missing nutrition is unknown, not zero. Do not claim a dish is high-protein when protein grams are absent.",
-    "Use the user preferences as ranking context. Never assume ingredients or allergen absence from a dish name; mark uncertainty in reasons and do not make medical safety guarantees.",
-    "Return valid JSON only, with a top-level recommendations array. Each item must contain dishId (string), healthScore (number), and reasons (array of strings).",
+    "Use user preferences as ranking context. Never assume ingredients or allergen absence from a dish name; mark uncertainty and do not make medical safety guarantees.",
+    "Return JSON only with a top-level recommendations array. Each item must contain dishId, healthScore, and reasons.",
   ].join(" ");
-  const user = JSON.stringify({ task: "Rank the supplied dishes from most fitness-friendly to least fitness-friendly. Scores are comparative, not medical advice.", preferences: preferences || {}, dishes });
-  const anthropic = provider.name === "Anthropic";
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(anthropic ? { "x-api-key": provider.apiKey, "anthropic-version": "2023-06-01" } : { Authorization: `Bearer ${provider.apiKey}` }),
-    },
-    body: JSON.stringify(anthropic
-      ? { model: provider.model, max_tokens: 1800, temperature: 0.1, system, messages: [{ role: "user", content: user }] }
-      : { model: provider.model, max_tokens: 1800, temperature: 0.1, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
-    signal: AbortSignal.timeout(Math.max(1, timeoutMs)),
+  const user = JSON.stringify({
+    task: "Rank supplied dishes from most fitness-friendly to least fitness-friendly. Scores are comparative, not medical advice.",
+    preferences: preferences || {},
+    dishes,
   });
-  if (!response.ok) throw new Error(`${provider.name} request failed with HTTP ${response.status}`);
-  const payload = await response.json() as any;
-  const raw = anthropic ? payload.content?.find((block: any) => block.type === "text")?.text : payload.choices?.[0]?.message?.content;
-  if (typeof raw !== "string" || !raw.trim()) throw new Error(`${provider.name} returned an empty response`);
+  const raw = await requestAiText({
+    operation: "food.rank",
+    provider,
+    system,
+    user,
+    maxTokens: 1800,
+    temperature: 0.1,
+    json: true,
+    timeoutMs,
+    // Provider failover already supplies the retry path here. Keep one shared
+    // 9-second budget across OpenRouter and Anthropic instead of retrying each
+    // provider for its full per-provider timeout.
+    retries: 0,
+  });
   return parseAnalyses(raw, dishes);
 }
 

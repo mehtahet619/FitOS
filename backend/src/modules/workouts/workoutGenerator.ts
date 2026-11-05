@@ -312,15 +312,70 @@ export async function generateWorkout(
       throw new Error(`No bundled catalogue exercises match the requested muscles and available equipment (requested ${requestedCount}).`);
     }
   }
+  // Deduplicate AI output first, then fill any missing slots from the trusted
+  // catalogue. Duplicate model suggestions must never make a valid workout fail.
   const seenMovementFamilies = new Set<string>();
+  const seenExerciseNames = new Set<string>();
   const selectedExercises = aiExercises.filter((exercise) => {
-    const familyKey = exerciseFamilyKey(exercise.exercise);
-    if (seenMovementFamilies.has(familyKey)) return false;
+    const nameKey = normalizeExerciseValue(exercise.exercise);
+    const familyKey = normalizeExerciseValue(exerciseFamilyKey(exercise.exercise));
+    if (!nameKey || !familyKey || seenExerciseNames.has(nameKey) || seenMovementFamilies.has(familyKey)) return false;
+    seenExerciseNames.add(nameKey);
     seenMovementFamilies.add(familyKey);
     return true;
   });
+
+  if (selectedExercises.length < requestedCount) {
+    const missingCount = requestedCount - selectedExercises.length;
+    console.warn(
+      `[workouts] AI supplied ${selectedExercises.length}/${requestedCount} unique movement patterns; filling ${missingCount} slot(s) from the trusted catalogue.`
+    );
+    const catalogue = exerciseRecommendationService.getRecommendedExercises({
+      targetMuscles: unitMuscles,
+      sessionDurationMinutes: durationMin,
+      requestedCount: missingCount,
+      equipmentMode,
+      availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
+      excludedExerciseNames: [
+        ...(options?.excludedExerciseNames ?? []),
+        ...selectedExercises.map((exercise) => exercise.exercise),
+      ],
+      excludedExerciseFamilyKeys: [
+        ...(options?.excludedExerciseFamilyKeys ?? []),
+        ...selectedExercises.map((exercise) => exerciseFamilyKey(exercise.exercise)),
+      ],
+      selectionSeed: options?.selectionSeed,
+    });
+
+    for (const exercise of catalogue.exercises) {
+      const nameKey = normalizeExerciseValue(exercise.exercise);
+      const familyKey = normalizeExerciseValue(exerciseFamilyKey(exercise.exercise));
+      if (!nameKey || !familyKey || seenExerciseNames.has(nameKey) || seenMovementFamilies.has(familyKey)) continue;
+      seenExerciseNames.add(nameKey);
+      seenMovementFamilies.add(familyKey);
+      selectedExercises.push({
+        sourceIndex: exercise.sourceIndex,
+        exercise: exercise.exercise,
+        machine: exercise.machine,
+        muscle: exercise.primaryMuscle,
+        primaryMuscle: exercise.primaryMuscle,
+        muscleCategories: exercise.muscleCategories,
+        timeTakenOneSet: exercise.timeTakenOneSet || "25-45 sec",
+        targetedMuscle: exercise.targetedMuscle || exercise.primaryMuscle,
+        targetedMuscles: exercise.targetedMuscles.length ? exercise.targetedMuscles : [exercise.primaryMuscle],
+        instructions: "Use controlled form and a comfortable range of motion. Stop if you feel pain.",
+        sets: 3,
+        repRangeLow: 8,
+        repRangeHigh: 12,
+      });
+      if (selectedExercises.length >= requestedCount) break;
+    }
+  }
+
   if (selectedExercises.length !== requestedCount) {
-    throw new Error("OpenRouter returned duplicate movement patterns. Please retry workout generation.");
+    throw new Error(
+      `FitOS could only find ${selectedExercises.length} unique compatible exercises; ${requestedCount} were requested. Add more exercises or equipment to your catalogue.`
+    );
   }
   const exerciseIds = await ensureExerciseRows(database, selectedExercises);
   const generated = await Promise.all(selectedExercises.map(async (exercise): Promise<GeneratedExercise> => {
