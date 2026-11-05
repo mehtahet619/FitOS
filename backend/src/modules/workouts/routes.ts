@@ -821,7 +821,18 @@ workoutRouter.post("/:id/complete-set", async (req: AuthedRequest, res) => {
   return res.status(201).json(await db.get(`SELECT * FROM WorkoutSet WHERE id = ?`, setId));
 });
 
+const finishWorkoutSchema = z.object({
+  sets: z.array(z.object({
+    workoutExerciseId: z.string().min(1),
+    setNumber: z.number().int().positive(),
+    reps: z.number().int().nonnegative(),
+    weightKg: z.number().nonnegative().nullable().optional(),
+  })).default([]),
+});
+
 workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
+  const parsed = finishWorkoutSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "Invalid workout completion data." });
   const userId = req.userId!;
   const workout = await db.get<any>(`SELECT * FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== userId)
@@ -829,12 +840,48 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
   if (workout.status === "completed")
     return res.status(409).json({ error: "This workout has already been completed." });
 
-  const ts = nowIso();
-  await db.run(`UPDATE Workout SET status = 'completed', completedAt = ? WHERE id = ?`, ts, req.params.id);
-  await db.run(
-    `UPDATE WorkoutExercise SET status = 'completed' WHERE workoutId = ? AND status = 'pending'`,
+  const workoutExercises = await db.all<any>(
+    `SELECT id, exerciseId, targetSets FROM WorkoutExercise WHERE workoutId = ?`,
     req.params.id
   );
+  const exerciseById = new Map(workoutExercises.map((exercise: any) => [exercise.id, exercise]));
+  const seenSets = new Set<string>();
+  for (const set of parsed.data.sets) {
+    const exercise: any = exerciseById.get(set.workoutExerciseId);
+    if (!exercise) return res.status(400).json({ error: "A logged set does not belong to this workout." });
+    if (set.setNumber > exercise.targetSets) return res.status(400).json({ error: "A logged set exceeds its exercise target." });
+    const key = `${set.workoutExerciseId}:${set.setNumber}`;
+    if (seenSets.has(key)) return res.status(400).json({ error: "Duplicate set numbers were submitted." });
+    seenSets.add(key);
+  }
+
+  const ts = nowIso();
+  const persistWorkout = async (connection: typeof db) => {
+    for (const set of parsed.data.sets) {
+      const exercise: any = exerciseById.get(set.workoutExerciseId);
+      const existing = await connection.get<any>(
+        `SELECT id FROM WorkoutSet WHERE workoutExerciseId = ? AND setNumber = ? AND completed = 1 LIMIT 1`,
+        set.workoutExerciseId, set.setNumber
+      );
+      if (existing) continue;
+      await connection.run(
+        `INSERT INTO WorkoutSet (id, workoutExerciseId, setNumber, weightKg, reps, completed, createdAt) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+        uuidv4(), set.workoutExerciseId, set.setNumber, set.weightKg ?? null, set.reps, ts
+      );
+      await connection.run(
+        `INSERT INTO WorkoutHistory (id, userId, exerciseId, weightKg, reps, volumeKg, recordedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        uuidv4(), userId, exercise.exerciseId, set.weightKg ?? null, set.reps,
+        set.weightKg != null && set.reps ? set.weightKg * set.reps : null, ts
+      );
+    }
+    await connection.run(`UPDATE Workout SET status = 'completed', completedAt = ? WHERE id = ? AND status = 'pending'`, ts, req.params.id);
+    await connection.run(
+      `UPDATE WorkoutExercise SET status = 'completed' WHERE workoutId = ? AND status = 'pending'`,
+      req.params.id
+    );
+  };
+  if (db.transaction) await db.transaction(persistWorkout);
+  else await persistWorkout(db);
 
   const state = await getPlanState(db, userId);
   let completionResult = null;

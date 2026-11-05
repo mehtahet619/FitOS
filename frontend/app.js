@@ -1974,6 +1974,12 @@ async function fallbackExerciseDemoPlayback(player, button, exercise, demo) {
     "Demonstration currently unavailable.");
 }
 
+const pendingWorkoutSets = new Map();
+
+function getPendingWorkoutSets(workoutId, workoutExerciseId) {
+  return pendingWorkoutSets.get(workoutId)?.get(workoutExerciseId) || [];
+}
+
 function renderWorkout(workout, plan) {
   const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
   const el = $("workout-content");
@@ -1986,7 +1992,11 @@ function renderWorkout(workout, plan) {
   }
   const progress = exercises.map((exercise) => {
     const targetSets = Math.max(1, Number(exercise.targetSets) || 1);
-    const completedSetRows = Array.isArray(exercise.completedSets) ? exercise.completedSets : [];
+    const savedSetRows = Array.isArray(exercise.completedSets) ? exercise.completedSets : [];
+    const localSetRows = getPendingWorkoutSets(workout.id, exercise.workoutExerciseId);
+    const completedSetRows = [...savedSetRows, ...localSetRows.filter((localSet) =>
+      !savedSetRows.some((savedSet) => Number(savedSet.setNumber) === Number(localSet.setNumber))
+    )].sort((left, right) => Number(left.setNumber) - Number(right.setNumber));
     const completedSetNumbers = new Set(completedSetRows.map((set) => Number(set.setNumber)));
     const nextSetNumber = Array.from({ length: targetSets }, (_, index) => index + 1)
       .find((setNumber) => !completedSetNumbers.has(setNumber));
@@ -2181,7 +2191,7 @@ function renderWorkout(workout, plan) {
 
   const logSetButton = $("log-workout-set");
   if (logSetButton && active) {
-    logSetButton.addEventListener("click", async () => {
+    logSetButton.addEventListener("click", () => {
       const repsInput = $("workout-set-reps");
       const weightInput = $("workout-set-weight");
       const reps = Number(repsInput.value);
@@ -2190,21 +2200,22 @@ function renderWorkout(workout, plan) {
         showWorkoutNotice("Enter a valid rep count and a non-negative weight.", "error");
         return;
       }
-      logSetButton.disabled = true;
-      logSetButton.innerHTML = `<span class="spinner"></span> Saving set…`;
-      try {
-        await Api.post(`/workouts/${workout.id}/complete-set`, {
-          workoutExerciseId: active.exercise.workoutExerciseId,
-          setNumber: active.nextSetNumber,
-          reps,
-          ...(weightKg === undefined ? {} : { weightKg }),
-        });
-        await loadWorkout();
-      } catch (error) {
-        showWorkoutNotice(error.message, "error");
-        logSetButton.disabled = false;
-        logSetButton.textContent = "Log set · show me what's next";
-      }
+      const workoutSets = pendingWorkoutSets.get(workout.id) || new Map();
+      const exerciseSets = workoutSets.get(active.exercise.workoutExerciseId) || [];
+      if (exerciseSets.some((set) => Number(set.setNumber) === active.nextSetNumber)) return;
+      exerciseSets.push({
+        setNumber: active.nextSetNumber,
+        reps,
+        weightKg: weightKg === undefined ? null : weightKg,
+      });
+      workoutSets.set(active.exercise.workoutExerciseId, exerciseSets);
+      pendingWorkoutSets.set(workout.id, workoutSets);
+      const updatedExercises = workout.exercises.map((exercise) => exercise.workoutExerciseId === active.exercise.workoutExerciseId
+        ? { ...exercise, completedSets: [...(exercise.completedSets || []), ...exerciseSets.filter((set) =>
+            !(exercise.completedSets || []).some((saved) => Number(saved.setNumber) === Number(set.setNumber))
+          )] }
+        : exercise);
+      renderWorkout({ ...workout, exercises: updatedExercises }, plan);
     });
   }
 
@@ -2512,7 +2523,12 @@ function renderWorkout(workout, plan) {
       completeBtn.disabled = true;
       completeBtn.innerHTML = `<span class="spinner"></span> Saving workout…`;
       try {
-        await Api.post(`/workouts/${workout.id}/complete`, {});
+        const localSets = pendingWorkoutSets.get(workout.id) || new Map();
+        const sets = [...localSets.entries()].flatMap(([workoutExerciseId, exerciseSets]) =>
+          exerciseSets.map((set) => ({ workoutExerciseId, ...set }))
+        );
+        await Api.post(`/workouts/${workout.id}/complete`, { sets });
+        pendingWorkoutSets.delete(workout.id);
         await loadWorkout();
       } catch (error) {
         showWorkoutNotice(error.message, "error");
