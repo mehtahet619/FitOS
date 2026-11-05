@@ -88,7 +88,7 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
   }).sort((x, y) => y.combinedScore - x.combinedScore || x.distanceKm - y.distanceKm).slice(0, 20);
   return res.json({ success: true, configured: true, cacheHit, restaurantsFound: places.length, dishesFound: dishes.length,
     recommendations, ranking: "80% dish health score + 20% proximity score (within 10 km)",
-    dataSource: "live provider menu data; nutrition estimates are labeled" });
+    dataSource: "verified menu provider data; nutrition estimates are labeled" });
 });
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
