@@ -407,76 +407,7 @@
       <div id="workout-scan-area"></div>
       <div id="workout-content"><div class="empty-state">Loading…</div></div>
 
-      <!-- Vision Coach tools at the bottom of Workout -->
-      <div id="fitos-vision-tools" class="fitos-vision-tools">
-        <div class="header">
-          <h1>Vision Coach</h1>
-          <p>CV rep counter, form scoring, and model gates</p>
-        </div>
-  
-        <div class="segment" id="vision-segment">
-          <button class="active" data-exercise="squat">✓ Squat</button>
-          <button data-exercise="curl"> Curl</button>
-          <button data-exercise="pushup"> Push-up</button>
-        </div>
-  
-        <div class="vision-stage">
-        <section id="vision-demo" class="exercise-demonstration" hidden aria-label="Selected exercise demonstration">
-          <div class="exercise-demonstration-label" id="vision-demo-label">Exercise Demonstration</div>
-          <button id="vision-demo-btn" hidden type="button" aria-label="Load exercise demonstration"></button>
-          <div id="vision-demo-player" class="exercise-demo-player" hidden aria-live="polite"></div>
-        </section>
-  
-        <div class="camera-panel" id="camera-panel">
-          <video id="vision-video" autoplay playsinline muted style="display:none;"></video>
-          <canvas id="vision-canvas"></canvas>
-          <div class="camera-placeholder-text" id="camera-placeholder">
-            Tap "Start Camera" to begin pose analysis in your browser.
-          </div>
-          <div class="camera-feedback" id="camera-feedback" style="display:none;"></div>
-        </div>
-  
-        </div>
-  
-        <div class="card" id="equipment-recognition-card" style="display:none;">
-          <div class="card-label">Equipment recognition</div>
-          <div id="equipment-recognition-status">Waiting for a frame…</div>
-          <div id="equipment-recognition-results"></div>
-          <div id="equipment-recommendations"></div>
-        </div>
-  
-        <div class="card" id="crowd-analysis-card">
-          <div class="card-label">Crowd analysis</div>
-          <p class="card-sub">A separate live view powered by Roboflow people counting. It estimates the number of people visible in the camera frame.</p>
-          <div class="card-grid-2">
-            <div><div class="card-sub">People detected</div><div class="card-value" id="crowd-people-count">—</div></div>
-            <div><div class="card-sub">Crowd level</div><div class="card-value" id="crowd-level">Waiting</div></div>
-          </div>
-          <div id="crowd-analysis-status" class="card-sub" aria-live="polite">Starts automatically when Live Scan camera starts.</div>
-          <div id="crowd-analysis-results"></div>
-        </div>
-  
-        <button class="btn btn-mint" id="vision-start-btn" style="margin-bottom:14px;">Start Camera</button>
-  
-        <div class="card-grid-2">
-          <div class="card">
-            <div class="card-label">⇄ Reps</div>
-            <div class="card-value" id="vision-reps">0</div>
-          </div>
-          <div class="card">
-            <div class="card-label">∠ Angle</div>
-            <div class="card-value" id="vision-angle">0 deg</div>
-          </div>
-        </div>
-        <button class="btn btn-outline" id="vision-reset-btn">Reset rep count</button>
-  
-        <div class="card" id="form-comparison-card" style="display:none;">
-          <div class="card-label">Form comparison</div>
-          <div id="form-comparison-status"></div>
-          <div id="form-comparison-results"></div>
-          <button class="btn btn-outline" id="form-comparison-retry-btn" style="display:none;">Retry analysis</button>
-        </div>
-      </div>
+      
   
     </div>
 
@@ -566,6 +497,6 @@
 <script src="nutrition-guidance.js?v=fitos-nutrition-guidance-v2"></script>
 <script src="barcode-scanner.js?v=fitos-barcode-zxing-v1"></script>
 <script src="food-tracker.js?v=fitos-smart-food-search-v3"></script>
-<script type="module" src="vision.js"></script>
+
 </body>
 </html>
