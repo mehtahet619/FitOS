@@ -175,13 +175,38 @@ export function registerGymIntelligenceRoutes(router: Router): void {
     const city = typeof req.query.city === "string" ? req.query.city.trim() : "";
     const query = typeof req.query.q === "string" ? req.query.q.trim() : "gyms";
     if (city.length < 2) return res.status(400).json({ error: "Select a city before searching for gyms." });
-    const places = await searchOsmGyms(city, query || "gyms");
-    const gyms: any[] = [];
-    for (const place of places) {
-      const gym = await upsertPlace(place, city);
-      gyms.push({ ...gym, distanceKm: place.distanceKm, source: "openstreetmap", latitude: place.latitude, longitude: place.longitude, openingHoursText: place.openingHours });
+    try {
+      const places = await searchOsmGyms(city, query || "gyms");
+      const gyms: any[] = [];
+      for (const place of places) {
+        const gym = await upsertPlace(place, city);
+        gyms.push({ ...gym, distanceKm: place.distanceKm, source: "openstreetmap", latitude: place.latitude, longitude: place.longitude, openingHoursText: place.openingHours });
+      }
+      return res.json({ configured: true, provider: "overpass_openstreetmap", attribution: "© OpenStreetMap contributors", city, gyms });
+    } catch (providerError) {
+      // Public Overpass instances can time out or rate-limit requests. Do not
+      // fail the entire gym search when FitOS already has gyms saved locally.
+      console.warn("[gym/search] OpenStreetMap discovery unavailable; using saved gyms.", providerError);
+      const savedGyms = await db.all<any>(
+        "SELECT * FROM Gym WHERE LOWER(city) = LOWER(?) ORDER BY name ASC LIMIT 50",
+        city
+      );
+      return res.json({
+        configured: true,
+        provider: "database_fallback",
+        attribution: "© OpenStreetMap contributors",
+        city,
+        gyms: savedGyms.map((gym) => ({
+          ...gym,
+          distanceKm: null,
+          source: "fitos_database",
+          latitude: gym.latitude ?? null,
+          longitude: gym.longitude ?? null,
+          openingHoursText: null,
+        })),
+        warning: "Live gym discovery is temporarily unavailable. Showing gyms already saved in FitOS.",
+      });
     }
-    return res.json({ configured: true, provider: "overpass_openstreetmap", attribution: "© OpenStreetMap contributors", city, gyms });
   });
 
   router.get("/route", async (req, res) => {
