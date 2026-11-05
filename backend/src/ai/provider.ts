@@ -1,5 +1,5 @@
 import { requestAiText } from "./gateway";
-import { z } from "zod";
+import { HealthyDishRankingSchema } from "./schemas";
 /**
  * AI provider abstraction for FitOS.
  * Nearby-food ranking uses OpenRouter first and Anthropic Claude as fallback.
@@ -87,17 +87,9 @@ function configuredProviders(): Provider[] {
   return providers;
 }
 
-const HealthyDishResponseSchema = z.object({
-  recommendations: z.array(z.object({
-    dishId: z.string().min(1),
-    healthScore: z.number().finite(),
-    reasons: z.array(z.string()).optional(),
-  }).passthrough()).min(1),
-}).passthrough();
-
 function parseAnalyses(raw: string, dishes: HealthyDishInput[]): HealthyDishAnalysis[] {
   const parsedJson: unknown = JSON.parse(raw);
-  const parsed = HealthyDishResponseSchema.parse(parsedJson);
+  const parsed = HealthyDishRankingSchema.parse(parsedJson);
   const known = new Map(dishes.map((dish) => [dish.dishId, dish]));
   const seen = new Set<string>();
   const results: HealthyDishAnalysis[] = [];
