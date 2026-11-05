@@ -588,7 +588,7 @@ function fillProfileForm(profile) {
 }
 
 async function loadProfileForScreen({ editable = false } = {}) {
-  setProfileEditMode(true);
+  setProfileEditMode(editable);
   try {
     const profile = await Api.get("/user/profile");
     profileSnapshot = { ...profile };
