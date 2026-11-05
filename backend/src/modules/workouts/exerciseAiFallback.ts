@@ -1,3 +1,4 @@
+import { AiExerciseCandidateSchema, AiExerciseGenerationSchema } from "../../ai/schemas";
 import { requestAiText } from "../../ai/gateway";
 function normalizeExerciseValue(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
@@ -85,8 +86,9 @@ function parseJson(content: string): unknown {
 }
 
 function validatedExercises(content: string, input: ExerciseFallbackInput): RecommendedExercise[] {
-  const payload = parseJson(content) as { exercises?: unknown };
-  if (!Array.isArray(payload.exercises)) throw new Error("Provider response is missing exercises.");
+  const parsedPayload = AiExerciseGenerationSchema.safeParse(parseJson(content));
+  if (!parsedPayload.success) throw new Error(`Provider response has an invalid exercise list: ${parsedPayload.error.message}`);
+  const payload = parsedPayload.data;
   const targetByKey = new Map(input.targetMuscles.map((muscle) => [normalizeExerciseValue(muscle), muscle]));
   const equipmentByAlias = new Map<string, string>();
   for (const option of input.equipment) {
@@ -100,9 +102,9 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
   const result: RecommendedExercise[] = [];
 
   for (const item of payload.exercises) {
-    if (!item || typeof item !== "object") continue;
-    const candidate = item as Record<string, unknown>;
-    if (typeof candidate.exercise !== "string" || typeof candidate.machine !== "string" || typeof candidate.muscle !== "string") continue;
+    const candidateResult = AiExerciseCandidateSchema.safeParse(item);
+    if (!candidateResult.success) continue;
+    const candidate = candidateResult.data;
     const exercise = candidate.exercise.trim();
     const nameKey = normalizeExerciseValue(exercise);
     const muscle = targetByKey.get(normalizeExerciseValue(candidate.muscle));
