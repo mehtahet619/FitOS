@@ -22,9 +22,9 @@ export interface NearbyPlace {
   id: string;
   name: string;
   distanceKm: number;
-  rating: number;
+  rating: number | null;
   priceRange: string;
-  isOpenNow: boolean;
+  isOpenNow: boolean | null;
   /** Coordinates are optional because the Swiggy actor returns distance but not geocoded restaurant coordinates. */
   latitude?: number;
   longitude?: number;
@@ -99,9 +99,9 @@ class OpenStreetMapFoodProvider implements MapsProvider {
       id: place.id,
       name: place.name,
       distanceKm: place.distanceKm,
-      rating: 0,
+      rating: null,
       priceRange: "Unknown",
-      isOpenNow: false,
+      isOpenNow: null,
       latitude: place.latitude,
       longitude: place.longitude,
       dishes: [],
