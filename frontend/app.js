@@ -3647,6 +3647,7 @@ function renderGymScan(equipment, plan) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const rect = toggle.getBoundingClientRect();
     pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    try { toggle.setPointerCapture(event.pointerId); } catch {}
     dragMoved = false;
     suppressNextClick = false;
   });
