@@ -10,7 +10,16 @@
 <meta name="apple-mobile-web-app-title" content="FitOS" />
 <meta name="description" content="Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FitOS." />
 <meta name="robots" content="index, follow, max-image-preview:large" />
-<meta name="color-scheme" content="light" />
+<meta name="color-scheme" content="light dark" />
+<script>
+  try {
+    const savedTheme = localStorage.getItem("fitos-theme");
+    document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
+    document.documentElement.style.colorScheme = savedTheme === "dark" ? "dark" : "light";
+  } catch {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
 <link rel="canonical" href="https://adaptive-fit-web.onrender.com/" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="FitOS" />
