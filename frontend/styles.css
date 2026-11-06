@@ -2620,3 +2620,109 @@ html[data-theme="dark"] .theme-toggle {
   background: rgba(32, 41, 35, .97);
   border-color: #465349;
 }
+
+
+/* ---------- Final component-level theme coverage ---------- */
+/* Scoped overrides win over legacy screen-specific colors without changing layout. */
+html[data-theme="light"] #screen-gym .card,
+html[data-theme="light"] #screen-gym-scan .card,
+html[data-theme="light"] #screen-gym-scan .food-tool-card,
+html[data-theme="light"] #screen-gym .gym-intelligence-card {
+  background:#fff !important; color:#17211b !important; border-color:#e2e7e1 !important;
+}
+html[data-theme="dark"] #screen-gym .card,
+html[data-theme="dark"] #screen-gym-scan .card,
+html[data-theme="dark"] #screen-gym-scan .food-tool-card,
+html[data-theme="dark"] #screen-gym .gym-intelligence-card {
+  background:#1a211d !important; color:#edf3ee !important; border-color:#303b34 !important;
+  box-shadow:0 2px 14px rgba(0,0,0,.22) !important;
+}
+html[data-theme="dark"] #screen-gym .card-label,
+html[data-theme="dark"] #screen-gym .form-label,
+html[data-theme="dark"] #screen-gym strong,
+html[data-theme="dark"] #screen-gym h2,
+html[data-theme="dark"] #screen-gym h3,
+html[data-theme="dark"] #screen-gym summary,
+html[data-theme="dark"] #screen-gym-scan h1,
+html[data-theme="dark"] #screen-gym-scan h2,
+html[data-theme="dark"] #screen-gym-scan h3,
+html[data-theme="dark"] #screen-gym-scan label { color:#edf3ee !important; }
+html[data-theme="dark"] #screen-gym .card-sub,
+html[data-theme="dark"] #screen-gym p,
+html[data-theme="dark"] #screen-gym details,
+html[data-theme="dark"] #screen-gym-scan .card-sub,
+html[data-theme="dark"] #screen-gym-scan p { color:#a0aaa3; }
+html[data-theme="dark"] #screen-gym .input,
+html[data-theme="dark"] #screen-gym input,
+html[data-theme="dark"] #screen-gym select,
+html[data-theme="dark"] #screen-gym-scan .input,
+html[data-theme="dark"] #screen-gym-scan input,
+html[data-theme="dark"] #screen-gym-scan select,
+html[data-theme="dark"] #screen-gym-scan textarea {
+  color:#edf3ee !important; background:#151c18 !important; border-color:#3b493f !important;
+}
+html[data-theme="dark"] #screen-gym input::placeholder,
+html[data-theme="dark"] #screen-gym-scan input::placeholder { color:#a0aaa3 !important; opacity:1; }
+
+/* Rewards and friends leaderboard */
+html[data-theme="light"] .fitos-private-leaderboard h3,
+html[data-theme="light"] .fitos-friend-name { color:#202923 !important; }
+html[data-theme="dark"] .fitos-private-leaderboard h3,
+html[data-theme="dark"] .fitos-friend-name { color:#edf3ee !important; }
+html[data-theme="dark"] .fitos-gamification-card,
+html[data-theme="dark"] .fitos-friend-card,
+html[data-theme="dark"] .fitos-friends-empty {
+  background:#1a211d !important; color:#edf3ee !important; border-color:#303b34 !important;
+}
+html[data-theme="dark"] .fitos-friend-card.is-you {
+  background:linear-gradient(145deg,#202923 0%,#17221c 100%) !important; border-color:#42634f !important;
+}
+html[data-theme="dark"] .fitos-friend-stats { color:#a0aaa3 !important; border-color:#303b34 !important; }
+html[data-theme="dark"] .fitos-gamification-eyebrow,
+html[data-theme="dark"] .fitos-gamification-level,
+html[data-theme="dark"] .fitos-gamification-next,
+html[data-theme="dark"] .fitos-gamification-rules,
+html[data-theme="dark"] .fitos-gamification-note { color:#a0aaa3 !important; }
+html[data-theme="dark"] .fitos-gamification-rules summary { color:#edf3ee !important; }
+html[data-theme="dark"] .fitos-gamification-track { background:#303b34 !important; }
+
+/* Diet scanner and nutrition forms */
+html[data-theme="dark"] #screen-diet .food-tracker,
+html[data-theme="dark"] #screen-diet .food-tool-card {
+  background:#1a211d !important; color:#edf3ee !important; border-color:#303b34 !important;
+}
+html[data-theme="dark"] #screen-diet .food-tracker-heading h2,
+html[data-theme="dark"] #screen-diet .food-tool-card h3,
+html[data-theme="dark"] #screen-diet label,
+html[data-theme="dark"] #screen-diet .form-label { color:#edf3ee !important; }
+html[data-theme="dark"] #screen-diet .food-tracker-heading > p:last-child,
+html[data-theme="dark"] #screen-diet .food-tool-card p,
+html[data-theme="dark"] #screen-diet .food-data-note { color:#a0aaa3 !important; }
+html[data-theme="dark"] #screen-diet .food-tracker-tabs button:not(.active) {
+  background:#202923 !important; color:#edf3ee !important; border-color:#303b34 !important;
+}
+html[data-theme="dark"] #screen-diet input,
+html[data-theme="dark"] #screen-diet select,
+html[data-theme="dark"] #screen-diet textarea {
+  background:#151c18 !important; color:#edf3ee !important; border-color:#3b493f !important;
+}
+html[data-theme="dark"] #screen-diet input::placeholder,
+html[data-theme="dark"] #screen-diet textarea::placeholder { color:#a0aaa3 !important; opacity:1; }
+
+/* Loading/empty states and navigation use the same theme tokens. */
+html[data-theme="light"] .empty-state { color:#68756d; background:transparent; }
+html[data-theme="dark"] .empty-state { color:#a0aaa3; background:transparent; }
+html[data-theme="dark"] .banner:not(.banner-error):not(.banner-success) {
+  color:#cbd8cf; background:#202923; border-color:#303b34;
+}
+html[data-theme="light"] #bottom-nav { background:rgba(255,255,255,.97); border-color:#e2e7e1; }
+html[data-theme="dark"] #bottom-nav { background:rgba(24,31,27,.98); border-color:#303b34; }
+html[data-theme="dark"] #bottom-nav .nav-item { color:#a0aaa3; }
+html[data-theme="dark"] #bottom-nav .nav-item.active { color:#86e3c4; }
+html[data-theme="dark"] #bottom-nav .nav-item.active .nav-icon { background:#20392d; }
+html[data-theme="dark"] button:disabled,
+html[data-theme="dark"] input:disabled,
+html[data-theme="dark"] select:disabled,
+html[data-theme="dark"] textarea:disabled {
+  color:#849088; background-color:#202923; border-color:#303b34; opacity:1;
+}
