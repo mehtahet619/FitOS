@@ -2726,3 +2726,132 @@ html[data-theme="dark"] select:disabled,
 html[data-theme="dark"] textarea:disabled {
   color:#849088; background-color:#202923; border-color:#303b34; opacity:1;
 }
+
+
+/* ======================================================================
+   THEME ROOT-CAUSE FIX
+   The in-app shell (#main-app, .screen, .card, workout/gym/diet cards) was
+   styled with a separate, hard-coded --fitos-* palette. Those rules use an
+   #id selector, so they beat every `html[data-theme] ...` override and kept
+   the page LIGHT while text/cards switched to DARK-theme colours.
+   Fix: make the --fitos-* palette itself theme-aware, then re-colour the few
+   components that still hard-code light surfaces.
+   ====================================================================== */
+html[data-theme="light"] {
+  --fitos-app-bg: #f5f6f2;
+  --fitos-card: #ffffff;
+  --fitos-ink: #17231c;
+  --fitos-muted: #778078;
+  --fitos-border: #e7ebe5;
+  --fitos-line: #e3e9e3;
+  --fitos-surface: #fbfcfa;
+  --fitos-mint: #e5f4eb;
+}
+html[data-theme="dark"] {
+  --fitos-app-bg: #101512;
+  --fitos-card: #1a211d;
+  --fitos-ink: #edf3ee;
+  --fitos-muted: #a0aaa3;
+  --fitos-border: #303b34;
+  --fitos-line: #303b34;
+  --fitos-surface: #1a211d;
+  --fitos-mint: #20392d;
+}
+
+/* ---------- Dark: shell, headings, shared components ---------- */
+html[data-theme="dark"] #main-app,
+html[data-theme="dark"] #main-app > .screen,
+html[data-theme="dark"] #screen-workout { background: var(--fitos-app-bg); color: var(--fitos-ink); }
+html[data-theme="dark"] .screen .header h1,
+html[data-theme="dark"] #screen-workout .header h1,
+html[data-theme="dark"] #screen-diet .food-tracker-heading h2 { color: var(--fitos-ink); }
+html[data-theme="dark"] #screen-workout .header p,
+html[data-theme="dark"] #screen-workout .workout-cycle-line { color: var(--fitos-muted); }
+html[data-theme="dark"] #screen-gym .card-value,
+html[data-theme="dark"] #screen-gym-scan .card-value { color: #86e3c4; }
+
+html[data-theme="dark"] #main-app .btn-outline {
+  background: #202923; color: var(--fitos-ink); border-color: var(--fitos-border);
+}
+html[data-theme="dark"] #main-app .chip,
+html[data-theme="dark"] #main-app .chip-group button,
+html[data-theme="dark"] #main-app .equipment-chip,
+html[data-theme="dark"] #main-app .equipment-option,
+html[data-theme="dark"] #main-app .choice-chip {
+  background: #202923; color: #cbd8cf; border-color: var(--fitos-border);
+}
+html[data-theme="dark"] #main-app .chip.selected,
+html[data-theme="dark"] #main-app .chip.active,
+html[data-theme="dark"] #main-app .equipment-chip.selected,
+html[data-theme="dark"] #main-app .equipment-option.selected,
+html[data-theme="dark"] #main-app .choice-chip.selected {
+  background: #20392d; color: #9bd8bd; border-color: #2f5b45;
+}
+
+/* ---------- Dark: workout screen ---------- */
+html[data-theme="dark"] #screen-workout .workout-session-card,
+html[data-theme="dark"] #screen-workout .workout-session,
+html[data-theme="dark"] #screen-workout .workout-summary,
+html[data-theme="dark"] #screen-workout .workout-next-card,
+html[data-theme="dark"] #screen-workout .workout-plan-card,
+html[data-theme="dark"] #screen-workout .workout-next-plan-card {
+  background: var(--fitos-card); color: var(--fitos-ink); border-color: var(--fitos-border);
+  box-shadow: var(--shadow);
+}
+html[data-theme="dark"] #screen-workout .workout-day-complete-card {
+  background: linear-gradient(145deg, #1d3027 0%, #17261e 100%);
+  border-color: #2f5b45; color: var(--fitos-ink);
+}
+html[data-theme="dark"] #screen-workout .workout-day-complete-card h2 { color: #86e3c4; }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card .card-label span { color: #86e3c4; }
+html[data-theme="dark"] #screen-workout .workout-plan-card .card-label,
+html[data-theme="dark"] #screen-workout .workout-day-complete-card .card-label,
+html[data-theme="dark"] #screen-workout .workout-session h2,
+html[data-theme="dark"] #screen-workout .workout-session-card h2,
+html[data-theme="dark"] #screen-workout .workout-next-card h2 { color: var(--fitos-ink); }
+html[data-theme="dark"] #screen-workout .workout-session-top,
+html[data-theme="dark"] #screen-workout .workout-session-meta,
+html[data-theme="dark"] #screen-workout .workout-next-top { color: var(--fitos-muted); }
+html[data-theme="dark"] #screen-workout .workout-progress-track { background: #303b34; }
+html[data-theme="dark"] #screen-workout #workout-scan-btn {
+  background: #17261e; border-color: #2f5b45; color: var(--fitos-ink);
+}
+html[data-theme="dark"] #screen-workout .workout-plan-card .pill {
+  background: #3a2f17; color: #e8b862;
+}
+html[data-theme="dark"] .workout-missing-card {
+  background: linear-gradient(135deg, rgba(224,90,78,.16), #1a211d);
+  border-color: rgba(224,90,78,.35);
+}
+
+/* ---------- Dark: gym "choose your gym" modal ---------- */
+html[data-theme="dark"] .gym-choice-modal {
+  background: var(--fitos-card); color: var(--fitos-ink); border-color: var(--fitos-border);
+}
+html[data-theme="dark"] .gym-choice-modal h2 { color: var(--fitos-ink); }
+html[data-theme="dark"] .gym-choice-icon { background: #20392d; color: #86e3c4; }
+html[data-theme="dark"] .gym-choice-eyebrow { color: #86e3c4; }
+html[data-theme="dark"] .gym-choice-summary { background: #202923; color: var(--fitos-ink); }
+html[data-theme="dark"] .gym-choice-actions button {
+  background: #202923; color: var(--fitos-ink); border-color: var(--fitos-border);
+}
+html[data-theme="dark"] .gym-choice-actions .gym-choice-no:hover { background: #2a352d; }
+
+/* ---------- Dark: rewards / friends leftovers ---------- */
+html[data-theme="dark"] .fitos-friend-rank,
+html[data-theme="dark"] .fitos-friend-avatar { background: #20392d; color: #86e3c4; }
+html[data-theme="dark"] .fitos-gamification-share {
+  background: #20392d; color: #9bd8bd; border-color: #2f5b45;
+}
+html[data-theme="dark"] .fitos-gamification-rules li strong { color: #9bd8bd; }
+
+/* ---------- Dark: inline styles written by app.js template strings ---------- */
+html[data-theme="dark"] #main-app [style*="background:#fff8e1"] {
+  background: #33290f !important; border-color: #5b4a1c !important; color: #f1e3b5 !important;
+}
+html[data-theme="dark"] #main-app [style*="background:#f8f9fa"] {
+  background: #202923 !important; color: var(--fitos-ink) !important;
+}
+html[data-theme="dark"] #main-app [style*="background:#fee2e2"] {
+  background: #4a1f1f !important; color: #fca5a5 !important;
+}
