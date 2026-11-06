@@ -2448,3 +2448,175 @@ html[data-theme="dark"] #screen-gym-scan [style*="color: #666"] {
   font-size: 12px;
   font-weight: 700;
 }
+
+
+/* ---------- FitOS global theme parity (all app routes) ---------- */
+/* Theme tokens are applied at the document root so dynamically rendered screens
+   inherit the same palette as the shell and navigation. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f2ec;
+  --card: #ffffff;
+  --ink: #17211b;
+  --muted: #68756d;
+  --border: #e2e7e1;
+  --black-panel: #141a16;
+  --surface: #f4f2ec;
+  --surface-raised: #ffffff;
+  --surface-soft: #f7f9f6;
+  --text-primary: #17211b;
+  --text-secondary: #68756d;
+  --shadow: 0 2px 10px rgba(20, 35, 25, .06);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101512;
+  --card: #1a211d;
+  --ink: #edf3ee;
+  --muted: #a0aaa3;
+  --border: #303b34;
+  --black-panel: #090e0b;
+  --surface: #101512;
+  --surface-raised: #1a211d;
+  --surface-soft: #202923;
+  --text-primary: #edf3ee;
+  --text-secondary: #a0aaa3;
+  --shadow: 0 2px 14px rgba(0, 0, 0, .22);
+}
+
+html[data-theme] body,
+html[data-theme] #app,
+html[data-theme] #main-app,
+html[data-theme] .screen,
+html[data-theme] .screen.active {
+  background-color: var(--bg);
+  color: var(--ink);
+}
+html[data-theme] .header h1,
+html[data-theme] .header h2,
+html[data-theme] .header h3,
+html[data-theme] .card-label,
+html[data-theme] .form-label,
+html[data-theme] label,
+html[data-theme] .exercise-name,
+html[data-theme] .section-title,
+html[data-theme] .gym-intelligence-card strong,
+html[data-theme] .gym-intelligence-card summary {
+  color: var(--ink);
+}
+html[data-theme] .header p,
+html[data-theme] .card-sub,
+html[data-theme] .muted,
+html[data-theme] .exercise-meta,
+html[data-theme] .gym-intelligence-card details,
+html[data-theme] .gym-crowd-hour span,
+html[data-theme] .gym-crowd-hour small {
+  color: var(--muted);
+}
+html[data-theme] .card,
+html[data-theme] .gym-intelligence-card,
+html[data-theme] .food-tool-card,
+html[data-theme] .guide-card,
+html[data-theme] .exercise-card,
+html[data-theme] .workout-card,
+html[data-theme] .friends-empty,
+html[data-theme] .fitos-friend-card,
+html[data-theme] .fitos-friends-empty {
+  background: var(--card);
+  color: var(--ink);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+html[data-theme] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme] select,
+html[data-theme] textarea,
+html[data-theme] .input,
+html[data-theme] .gym-intelligence-card .input {
+  color: var(--ink);
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+html[data-theme] input::placeholder,
+html[data-theme] textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+html[data-theme] .btn-outline,
+html[data-theme] .button-glass {
+  color: var(--ink);
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+html[data-theme] .bottom-nav {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--border);
+}
+html[data-theme] .nav-item { color: var(--muted); }
+html[data-theme] .nav-item.active { color: #237653; }
+html[data-theme] .empty-state {
+  color: var(--muted);
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+html[data-theme] .gym-intelligence-card .form-label {
+  color: var(--ink);
+  opacity: 1;
+}
+html[data-theme] .gym-intelligence-card .input {
+  width: 100%;
+  min-height: 48px;
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+html[data-theme] .gym-crowd-day { border-color: var(--border); }
+html[data-theme] .gym-crowd-track { background: var(--border); }
+html[data-theme] .fitos-osm-map {
+  background: var(--surface-soft);
+  border-color: var(--border);
+}
+html[data-theme] .leaflet-container { background: var(--surface-soft); }
+html[data-theme] .leaflet-control,
+html[data-theme] .leaflet-popup-content-wrapper,
+html[data-theme] .leaflet-popup-tip {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+html[data-theme] .leaflet-bar a {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--border);
+}
+html[data-theme] .leaflet-control-attribution {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+}
+html[data-theme] .leaflet-control-attribution a { color: #23815a; }
+
+html[data-theme="dark"] .bottom-nav { background: rgba(24, 31, 27, .98); }
+html[data-theme="dark"] .nav-item.active { color: #86e3c4; }
+html[data-theme="dark"] .btn-outline,
+html[data-theme="dark"] .button-glass { background: #202923; }
+html[data-theme="dark"] .gym-intelligence-card .input,
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  color: #edf3ee;
+  background-color: #151c18;
+  border-color: #3b493f;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #a0aaa3; }
+html[data-theme="dark"] .leaflet-control-attribution a { color: #9bd8bd; }
+
+/* Keep the floating theme control legible regardless of page background. */
+html[data-theme="light"] .theme-toggle {
+  color: #17211b;
+  background: rgba(255, 255, 255, .96);
+  border-color: #cbd5cd;
+}
+html[data-theme="dark"] .theme-toggle {
+  color: #edf3ee;
+  background: rgba(32, 41, 35, .97);
+  border-color: #465349;
+}
