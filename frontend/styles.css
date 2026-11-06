@@ -3224,3 +3224,21 @@ html[data-theme] #screen-workout .workout-session-top > span {
 #today-content > .today-workout-card,
 #today-content > .today-stats-grid,
 #today-content > .today-grow-card { grid-column: 1 !important; grid-row: auto !important; }
+
+
+/* Movable theme switch: supports mouse, touch and pen without leaving the viewport. */
+.theme-toggle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.theme-toggle.is-dragging {
+  cursor: grabbing;
+  transition: none !important;
+  transform: none !important;
+  opacity: .92;
+}
+.theme-toggle.is-positioned {
+  right: auto;
+}
