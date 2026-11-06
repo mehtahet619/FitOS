@@ -3577,12 +3577,18 @@ function renderGymScan(equipment, plan) {
   });
 }
 
-/* ---------------- Theme preference ---------------- */
+/* ---------------- Theme preference + movable control ---------------- */
 (() => {
   const root = document.documentElement;
   const toggle = document.getElementById("theme-toggle");
   const themeMeta = document.querySelector('meta[name="theme-color"]');
   const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+  const POSITION_KEY = "fitos-theme-toggle-position";
+  const DRAG_THRESHOLD = 5;
+  let pointerStart = null;
+  let dragMoved = false;
+  let suppressNextClick = false;
+
   const readSavedTheme = () => {
     try { return localStorage.getItem("fitos-theme"); } catch { return null; }
   };
@@ -3602,12 +3608,95 @@ function renderGymScan(equipment, plan) {
       if (label) label.textContent = isDark ? "Light mode" : "Dark mode";
     }
   };
+
+  const clampPosition = (left, top) => {
+    const rect = toggle.getBoundingClientRect();
+    const margin = 8;
+    return {
+      left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - rect.width - margin)),
+      top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - rect.height - margin))
+    };
+  };
+  const setPosition = (left, top, persist = false) => {
+    if (!toggle) return;
+    const position = clampPosition(left, top);
+    toggle.style.left = position.left + "px";
+    toggle.style.top = position.top + "px";
+    toggle.style.right = "auto";
+    toggle.style.bottom = "auto";
+    toggle.classList.add("is-positioned");
+    if (persist) {
+      try { localStorage.setItem(POSITION_KEY, JSON.stringify(position)); } catch {}
+    }
+  };
+  const restorePosition = () => {
+    if (!toggle) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+      if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+        requestAnimationFrame(() => setPosition(saved.left, saved.top));
+      }
+    } catch {}
+  };
+
   const savedTheme = readSavedTheme();
   applyTheme(savedTheme === "dark" ? "dark" : "light");
-  toggle?.addEventListener("click", () => {
+  restorePosition();
+
+  toggle?.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const rect = toggle.getBoundingClientRect();
+    pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    dragMoved = false;
+    suppressNextClick = false;
+  });
+  toggle?.addEventListener("pointermove", (event) => {
+    if (!pointerStart || event.pointerId !== pointerStart.id) return;
+    const dx = event.clientX - pointerStart.x;
+    const dy = event.clientY - pointerStart.y;
+    if (!dragMoved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    dragMoved = true;
+    toggle.classList.add("is-dragging");
+    if (toggle.hasPointerCapture?.(event.pointerId)) {
+      setPosition(pointerStart.left + dx, pointerStart.top + dy);
+    } else {
+      toggle.setPointerCapture?.(event.pointerId);
+      setPosition(pointerStart.left + dx, pointerStart.top + dy);
+    }
+    event.preventDefault();
+  });
+  const finishDrag = (event) => {
+    if (!pointerStart || event.pointerId !== pointerStart.id) return;
+    if (dragMoved) {
+      const rect = toggle.getBoundingClientRect();
+      setPosition(rect.left, rect.top, true);
+      suppressNextClick = true;
+      requestAnimationFrame(() => { suppressNextClick = false; });
+    }
+    toggle.classList.remove("is-dragging");
+    pointerStart = null;
+  };
+  toggle?.addEventListener("pointerup", finishDrag);
+  toggle?.addEventListener("pointercancel", finishDrag);
+  toggle?.addEventListener("lostpointercapture", () => {
+    toggle.classList.remove("is-dragging");
+    pointerStart = null;
+  });
+  toggle?.addEventListener("click", (event) => {
+    if (suppressNextClick) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      suppressNextClick = false;
+      return;
+    }
     const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
     applyTheme(nextTheme);
     try { localStorage.setItem("fitos-theme", nextTheme); } catch {}
+  });
+  window.addEventListener("resize", () => {
+    if (!toggle?.classList.contains("is-positioned")) return;
+    const rect = toggle.getBoundingClientRect();
+    setPosition(rect.left, rect.top, true);
   });
 })();
 
