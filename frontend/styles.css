@@ -2855,3 +2855,372 @@ html[data-theme="dark"] #main-app [style*="background:#f8f9fa"] {
 html[data-theme="dark"] #main-app [style*="background:#fee2e2"] {
   background: #4a1f1f !important; color: #fca5a5 !important;
 }
+
+
+   AUTO-GENERATED DARK OVERRIDES
+   Every rule above that hard-codes a light surface, dark text or light border
+   gets a matching dark-theme override here, so no component can stay light.
+   ====================================================================== */
+/* from styles.css */
+html[data-theme="dark"] .grow-impact-card { background:linear-gradient(145deg, #1a211d 12%, #1c3b2a 100%) }
+html[data-theme="dark"] .grow-impact-heading h2 span { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-month { color:#95dabc; background:#1c3b28 }
+html[data-theme="dark"] .grow-impact-progress,
+html[data-theme="dark"] .grow-impact-stage-track { background:#303b34 }
+html[data-theme="dark"] .grow-impact-encouragement { color:#91dec4 }
+html[data-theme="dark"] .grow-impact-rest-note,
+html[data-theme="dark"] .grow-impact-virtual-label,
+html[data-theme="dark"] .grow-impact-partner-note { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-feedback { color:#dd9992 }
+html[data-theme="dark"] .grow-impact-unlocked { color:#90dfbf }
+html[data-theme="dark"] .grow-impact-option { border:1px solid #303b34; background:rgba(26,33,29,0.80) }
+html[data-theme="dark"] .grow-impact-option:hover,
+html[data-theme="dark"] .grow-impact-option.is-selected { background:#1c3b25 }
+html[data-theme="dark"] .grow-impact-option img,
+html[data-theme="dark"] .grow-impact-choice-preview img,
+html[data-theme="dark"] .grow-impact-tree-card img { background:#1e391e }
+html[data-theme="dark"] .grow-impact-option small,
+html[data-theme="dark"] .grow-impact-tree-copy span,
+html[data-theme="dark"] .grow-impact-choice-preview span { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-option-check { color:#9bd4b6; background:#1c3b23 }
+html[data-theme="dark"] .grow-impact-choice-preview,
+html[data-theme="dark"] .grow-impact-tree-card { background:#202923 }
+html[data-theme="dark"] .grow-impact-choice-preview small,
+html[data-theme="dark"] .grow-impact-tree-copy small { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-stage-line { color:#9ad6b7 }
+html[data-theme="dark"] .grow-impact-stage-line span:last-child { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-month-label input { border:1px solid #37583f; color:#95dabc; background:#202923 }
+html[data-theme="dark"] .grow-impact-calendar-stats span { border:1px solid #303b34; color:#a0aaa3; background:rgba(26,33,29,0.72) }
+html[data-theme="dark"] .grow-impact-calendar-stats strong { color:#91dec4 }
+html[data-theme="dark"] .grow-impact-location-line { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-calendar-warning { color:#dfc390; background:#3b331c }
+html[data-theme="dark"] .grow-impact-growth { border:1px solid #38563f; background:rgba(26,33,29,0.68) }
+html[data-theme="dark"] .grow-impact-growth-copy { color:#98d7b8 }
+html[data-theme="dark"] .grow-impact-growth-copy span { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-celebration { border:1px solid #2b6438; color:#90dfb9; background:linear-gradient(115deg, #1c3b21, #323b1c) }
+html[data-theme="dark"] .grow-impact-celebration span { color:#b1beb5 }
+html[data-theme="dark"] .grow-impact-calendar-settings { border-top:1px solid #303b34; color:#b1beb7 }
+html[data-theme="dark"] .grow-impact-calendar-settings summary { color:#9ad6b7 }
+html[data-theme="dark"] .grow-impact-calendar-settings > p { color:#a0aaa3 }
+html[data-theme="dark"] .grow-impact-setting-label { color:#b1bfb7 }
+html[data-theme="dark"] .grow-impact-setting-label select,
+html[data-theme="dark"] .grow-impact-setting-label input { border:1px solid #39563e; color:#edf3ee; background:#1a211d }
+html[data-theme="dark"] .grow-impact-holiday { background:rgba(26,33,29,0.65) }
+html[data-theme="dark"] .grow-impact-closure-list li { background:#202923 }
+html[data-theme="dark"] .grow-impact-closure-list button { color:#d69f99 }
+html[data-theme="dark"] .btn-outline { background:#1a211d }
+html[data-theme="dark"] .btn-danger { background:#3b201c }
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .field select { background:#1a211d }
+html[data-theme="dark"] .chip { background:#1a211d }
+html[data-theme="dark"] .banner-error { background:#3b201c }
+html[data-theme="dark"] .banner-info { background:#1c2b3b; color:#90b5df }
+html[data-theme="dark"] .banner-success { background:#1c3b2c; color:#90dfc1 }
+html[data-theme="dark"] .meal-fact { background:#3b331c; border-color:#64562b }
+html[data-theme="dark"] .meal-skeleton b { background:linear-gradient(90deg, #37301f 25%, #202923 50%, #37301f 75%) }
+html[data-theme="dark"] .dish-reasons span { background:#1c3b2c; color:#90dfc1 }
+html[data-theme="dark"] .cycle-progress { background:#202923 }
+html[data-theme="dark"] .cycle-unit.cycle-next .cycle-marker { background:#1a211d; color:#90b5df }
+html[data-theme="dark"] .cycle-unit.cycle-done .cycle-label { color:#90dfc1 }
+html[data-theme="dark"] .cycle-unit.cycle-next .cycle-label { color:#90b5df }
+html[data-theme="dark"] .pill-success { background:#1c3b2c; color:#90dfc1; border:1px solid #2b6445 }
+html[data-theme="dark"] .pill-muted { background:#39321e }
+html[data-theme="dark"] .workout-session-meta span { color:#b2b8bd }
+html[data-theme="dark"] .workout-next-card { background:#1a211d }
+html[data-theme="dark"] .workout-tags span { background:#202923; color:#b1b7be }
+html[data-theme="dark"] .workout-target { background:#303b34 }
+html[data-theme="dark"] .workout-target span { color:#b1b7bf }
+html[data-theme="dark"] .workout-instructions { color:#b2b7bd }
+html[data-theme="dark"] .workout-set-log .workout-eyebrow { color:#96d9c3 }
+html[data-theme="dark"] .workout-set-inputs label { color:#b2b7bd }
+html[data-theme="dark"] .workout-set-inputs input { background:#1a211d }
+html[data-theme="dark"] .workout-exercise-list { background:#1a211d }
+html[data-theme="dark"] .workout-exercise-row.active .workout-exercise-state { color:#90dfc2 }
+html[data-theme="dark"] .workout-exercise-row.done .workout-exercise-state { color:#90dfc2 }
+html[data-theme="dark"] .exercise-demo-play { border:1px solid rgba(48,59,52,0.65) }
+html[data-theme="dark"] .exercise-captions { color:#90dfc2 }
+html[data-theme="dark"] .exercise-demo-fallback { background:#1a211d }
+html[data-theme="dark"] .exercise-demo-fallback p { color:#a0aaa3 }
+html[data-theme="dark"] .exercise-chat-form { background:#202923 }
+html[data-theme="dark"] .exercise-chat-form label { color:#b2b7bd }
+html[data-theme="dark"] .exercise-chat-form textarea { background:#1a211d }
+html[data-theme="dark"] .exercise-chat-answer { color:#afb8c0 }
+html[data-theme="dark"] .workout-edit-form { background:#202923 }
+html[data-theme="dark"] .workout-edit-form label { color:#b2b7bd }
+html[data-theme="dark"] .workout-edit-form input,
+html[data-theme="dark"] .workout-edit-form select { background:#1a211d }
+html[data-theme="dark"] .workout-edit-suggestions { background:#1a211d }
+html[data-theme="dark"] .workout-edit-suggestions select { background:#1a211d }
+html[data-theme="dark"] .workout-complete-card { border:1px solid #2b6445; background:#1c3b2c }
+html[data-theme="dark"] .workout-complete-card p { color:#b0bfb9 }
+html[data-theme="dark"] .workout-next-hint { border-top:1px solid #2b6445; color:#b0bfb9 }
+html[data-theme="dark"] .skip-link { background:#203729; color:#edf3ee !important }
+html[data-theme="dark"] .button-mint { color:#edf3ee !important }
+html[data-theme="dark"] .button-dark { background:#203729; color:#edf3ee !important }
+html[data-theme="dark"] .button-dark:hover { background:#1a211d }
+html[data-theme="dark"] .button-glass { border-color:rgba(43,100,66,0.19) }
+html[data-theme="dark"] .button-glass:hover { border-color:rgba(43,100,66,0.38) }
+html[data-theme="dark"] .eyebrow { color:#a3cdb7 }
+html[data-theme="dark"] .hero-scene { border:1px solid rgba(43,100,62,0.17) }
+html[data-theme="dark"] .preview-card { border:1px solid rgba(43,100,59,0.16) }
+html[data-theme="dark"] .preview-exercise { border-top:1px solid rgba(43,100,66,0.10) }
+html[data-theme="dark"] .preview-equipment { border-top:1px solid rgba(43,100,66,0.10) }
+html[data-theme="dark"] .preview-equipment b { border:1px solid rgba(43,100,69,0.10) }
+html[data-theme="dark"] .preview-float { border:1px solid rgba(44,99,59,0.16) }
+html[data-theme="dark"] .preview-float-check { background:#1c3b27; color:#a3ccaf }
+html[data-theme="dark"] .features-section { background:#303b34; color:#edf3ee }
+html[data-theme="dark"] .section-heading h2,
+html[data-theme="dark"] .how-copy h2,
+html[data-theme="dark"] .closing-cta h2 { color:#edf3ee }
+html[data-theme="dark"] .section-heading h2 span,
+html[data-theme="dark"] .how-copy h2 span { color:#9fd0b6 }
+html[data-theme="dark"] .section-heading > p:last-child { color:#a0aaa3 }
+html[data-theme="dark"] .feature-card { border:1px solid #4d523d; background:#202923 }
+html[data-theme="dark"] .feature-art { background:#223424 }
+html[data-theme="dark"] .feature-kicker { color:#a6c9af }
+html[data-theme="dark"] .feature-copy h3 { color:#edf3ee }
+html[data-theme="dark"] .feature-copy > p:not(.feature-kicker) { color:#a0aaa3 }
+html[data-theme="dark"] .text-link { color:#9bd4b4 !important }
+html[data-theme="dark"] .equipment-art { background:radial-gradient(circle at 48% 48%, #253b1c, #203725) }
+html[data-theme="dark"] .art-scan { color:#a1ceb2 }
+html[data-theme="dark"] .swap-art { background:radial-gradient(circle at center, #243620, #223526) }
+html[data-theme="dark"] .swap-node { background:#202923; color:#a3ccb4 }
+html[data-theme="dark"] .swap-node-next { background:#1f3b1c }
+html[data-theme="dark"] .swap-path { color:#a0d0b1 }
+html[data-theme="dark"] .swap-caption { color:#a7c8b3 }
+html[data-theme="dark"] .food-art { background:radial-gradient(circle at center, #3b311c, #39361d) }
+html[data-theme="dark"] .food-leaf { color:#a5caa9 }
+html[data-theme="dark"] .food-bowl { background:linear-gradient(145deg,#3b341c,#2a3b1c) }
+html[data-theme="dark"] .food-label { color:#d4be9b }
+html[data-theme="dark"] .adaptive-art { background:radial-gradient(circle at center, #1c3b23, #223527) }
+html[data-theme="dark"] .adaptive-label { background:rgba(32,41,35,0.84); color:#a9c6af }
+html[data-theme="dark"] .how-stamp { border:1px solid rgba(43,100,54,0.25) }
+html[data-theme="dark"] .how-callout { border:1px solid #46533c; background:#1a211d }
+html[data-theme="dark"] .callout-icon { color:#9ed1af }
+html[data-theme="dark"] .how-callout b { color:#edf3ee }
+html[data-theme="dark"] .how-callout small { color:#a0aaa3 }
+html[data-theme="dark"] .how-lede { color:#a0aaa3 }
+html[data-theme="dark"] .step-number { color:#a1ceb3 }
+html[data-theme="dark"] .steps-list b { color:#edf3ee }
+html[data-theme="dark"] .nutrition-note { border:1px solid #3a553a; background:#263720 }
+html[data-theme="dark"] .nutrition-symbol { background:#1d3a1f; color:#9fd0ae }
+html[data-theme="dark"] .nutrition-note h2 { color:#a9c6b6 }
+html[data-theme="dark"] .nutrition-note p:not(.feature-kicker) { color:#b2bdb5 }
+html[data-theme="dark"] .guide-card { border:1px solid #303b34; background:#202923 }
+html[data-theme="dark"] .guide-card > span { color:#aac5b1 }
+html[data-theme="dark"] .guide-card h3 { color:#edf3ee }
+html[data-theme="dark"] .guide-card p { color:#a0aaa3 }
+html[data-theme="dark"] .faq-list { border-top:1px solid rgba(48,95,59,0.16) }
+html[data-theme="dark"] .faq-list details { border-bottom:1px solid rgba(48,95,59,0.16) }
+html[data-theme="dark"] .today-profile-button { background:#1a211d }
+html[data-theme="dark"] .today-profile-button:hover { background:#202923 }
+html[data-theme="dark"] .today-workout-status { color:#acc3b3 }
+html[data-theme="dark"] .today-plan-lock { border:1px solid #303b34; background:#202923; color:#a0aaa3 }
+html[data-theme="dark"] .today-workout-warning { color:#c4bfab }
+html[data-theme="dark"] .today-stat-card { background:#1a211d }
+html[data-theme="dark"] .today-stat-heading .today-icon { color:#a0aaa3 }
+html[data-theme="dark"] .today-grow-card.grow-impact-card { background:#1a211d }
+html[data-theme="dark"] .today-month-select { color:#a8c7b3; background:#202923 }
+html[data-theme="dark"] .today-grow-progress { background:#303b34 }
+html[data-theme="dark"] .today-grow-metrics > div { background:#202923 }
+html[data-theme="dark"] .today-grow-complete { color:#a8c7b3 }
+html[data-theme="dark"] .today-grow-feedback { color:#dd9992 }
+html[data-theme="dark"] .today-retry-button { background:#1a211d }
+html[data-theme="dark"] .bottom-nav { border-top-color:#303b34; background:rgba(26,33,29,0.97) }
+html[data-theme="dark"] .nav-item { color:#a0aaa3 }
+html[data-theme="dark"] .nav-item.active { color:#a2cdb1 }
+html[data-theme="dark"] .nav-item.active .nav-icon { background:#213625 }
+html[data-theme="dark"] .price-guess-copy h2 span { color:#a2cdba }
+html[data-theme="dark"] .price-guess-note { color:#a0aaa3 }
+html[data-theme="dark"] .price-guess-note > span:first-child { color:#a2cdba }
+html[data-theme="dark"] .price-guess-input-wrap { border:1px solid #303b34; background:#202923 }
+html[data-theme="dark"] .price-guess-input-wrap > span { color:#a2cdba }
+html[data-theme="dark"] .price-guess-feedback { color:#a2cdba }
+html[data-theme="dark"] .price-guess-average { background:#202923 }
+html[data-theme="dark"] .price-guess-average-label { color:#afc0b6 }
+html[data-theme="dark"] .price-guess-average strong { color:#9dd2b8 }
+html[data-theme="dark"] .price-guess-count { color:#a0aaa3 }
+html[data-theme="dark"] .not-found-screen h1 span { color:#a2cdba }
+html[data-theme="dark"] .fitos-consent-banner { border:1px solid #3e5144; background:#1a211d; color:#edf3ee }
+html[data-theme="dark"] .fitos-consent-copy p { color:#a0aaa3 }
+html[data-theme="dark"] .fitos-consent-copy a { color:#97d8bd }
+html[data-theme="dark"] .fitos-consent-actions button,
+html[data-theme="dark"] .fitos-cookie-settings { border:1px solid #3e5042; background:#1a211d; color:#abc4b6 }
+html[data-theme="dark"] #main-app { background:var(--bg,#303b34) }
+html[data-theme="dark"] .screen .header h1 { color:#edf3ee }
+html[data-theme="dark"] .screen .header p { color:#a0aaa3 }
+html[data-theme="dark"] #bottom-nav { border-top:1px solid rgba(48,59,52,0.90) }
+html[data-theme="dark"] #bottom-nav .nav-item.active { color:#99d6ba }
+html[data-theme="dark"] #bottom-nav .nav-item.active .nav-icon { background:#1c3b26 }
+html[data-theme="dark"] #screen-diet .food-tracker { border-color:#303b34 }
+html[data-theme="dark"] #screen-diet .food-tracker-heading h2 { color:#edf3ee }
+html[data-theme="dark"] .gym-choice-modal { border:1px solid rgba(58,85,63,0.90); background:#1a211d; color:#edf3ee }
+html[data-theme="dark"] .gym-choice-icon { background:#1c3b28; color:#99d6ba }
+html[data-theme="dark"] .gym-choice-eyebrow { color:#a1cfb8 }
+html[data-theme="dark"] .gym-choice-modal h2 { color:#edf3ee }
+html[data-theme="dark"] .gym-choice-modal > p:not(.gym-choice-eyebrow) { color:#a0aaa3 }
+html[data-theme="dark"] .gym-choice-summary { background:#202923; color:#abc4b4 }
+html[data-theme="dark"] .gym-choice-actions button { border:1px solid #3c5340; background:#1a211d; color:#abc5b4 }
+html[data-theme="dark"] .gym-choice-actions .gym-choice-no:hover { background:#202923 }
+html[data-theme="dark"] #main-app .btn-outline { background:#1a211d }
+html[data-theme="dark"] #main-app .chip,
+html[data-theme="dark"] #main-app .chip-group button,
+html[data-theme="dark"] #main-app .equipment-chip,
+html[data-theme="dark"] #main-app .equipment-option,
+html[data-theme="dark"] #main-app .choice-chip { background:#202923; color:#a0aaa3 }
+html[data-theme="dark"] #main-app .chip.selected,
+html[data-theme="dark"] #main-app .chip.active,
+html[data-theme="dark"] #main-app .equipment-chip.selected,
+html[data-theme="dark"] #main-app .equipment-option.selected,
+html[data-theme="dark"] #main-app .choice-chip.selected { border-color:#2b6444 }
+html[data-theme="dark"] #screen-workout .workout-session-card,
+html[data-theme="dark"] #screen-workout .workout-session,
+html[data-theme="dark"] #screen-workout .workout-summary,
+html[data-theme="dark"] #screen-workout .workout-next-card { background:#1a211d }
+html[data-theme="dark"] #screen-workout .workout-progress-track { background:#303b34 }
+html[data-theme="dark"] #screen-gym .card,
+html[data-theme="dark"] #screen-gym-scan .card,
+html[data-theme="dark"] #screen-gym-scan .food-tool-card { background:#1a211d }
+html[data-theme="dark"] #screen-diet .food-tracker { background:#1a211d }
+html[data-theme="dark"] #screen-diet .food-tracker-heading .eyebrow { color:#9fd0b9 }
+html[data-theme="dark"] #screen-diet .food-tracker-tabs button { background:#202923; color:#edf3ee }
+html[data-theme="dark"] #screen-diet .food-tool-card { background:#1a211d }
+html[data-theme="dark"] #screen-diet input,
+html[data-theme="dark"] #screen-diet select,
+html[data-theme="dark"] #screen-diet textarea { border:1px solid #303b34; background:#202923 }
+html[data-theme="dark"] #bottom-nav { border-top:1px solid #303b34; background:rgba(26,33,29,0.97) }
+html[data-theme="dark"] #screen-workout { background:#202923 }
+html[data-theme="dark"] #screen-workout .header h1 { color:#edf3ee }
+html[data-theme="dark"] #screen-workout .header p { color:#a0aaa3 }
+html[data-theme="dark"] #screen-workout #workout-scan-btn { border:2px solid #2b644b; background:#1c3b2b; color:#edf3ee }
+html[data-theme="dark"] #screen-workout #workout-scan-btn::before { background:#1c3b2b; color:#90dfc6 }
+html[data-theme="dark"] #screen-workout .workout-plan-card,
+html[data-theme="dark"] #screen-workout .workout-next-plan-card,
+html[data-theme="dark"] #screen-workout .workout-day-complete-card { border:1px solid #303b34; background:#1a211d }
+html[data-theme="dark"] #screen-workout .workout-plan-card .card-label { color:#edf3ee }
+html[data-theme="dark"] #screen-workout .workout-plan-card .pill { background:#3b311c; color:#dfc490 }
+html[data-theme="dark"] #screen-workout .workout-plan-card .circular-progress-done { color:#edf3ee }
+html[data-theme="dark"] #screen-workout .workout-next-plan-title { color:#edf3ee }
+html[data-theme="dark"] #screen-workout .workout-next-plan-title strong { color:#90dfc6 }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card { border:2px solid #2b6449; background:linear-gradient(145deg,#1c3b2b 0%,#1c3b2b 100%) }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card .card-label { color:#edf3ee }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card .card-label span { color:#90dfc4 }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card h2 { color:#90dfc6 }
+html[data-theme="dark"] #screen-workout .workout-day-complete-card .card-sub { color:#b1beb8 }
+html[data-theme="dark"] .workout-missing-card { background:linear-gradient(135deg, rgba(220, 53, 69, 0.09), rgba(26,33,29,0.96)) }
+html[data-theme="dark"] .workout-missing-card .card-label,
+html[data-theme="dark"] .workout-missing-card h2 { color:#df9098 }
+html[data-theme="dark"] .gym-intelligence-card .input { background:#1a211d }
+html[data-theme="dark"] .gym-crowd-track { background:#303b34 }
+html[data-theme="dark"] .fitos-gamification-card { background:#1a211d; border:1px solid #303b34; color:#edf3ee }
+html[data-theme="dark"] .fitos-gamification-eyebrow { color:#a0aaa3 }
+html[data-theme="dark"] .fitos-gamification-level { color:#a0aaa3 }
+html[data-theme="dark"] .fitos-gamification-share { border:1px solid #2b644d; background:#1c3b2d; color:#90dfc6 }
+html[data-theme="dark"] .fitos-gamification-track { background:#303b34 }
+html[data-theme="dark"] .fitos-gamification-next { color:#a0aaa3 }
+html[data-theme="dark"] .fitos-gamification-recent { color:#97d8c0 }
+html[data-theme="dark"] .fitos-gamification-rules { border-top:1px solid #303b34; color:#a0aaa3 }
+html[data-theme="dark"] .fitos-gamification-rules summary { color:#abc4b6 }
+html[data-theme="dark"] .fitos-gamification-rules li strong { color:#90dfc6 }
+html[data-theme="dark"] .fitos-gamification-invite-copy { color:#97d8c0 }
+html[data-theme="dark"] .fitos-gamification-friends span:after { background:#1c3b2e }
+html[data-theme="dark"] .fitos-gamification-friends span:nth-child(2):after { background:#3b2d1c }
+html[data-theme="dark"] .fitos-gamification-friends span:nth-child(3):after { background:#1c243b }
+html[data-theme="dark"] .fitos-private-leaderboard h3 { color:#edf3ee }
+html[data-theme="dark"] .fitos-friend-card { background:#1a211d; border:1px solid #303b34 }
+html[data-theme="dark"] .fitos-friend-card.is-you { border-color:#2d624a; background:linear-gradient(145deg,#1a211d 0%,#202923 100%) }
+html[data-theme="dark"] .fitos-friend-rank { background:#303b34; color:#97d8c0 }
+html[data-theme="dark"] .fitos-friend-avatar { background:#1c3b2a; color:#97d8c0 }
+html[data-theme="dark"] .fitos-friend-name { color:#edf3ee }
+html[data-theme="dark"] .fitos-friend-stats { border-top:1px solid #303b34; color:#a0aaa3 }
+html[data-theme="dark"] .fitos-friend-stats strong { color:#97d8c0 }
+html[data-theme="dark"] .fitos-friends-empty { border:1px dashed #3d5243; background:#1a211d; color:#a0aaa3 }
+html[data-theme="dark"] #screen-onboarding .card input:disabled,
+html[data-theme="dark"] #screen-onboarding .card select:disabled { background:#202923; color:#a0aaa3; border-color:#303b34 }
+html[data-theme="dark"] .fitos-osm-map { border:1px solid var(--border, #524d3c); background:var(--surface, #303b34) }
+html[data-theme="dark"] .theme-toggle { color:#edf3ee; background:rgba(26,33,29,0.94) }
+
+/* from food-tracker.css */
+html[data-theme="dark"] .food-tracker { border:1px solid var(--border,#574f38); background:var(--card,#1a211d); color:var(--ink,#edf3ee) }
+html[data-theme="dark"] .food-tracker-heading p:last-child,
+html[data-theme="dark"] .food-tool-card>p { color:var(--muted,#a0aaa3) }
+html[data-theme="dark"] .food-tracker-tabs button { border:1px solid var(--border,#303b34) }
+html[data-theme="dark"] .food-tool-card { border:1px solid var(--border,#574f38); background:#1a211d }
+html[data-theme="dark"] .food-tracker input { border:1px solid #303b34; background:#1a211d; color:#edf3ee }
+html[data-theme="dark"] .food-status { color:#a0aaa3 }
+html[data-theme="dark"] .food-data-note { color:var(--muted,#a0aaa3) }
+html[data-theme="dark"] .food-product-result,
+html[data-theme="dark"] .food-log-entry,
+html[data-theme="dark"] .food-nearby-entry { border-bottom:1px solid #303b34 }
+html[data-theme="dark"] .food-product-result img { background:#202923 }
+html[data-theme="dark"] .food-result-main small { color:#a0aaa3 }
+html[data-theme="dark"] .food-nutrient-chip { background:#202923 }
+html[data-theme="dark"] .food-nutrient-chip small { color:#a0aaa3 }
+html[data-theme="dark"] .food-summary-tile { background:#202923 }
+html[data-theme="dark"] .food-summary-tile small { color:#a0aaa3 }
+html[data-theme="dark"] .food-log-actions button { border:1px solid #303b34; background:#1a211d }
+html[data-theme="dark"] .food-empty { color:#a0aaa3 }
+html[data-theme="dark"] #screen-diet .food-nearby-card { border:1px solid #303b34; background:linear-gradient(160deg,#1a211d 0%,#202923 100%) }
+html[data-theme="dark"] #screen-diet .food-nearby-card:hover { border-color:#345a44 }
+html[data-theme="dark"] .food-rank { color:#b2bdb7 }
+html[data-theme="dark"] .food-health-score { background:#1c3b29; color:#96d9b8 }
+html[data-theme="dark"] .food-nearby-card h3 { color:#edf3ee }
+html[data-theme="dark"] .food-nearby-restaurant { color:#b0bfb6 }
+html[data-theme="dark"] .food-nearby-meta span { border:1px solid #303b34; background:#1a211d; color:#a0aaa3 }
+html[data-theme="dark"] .food-nearby-nutrition > div { background:#303b34 }
+html[data-theme="dark"] .food-nearby-nutrition small { color:#a0aaa3 }
+html[data-theme="dark"] .food-nearby-nutrition strong { color:#a7c8b5 }
+html[data-theme="dark"] .food-nearby-locality { color:#a0aaa3 }
+html[data-theme="dark"] .food-nearby-reasons { border-top:1px solid #303b34; color:#a0aaa3 }
+html[data-theme="dark"] .food-nearby-card-footer > span { color:#a0aaa3 }
+html[data-theme="dark"] #screen-diet .food-search-suggestions { border:1px solid #303b34; background:#1a211d }
+html[data-theme="dark"] #screen-diet .food-search-suggestion { border-bottom:1px solid #303b34; background:#1a211d; color:#edf3ee }
+html[data-theme="dark"] #screen-diet .food-search-suggestion:hover,
+html[data-theme="dark"] #screen-diet .food-search-suggestion:focus-visible { background:#202923 }
+html[data-theme="dark"] #screen-diet .food-search-suggestion small { color:#a0aaa3 }
+html[data-theme="dark"] #screen-diet .food-search-suggestion-empty { color:#a0aaa3 }
+html[data-theme="dark"] #screen-diet .food-smart-correction { color:#afc1b4 }
+html[data-theme="dark"] #screen-diet .food-smart-keep-query { color:#96d9b8 }
+html[data-theme="dark"] #screen-diet .food-smart-recommendation-heading { color:#a0aaa3 }
+html[data-theme="dark"] #screen-diet .food-smart-nutrients { color:#a9c7b4 }
+html[data-theme="dark"] #screen-diet .food-smart-score { color:#94dbb8 }
+html[data-theme="dark"] #screen-diet .food-smart-limited { color:#ccbea3 }
+
+
+/* ======================================================================
+
+/* ---------- Today screen redefines the theme variables locally; re-point them per theme ---------- */
+html[data-theme="light"] #screen-today {
+  --bg: #f5f7f5; --card: #ffffff; --ink: #202a24; --muted: #66736b; --border: #e2e9e3;
+  --mint: #e3eee6; --mint-strong: #4b8061; --shadow: 0 2px 8px rgba(32, 42, 36, 0.045);
+}
+html[data-theme="dark"] #screen-today {
+  --bg: #101512; --card: #1a211d; --ink: #edf3ee; --muted: #a0aaa3; --border: #303b34;
+  --mint: #20392d; --mint-strong: #86e3c4; --shadow: 0 2px 14px rgba(0, 0, 0, .22);
+}
+html[data-theme="dark"] #screen-today .today-workout-status { color: #9bd8bd; }
+html[data-theme="dark"] #screen-today .today-workout-status > span { background: #86e3c4; }
+html[data-theme="dark"] #screen-today .today-plan-lock { background: #202923; border-color: #303b34; color: var(--muted); }
+html[data-theme="dark"] #screen-today .today-workout-warning { color: #e3cf94; }
+html[data-theme="dark"] #screen-today .today-stat-heading .today-icon { color: #9bd8bd; }
+
+/* ---------- Workout: exercise-number badge + session labels (readable in BOTH themes) ---------- */
+html[data-theme="dark"] .workout-exercise-row.active .workout-exercise-number,
+html[data-theme="dark"] .workout-exercise-row.done .workout-exercise-number {
+  color: #0b1a12; background: #86e3c4; border-color: #86e3c4;
+}
+html[data-theme] #screen-workout .workout-session-card .workout-eyebrow,
+html[data-theme] #screen-workout .workout-session-top > span {
+  color: var(--fitos-muted);
+}
+
+/* ---------- Today: "Next workout" label/value were rendered inline ---------- */
+.today-workout-context > div:not(.today-plan-lock) { display: grid; gap: 3px; }
+.today-workout-context > div:not(.today-plan-lock) > span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.today-workout-context > div:not(.today-plan-lock) > strong { color: var(--ink); font-size: 12px; font-weight: 600; }
+
+/* ---------- Today screen: never use the 2-column desktop grid inside the 430px app shell ---------- */
+#today-content { grid-template-columns: minmax(0, 1fr) !important; }
+#today-content > .today-workout-card,
+#today-content > .today-stats-grid,
+#today-content > .today-grow-card { grid-column: 1 !important; grid-row: auto !important; }
