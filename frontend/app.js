@@ -3582,6 +3582,7 @@ function renderGymScan(equipment, plan) {
   const root = document.documentElement;
   const toggle = document.getElementById("theme-toggle");
   const themeMeta = document.querySelector('meta[name="theme-color"]');
+  const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
   const readSavedTheme = () => {
     try { return localStorage.getItem("fitos-theme"); } catch { return null; }
   };
@@ -3590,6 +3591,7 @@ function renderGymScan(equipment, plan) {
     root.dataset.theme = isDark ? "dark" : "light";
     root.style.colorScheme = isDark ? "dark" : "light";
     if (themeMeta) themeMeta.setAttribute("content", isDark ? "#101512" : "#f4f2ec");
+    if (colorSchemeMeta) colorSchemeMeta.setAttribute("content", isDark ? "dark" : "light");
     if (toggle) {
       toggle.setAttribute("aria-pressed", String(isDark));
       toggle.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
