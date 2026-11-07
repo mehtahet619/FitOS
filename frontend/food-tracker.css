@@ -94,3 +94,12 @@
 @media (prefers-reduced-motion: reduce) {
   #screen-diet .food-search-suggestion { scroll-behavior: auto; }
 }
+
+/* Goal-aware daily intake balance */
+.food-balance-row { display:grid; gap:7px; margin:14px 0; }
+.food-balance-row > div:first-child { display:flex; justify-content:space-between; gap:12px; color:var(--fitos-ink,#17231c); font-size:13px; }
+.food-balance-row > small { color:var(--fitos-muted,#778078); font-size:11px; }
+.food-balance-track { height:8px; overflow:hidden; border-radius:99px; background:var(--fitos-border,#e7ebe5); }
+.food-balance-track > span { display:block; height:100%; border-radius:inherit; background:#65bd91; }
+.food-next-step { margin-top:18px; padding:14px; border-radius:14px; background:var(--fitos-surface,#fbfcfa); border:1px solid var(--fitos-border,#e7ebe5); }
+.food-next-step p { margin:7px 0 0; line-height:1.55; color:var(--fitos-ink,#17231c); font-size:13px; }
