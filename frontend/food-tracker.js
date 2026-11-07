@@ -340,7 +340,7 @@
     const cards = guidance.notes.map((note, index) => {
       const metric = Object.keys(metricMeta).find((key) => note.toLowerCase().startsWith(key + ":"));
       if (index === 0 && note.startsWith("Your saved goal is ")) {
-        const goalText = note.replace(/^Your saved goal is /, "").replace(/\\. This serving is information, not a restriction\\. You decide what to eat\\.?$/, "");
+        const goalText = note.replace(/^Your saved goal is /, "").split(". This serving is information, not a restriction. You decide what to eat.")[0];
         return `<article class="food-serving-card food-serving-goal"><span class="food-serving-icon" aria-hidden="true">◎</span><div><small>Your goal</small><strong>${esc(goalText)}</strong><p>This serving is information, not a restriction. You decide what to eat.</p></div></article>`;
       }
       if (metric) {
