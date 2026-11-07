@@ -130,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 12),
                   _dropdown("Fitness level", _level, const ["beginner", "intermediate", "advanced"], (v) => setState(() => _level = v!)),
                   const SizedBox(height: 12),
-                  _dropdown("Primary goal", _goal, const ["muscle_gain", "fat_loss", "strength", "general_fitness", "endurance"], (v) => setState(() => _goal = v!)),
+                  _dropdown("Primary goal", _goal, const ["muscle_gain", "fat_loss", "body_recomposition", "strength", "general_fitness", "endurance"], (v) => setState(() => _goal = v!)),
                   const SizedBox(height: 12),
                   Row(children: [
                     Expanded(child: TextField(controller: _days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Days / week"))),

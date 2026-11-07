@@ -36,6 +36,10 @@ export function computeMacroTargets(profile: {
       calories -= 400;
       proteinPerKg = 2.0;
       break;
+    case "body_recomposition":
+      // Stay near estimated maintenance while prioritizing protein.
+      proteinPerKg = 2.0;
+      break;
     case "muscle_gain":
       calories += 300;
       proteinPerKg = 1.8;

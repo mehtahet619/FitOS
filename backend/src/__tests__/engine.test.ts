@@ -140,6 +140,13 @@ describe("computeMacroTargets", () => {
     expect(fatLoss.proteinTargetG).toBeGreaterThan(maintenance.proteinTargetG);
   });
 
+  it("keeps body recomposition near maintenance and raises protein", () => {
+    const maintenance = computeMacroTargets({ weightKg: 75, heightCm: 175, age: 27, gender: "male", daysPerWeek: 4, primaryGoal: "general_fitness" });
+    const recomposition = computeMacroTargets({ weightKg: 75, heightCm: 175, age: 27, gender: "male", daysPerWeek: 4, primaryGoal: "body_recomposition" });
+    expect(recomposition.calorieTarget).toBe(maintenance.calorieTarget);
+    expect(recomposition.proteinTargetG).toBeGreaterThan(maintenance.proteinTargetG);
+  });
+
   it("never returns calories below the 1200 floor", () => {
     const targets = computeMacroTargets({
       weightKg: 40,
