@@ -331,7 +331,7 @@
       targets: state.nutritionTargets || {}, consumed: state.dailyTotals || {}
     });
     output.innerHTML = `<h4>How this serving fits your day</h4>
-      <p class="food-data-note">Guidance uses your saved profile and nutrition targets where available, plus general adult reference values. It is not a diagnosis or a simple healthy/unhealthy verdict.</p>
+      <p class="food-data-note">Guidance uses your saved profile and nutrition targets where available, plus general adult reference values. Nutrition scores and flags explain potential trade-offs; they never prevent you from logging or choosing a food.</p>
       <ul>${guidance.notes.map((note) => `<li>${esc(note)}</li>`).join("")}</ul>
       <p class="food-data-note">General references: sodium under 2,000 mg/day; caffeine up to 400 mg/day for most healthy adults; fibre about 25 g/day; free sugars ideally below 50 g/day on a 2,000 kcal diet. Product total sugars may differ from free sugars. Pregnancy, medication, health conditions, and age can change advice.</p>`;
   }
