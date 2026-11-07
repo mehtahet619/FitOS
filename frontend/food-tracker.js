@@ -330,9 +330,33 @@
       nutrients: n, servingGrams: serving, profile: state.profile || {},
       targets: state.nutritionTargets || {}, consumed: state.dailyTotals || {}
     });
+    const metricMeta = {
+      energy: { label: "Energy", unit: "kcal", icon: "◉" },
+      protein: { label: "Protein", unit: "g", icon: "P" },
+      carbohydrate: { label: "Carbohydrates", unit: "g", icon: "↗" },
+      fat: { label: "Fat", unit: "g", icon: "滴" },
+      fibre: { label: "Fibre", unit: "g", icon: "✳" }
+    };
+    const cards = guidance.notes.map((note, index) => {
+      const metric = Object.keys(metricMeta).find((key) => note.toLowerCase().startsWith(key + ":"));
+      if (index === 0 && note.startsWith("Your saved goal is ")) {
+        const goalText = note.replace(/^Your saved goal is /, "").split(". This serving is information, not a restriction. You decide what to eat.")[0];
+        return `<article class="food-serving-card food-serving-goal"><span class="food-serving-icon" aria-hidden="true">◎</span><div><small>Your goal</small><strong>${esc(goalText)}</strong><p>This serving is information, not a restriction. You decide what to eat.</p></div></article>`;
+      }
+      if (metric) {
+        const meta = metricMeta[metric];
+        const detail = note.slice(note.indexOf(":") + 1).trim();
+        const amount = detail.match(/this serving adds ([0-9.]+)/i);
+        const total = detail.match(/logged total becomes ([0-9.]+) of ([0-9.]+)/i);
+        const remaining = detail.match(/with ([0-9.]+) remaining/i);
+        const above = detail.match(/([0-9.]+) above the reference/i);
+        return `<article class="food-serving-card"><span class="food-serving-icon" aria-hidden="true">${meta.icon}</span><div class="food-serving-main"><strong>${meta.label}</strong><b>+${amount ? amount[1] : "—"} ${meta.unit}</b><small>${total ? total[1] + " / " + total[2] + " " + meta.unit : esc(detail)}</small></div><div class="food-serving-side"><strong>${remaining ? remaining[1] + " " + meta.unit : above ? above[1] + " above" : ""}</strong><small>${remaining ? "remaining" : above ? "reference" : ""}</small></div></article>`;
+      }
+      return `<article class="food-serving-card food-serving-note"><span class="food-serving-icon" aria-hidden="true">i</span><p>${esc(note)}</p></article>`;
+    }).join("");
     output.innerHTML = `<h4>How this serving fits your day</h4>
       <p class="food-data-note">Guidance uses your saved profile and nutrition targets where available, plus general adult reference values. Nutrition scores and flags explain potential trade-offs; they never prevent you from logging or choosing a food.</p>
-      <ul>${guidance.notes.map((note) => `<li>${esc(note)}</li>`).join("")}</ul>
+      <div class="food-serving-cards">${cards}</div>
       <p class="food-data-note">General references: sodium under 2,000 mg/day; caffeine up to 400 mg/day for most healthy adults; fibre about 25 g/day; free sugars ideally below 50 g/day on a 2,000 kcal diet. Product total sugars may differ from free sugars. Pregnancy, medication, health conditions, and age can change advice.</p>`;
   }
   function renderReview(product) {

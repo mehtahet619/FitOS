@@ -103,3 +103,22 @@
 .food-balance-track > span { display:block; height:100%; border-radius:inherit; background:#65bd91; }
 .food-next-step { margin-top:18px; padding:14px; border-radius:14px; background:var(--fitos-surface,#fbfcfa); border:1px solid var(--fitos-border,#e7ebe5); }
 .food-next-step p { margin:7px 0 0; line-height:1.55; color:var(--fitos-ink,#17231c); font-size:13px; }
+
+
+/* Serving guidance: compact information cards, without changing the surrounding Diet screen. */
+#screen-diet .food-serving-cards { display:grid; gap:9px; margin:14px 0; }
+#screen-diet .food-serving-card { display:flex; align-items:center; gap:12px; min-width:0; padding:12px 13px; border:1px solid var(--border,#e3e8e2); border-radius:13px; background:var(--card,#fff); color:var(--ink,#17231c); }
+#screen-diet .food-serving-icon { display:grid; place-items:center; flex:0 0 38px; width:38px; height:38px; border-radius:11px; background:rgba(101,189,145,.13); color:#55a879; font-size:17px; font-weight:750; }
+#screen-diet .food-serving-main { display:grid; flex:1; min-width:0; gap:3px; }
+#screen-diet .food-serving-main strong { font-size:14px; }
+#screen-diet .food-serving-main b { color:#55a879; font-size:13px; }
+#screen-diet .food-serving-main small,#screen-diet .food-serving-side small { color:var(--muted,#778078); font-size:11px; }
+#screen-diet .food-serving-side { display:grid; gap:3px; flex:0 0 auto; text-align:right; }
+#screen-diet .food-serving-side strong { font-size:13px; font-weight:650; }
+#screen-diet .food-serving-goal { align-items:flex-start; border-color:rgba(85,168,121,.38); }
+#screen-diet .food-serving-goal > div { display:grid; gap:4px; min-width:0; }
+#screen-diet .food-serving-goal small { color:var(--muted,#778078); font-size:11px; }
+#screen-diet .food-serving-goal strong { color:#55a879; font-size:15px; }
+#screen-diet .food-serving-goal p,#screen-diet .food-serving-note p { margin:0; color:var(--muted,#778078); font-size:12px; line-height:1.45; }
+#screen-diet .food-serving-note { align-items:flex-start; }
+@media(max-width:420px) { #screen-diet .food-serving-card { gap:9px; padding:10px; } #screen-diet .food-serving-icon { flex-basis:34px; width:34px; height:34px; } #screen-diet .food-serving-side strong { font-size:12px; } }
