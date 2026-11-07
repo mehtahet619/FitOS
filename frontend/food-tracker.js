@@ -1,6 +1,9 @@
 (() => {
   "use strict";
-  const $ = (id) => document.getElementById(id);
+  // Capture the document before async work starts. jsdom may detach window.document on close,
+  // while late request rejections can still run their status handlers.
+  const doc = document;
+  const $ = (id) => doc.getElementById(id);
   const root = $("fitos-food-tracker");
   if (!root || root.dataset.initialized) return;
   root.dataset.initialized = "true";
