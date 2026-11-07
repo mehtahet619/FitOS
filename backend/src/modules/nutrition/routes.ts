@@ -11,7 +11,7 @@ nutritionRouter.use(requireAuth);
 // Return saved macro targets to clients that load nutrition guidance separately.
 nutritionRouter.get("/targets", async (req: AuthedRequest, res) => {
   const nutritionProfile = await db.get<any>(
-    `SELECT calorieTarget, proteinTargetG, carbTargetG, fatTargetG FROM NutritionProfile WHERE userId = ?`,
+    `SELECT np.calorieTarget, np.proteinTargetG, np.carbTargetG, np.fatTargetG, up.primaryGoal, up.weightKg FROM NutritionProfile np JOIN UserProfile up ON up.userId = np.userId WHERE np.userId = ?`,
     req.userId!
   );
   if (!nutritionProfile) return res.status(404).json({ error: "Nutrition targets are not available until onboarding is complete." });
@@ -20,6 +20,8 @@ nutritionRouter.get("/targets", async (req: AuthedRequest, res) => {
     proteinTargetG: nutritionProfile.proteinTargetG,
     carbTargetG: nutritionProfile.carbTargetG,
     fatTargetG: nutritionProfile.fatTargetG,
+    primaryGoal: nutritionProfile.primaryGoal,
+    weightKg: nutritionProfile.weightKg,
   });
 });
 
