@@ -4,7 +4,7 @@
   const root = $("fitos-food-tracker");
   if (!root || root.dataset.initialized) return;
   root.dataset.initialized = "true";
-  const state = { product: null, scanner: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null, searchProducts: [] };
+  const state = { product: null, scanner: null, logs: [], pendingManual: false, profile: null, nutritionTargets: null, dailyTotals: null, searchProducts: [] };
   const num = (v) => v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const fmt = (v, unit = "") => v === null || v === undefined ? "Not available" : `${Number(v.toFixed ? v.toFixed(1) : v)}${unit}`;
@@ -318,6 +318,7 @@
         try { state.nutritionTargets = await api("/nutrition/targets"); } catch { /* profile-based estimates remain available */ }
       }
       renderNutritionGuidance();
+      try { await loadLogs(); } catch { /* diary can be opened and retried independently */ }
     } catch { /* onboarding may not be complete; use general references */ }
   }
   function renderNutritionGuidance() {
@@ -327,7 +328,7 @@
     const n = state.product.nutrimentsPer100g || {};
     const guidance = window.FitOSNutritionGuidance.assess({
       nutrients: n, servingGrams: serving, profile: state.profile || {},
-      targets: state.nutritionTargets || {}
+      targets: state.nutritionTargets || {}, consumed: state.dailyTotals || {}
     });
     output.innerHTML = `<h4>How this serving fits your day</h4>
       <p class="food-data-note">Guidance uses your saved profile and nutrition targets where available, plus general adult reference values. It is not a diagnosis or a simple healthy/unhealthy verdict.</p>
@@ -469,14 +470,40 @@
   $("food-camera-start").addEventListener("click", startCamera);
   $("food-camera-stop").addEventListener("click", stopCamera);
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopCamera(); });
+  function renderDailyBalance(summary = {}) {
+    const host = $("food-daily-balance");
+    if (!host) return;
+    const targets = state.nutritionTargets || {}, profile = state.profile || {};
+    const goal = String(profile.primaryGoal || targets.primaryGoal || "general_fitness");
+    const goalLabels = { fat_loss:"Weight loss", muscle_gain:"Weight gain / muscle gain", body_recomposition:"Body recomposition", strength:"Strength", endurance:"Endurance", general_fitness:"General fitness" };
+    const metrics = [["Calories",num(summary.caloriesKcal),num(targets.calorieTarget),"kcal"],["Protein",num(summary.proteinG),num(targets.proteinTargetG),"g"],["Carbs",num(summary.carbsG),num(targets.carbTargetG),"g"],["Fat",num(summary.fatG),num(targets.fatTargetG),"g"]];
+    const progress = metrics.map(([label,eaten,target,unit]) => {
+      if (target === null) return '<div class="food-balance-row"><span>' + label + '</span><strong>Target not set</strong></div>';
+      const current=eaten??0, pct=Math.max(0,Math.min(100,current/Math.max(1,target)*100)), remaining=target-current;
+      const amount=Math.abs(remaining).toFixed(0)+" "+unit+(remaining>=0?" remaining":" above target");
+      return '<div class="food-balance-row"><div><span>'+label+'</span><strong>'+current.toFixed(0)+' / '+target.toFixed(0)+' '+unit+'</strong></div><div class="food-balance-track"><span style="width:'+pct.toFixed(1)+'%"></span></div><small>'+amount+'</small></div>';
+    }).join("");
+    const proteinLeft=num(targets.proteinTargetG)===null?null:Math.max(0,targets.proteinTargetG-(num(summary.proteinG)??0));
+    const caloriesLeft=num(targets.calorieTarget)===null?null:targets.calorieTarget-(num(summary.caloriesKcal)??0);
+    const diet=String(profile.dietaryPref||"").toLowerCase();
+    const proteinFoods=/vegan/.test(diet)?"tofu, soya chunks, dal, chickpeas or beans":/vegetarian/.test(diet)?"paneer, tofu, soya chunks, dal, chickpeas or curd":"eggs, dairy, tofu, dal, beans, fish or lean meat";
+    let next=goal==="fat_loss"?"For your weight-loss goal, a filling next meal can centre on protein and fibre, with portions that fit your remaining energy target.":goal==="muscle_gain"?"For your muscle-gain goal, pair a protein source with a useful carbohydrate source in your next meal.":goal==="body_recomposition"?"For body recomposition, keep protein consistent and build the next meal around protein, vegetables and a suitable carbohydrate portion.":"Build your next meal around a protein source, vegetables or fruit, and carbohydrates or fats that suit your day.";
+    if(proteinLeft!==null&&proteinLeft>0) next+=" Based on your log, about "+proteinLeft.toFixed(0)+" g protein remains; options include "+proteinFoods+".";
+    if(caloriesLeft!==null&&caloriesLeft<0) next+=" Your logged calories are currently about "+Math.abs(caloriesLeft).toFixed(0)+" kcal above the estimate. This is context, not a reason to skip meals or compensate; just make your next choice balanced and comfortable.";
+    else if(caloriesLeft!==null) next+=" About "+caloriesLeft.toFixed(0)+" kcal remains against your estimated daily target.";
+    host.innerHTML='<h3>Your daily balance</h3><p class="food-data-note">Goal: <strong>'+esc(goalLabels[goal]||goalLabels.general_fitness)+'</strong>. Targets are estimates based on your saved profile.</p>'+progress+'<div class="food-next-step"><strong>What to eat next</strong><p>'+esc(next)+'</p></div><p class="food-data-note">You are always free to choose what you eat. Health scores and macro targets are guidance only. FitOS shows the trade-offs and suggests ways to balance your overall intake, it does not block food choices.</p>';
+  }
   async function loadLogs() {
     const result = await api("/nutrition/logs?date=" + localDate() + "&tzOffset=" + new Date().getTimezoneOffset());
     state.logs = result.entries || [];
     const summary = result.totals || {};
+    state.dailyTotals = summary;
     $("food-daily-summary").innerHTML = [
       ["Calories",summary.caloriesKcal,"kcal"],["Protein",summary.proteinG,"g"],["Carbs",summary.carbsG,"g"],["Fat",summary.fatG,"g"],["Fiber",summary.fiberG,"g"]
     ].map(([label,value,unit]) => `<div class="food-summary-tile"><strong>${fmt(value, unit === "kcal" ? " kcal" : " g")}</strong><small>${label} · available values only</small></div>`).join("");
     $("food-log-list").innerHTML = state.logs.length ? state.logs.map((entry) => `<article class="food-log-entry"><div class="food-result-main"><strong>${esc(entry.foodName)}</strong><small>${esc(entry.brand || "")} · ${esc(entry.servingAmount)} ${esc(entry.servingUnit)} · ${esc(entry.source)}</small><small>${fmt(entry.caloriesKcal," kcal")} · Protein ${fmt(entry.proteinG," g")} · Carbs ${fmt(entry.carbsG," g")} · Fat ${fmt(entry.fatG," g")}</small></div><div class="food-log-actions"><button type="button" data-delete-log="${esc(entry.id)}">Delete</button></div></article>`).join("") : '<p class="food-empty">No food logged today yet. Scan a package or enter its label values to get started.</p>';
+    renderDailyBalance(summary);
+    renderNutritionGuidance();
   }
   $("food-refresh-log").addEventListener("click", () => loadLogs().catch((e) => { $("food-log-list").textContent = e.message; }));
   $("food-log-list").addEventListener("click", async (event) => {
