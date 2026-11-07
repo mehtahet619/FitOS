@@ -3242,3 +3242,66 @@ html[data-theme] #screen-workout .workout-session-top > span {
 .theme-toggle.is-positioned {
   right: auto;
 }
+
+
+/* ---------- Public landing page: restore readable contrast in light mode ---------- */
+html[data-theme="light"] .landing-page {
+  --landing-bg: #f4f2ec;
+  --landing-ink: #17211b;
+  --landing-muted: #5f6d63;
+  --landing-panel: #ffffff;
+  --landing-mint: #238653;
+  --landing-line: rgba(32, 53, 40, .12);
+  background: var(--landing-bg);
+  color: var(--landing-ink);
+}
+html[data-theme="light"] .site-header {
+  border-bottom-color: rgba(32, 53, 40, .12);
+}
+html[data-theme="light"] .site-brand { color: #17211b; }
+html[data-theme="light"] .site-navigation > a:not(.button) {
+  color: #526258;
+}
+html[data-theme="light"] .site-navigation > a:not(.button):hover,
+html[data-theme="light"] .site-footer nav a:hover {
+  color: #187447;
+}
+html[data-theme="light"] .site-menu-toggle {
+  border-color: #d4ddd5;
+  background: rgba(255,255,255,.82);
+}
+html[data-theme="light"] .site-menu-toggle span { background: #26372c; }
+html[data-theme="light"] .site-navigation.is-open {
+  border-color: #dce4dc;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(28, 46, 34, .14);
+}
+html[data-theme="light"] .site-navigation.is-open > a:not(.button) {
+  border-bottom-color: #e8ede8;
+  color: #34483a;
+}
+html[data-theme="light"] .landing-hero h1 { color: #17211b; }
+html[data-theme="light"] .landing-hero h1 span { color: #238653; }
+html[data-theme="light"] .hero-slogan { color: #45584b; }
+html[data-theme="light"] .hero-slogan span { color: #238653; }
+html[data-theme="light"] .hero-intro { color: #5e6d63; }
+html[data-theme="light"] .hero-note { color: #637268; }
+html[data-theme="light"] .hero-note-mark,
+html[data-theme="light"] .hero-scroll span:last-child { color: #238653; }
+html[data-theme="light"] .hero-scroll { color: #526258 !important; }
+html[data-theme="light"] .button-glass {
+  border-color: #d5ded6;
+  background: rgba(255,255,255,.78);
+  color: #304438 !important;
+}
+html[data-theme="light"] .button-glass:hover {
+  border-color: #9bbba5;
+  background: #ffffff;
+}
+html[data-theme="light"] .hero-glow {
+  background: radial-gradient(ellipse, rgba(91, 178, 124, .15), transparent 68%);
+}
+html[data-theme="light"] .eyebrow { color: #397d58; }
+html[data-theme="light"] .site-footer { color: #637268; }
+html[data-theme="light"] .site-footer nav a { color: #526258; }
+html[data-theme="light"] .site-footer > small { color: #68766c; }
