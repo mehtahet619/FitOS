@@ -363,7 +363,8 @@
       <div class="field"><label>Primary goal</label>
         <select id="ob-goal">
           <option value="muscle_gain">Muscle gain</option>
-          <option value="fat_loss">Fat loss</option>
+          <option value="fat_loss">Weight loss</option>
+          <option value="body_recomposition">Body recomposition</option>
           <option value="strength">Strength</option>
           <option value="general_fitness">General fitness</option>
           <option value="endurance">Endurance</option>
@@ -438,8 +439,8 @@
           <div class="food-tool-card"><h3>Manual nutrition entry</h3><p>Use this if a product is missing or its label data is incomplete. Enter the values from the package label; nothing is guessed.</p><form id="food-manual-form" class="food-manual-grid"><label>Food name<input name="name" required maxlength="120" /></label><label>Serving amount (g/ml)<input name="serving" type="number" min="1" max="10000" value="100" required /></label><p class="food-data-note" style="grid-column:1/-1">Enter the label values for the serving amount above.</p><label>Calories (kcal)<input name="calories" type="number" min="0" max="10000" step="0.1" required /></label><label>Protein (g)<input name="protein" type="number" min="0" max="1000" step="0.1" required /></label><label>Carbohydrate (g)<input name="carbs" type="number" min="0" max="1000" step="0.1" required /></label><label>Fat (g)<input name="fat" type="number" min="0" max="1000" step="0.1" required /></label><button type="submit" class="btn btn-mint">Review manual entry</button></form></div>
           <div id="food-product-review" class="food-tool-card" hidden></div>
         </div>
-        <div id="food-view-log" class="food-view" hidden><div id="food-daily-summary" class="food-daily-summary"></div><div class="food-tool-card"><div class="food-section-heading"><h3>Meal history</h3><button type="button" class="btn btn-outline" id="food-refresh-log">Refresh</button></div><div id="food-log-list"></div></div></div>
-        <div id="food-view-nearby" class="food-view" hidden><div class="food-tool-card"><h3>Nearby food finder</h3><p>Your location is requested only after you tap “Use my location”. You can enter a location manually if you prefer not to share GPS.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-nearby-location">Use my location</button></div><form id="food-nearby-manual-form" class="food-inline-form"><label for="food-nearby-query">Search near a place (provider support required)</label><div class="food-input-row"><input id="food-nearby-query" maxlength="120" placeholder="Area, city, or address" /><button type="submit" class="btn btn-dark">Search</button></div></form><p id="food-nearby-status" class="food-status" aria-live="polite"></p><div id="food-nearby-results"></div></div></div>
+        <div id="food-view-log" class="food-view" hidden><div id="food-daily-summary" class="food-daily-summary"></div><section id="food-daily-balance" class="food-tool-card" aria-live="polite"><h3>Your daily balance</h3><p>Loading your goal and logged intake…</p></section><div class="food-tool-card"><div class="food-section-heading"><h3>Meal history</h3><button type="button" class="btn btn-outline" id="food-refresh-log">Refresh</button></div><div id="food-log-list"></div></div></div>
+        <div id="food-view-nearby" class="food-view" hidden><div class="food-tool-card"><h3>Nearby food finder</h3><p>Your location is requested only after you tap “Use my location”. You can enter a location manually if you prefer not to share GPS. Health scores are advisory, not filters: all returned menu options remain visible so you can make your own choice.</p><div class="food-actions"><button type="button" class="btn btn-mint" id="food-nearby-location">Use my location</button></div><form id="food-nearby-manual-form" class="food-inline-form"><label for="food-nearby-query">Search near a place (provider support required)</label><div class="food-input-row"><input id="food-nearby-query" maxlength="120" placeholder="Area, city, or address" /><button type="submit" class="btn btn-dark">Search</button></div></form><p id="food-nearby-status" class="food-status" aria-live="polite"></p><div id="food-nearby-results"></div></div></div>
         <p class="food-data-note">Data source: Open Food Facts community product database. Nutrition values are shown with their reported basis and may be missing or user-submitted. FitOS does not treat missing values as zero. Always confirm the selected serving before logging. Food logging is general wellness information, not medical advice.</p>
       </section>
     </div>
@@ -504,9 +505,9 @@
 <script src="pricing-guesses.js?v=fitos-price-guess-v2"></script>
 <script src="app.js?v=fitos-leaderboard-cards-v6"></script>
 <script src="gamification.js?v=fitos-rewards-client-xp-v7" defer></script>
-<script src="nutrition-guidance.js?v=fitos-nutrition-guidance-v2"></script>
+<script src="nutrition-guidance.js?v=fitos-goal-balance-v1"></script>
 <script src="barcode-scanner.js?v=fitos-barcode-zxing-v1"></script>
-<script src="food-tracker.js?v=fitos-smart-food-search-v3"></script>
+<script src="food-tracker.js?v=fitos-goal-balance-v1"></script>
 
 </body>
 </html>
