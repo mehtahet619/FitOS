@@ -15,7 +15,7 @@ const profileSchema = z.object({
   heightCm: z.number().positive(),
   weightKg: z.number().positive(),
   fitnessLevel: z.enum(["beginner", "intermediate", "advanced"]),
-  primaryGoal: z.enum(["muscle_gain", "fat_loss", "strength", "general_fitness", "endurance"]),
+  primaryGoal: z.enum(["muscle_gain", "fat_loss", "body_recomposition", "strength", "general_fitness", "endurance"]),
   daysPerWeek: z.number().int().min(1).max(7),
   // Older onboarding clients may not send a session duration yet.
   sessionMinutes: z.number().int().positive().default(60),
@@ -42,6 +42,7 @@ userRouter.get("/profile", async (req: AuthedRequest, res) => {
     ...profile,
     allergies: (profile.allergies || "").split(",").filter(Boolean),
     foodLikes: (profile.foodLikes || "").split(",").filter(Boolean),
+    nutritionTargets: nutritionTargets ? { calorieTarget: nutritionTargets.calorieTarget, proteinTargetG: nutritionTargets.proteinTargetG, carbTargetG: nutritionTargets.carbTargetG, fatTargetG: nutritionTargets.fatTargetG } : null,
   });
 });
 
