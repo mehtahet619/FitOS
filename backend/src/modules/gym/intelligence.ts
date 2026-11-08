@@ -32,7 +32,7 @@ function parseOsmOpeningHours(value: string | null | undefined): any | null {
   const expandDays = (selector: string): number[] => {
     const result = new Set<number>();
     // Tokenize OSM weekday selectors without a complex regular expression.
-    const tokens = selector.replaceAll(",", " ").trim().split(" ").filter(Boolean);
+    const tokens = selector.split(",").join(" ").trim().split(" ").filter(Boolean);
     for (const token of tokens) {
       const [startName, endName, ...unexpected] = token.split("-");
       if (unexpected.length > 0) continue;
