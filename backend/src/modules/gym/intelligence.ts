@@ -43,7 +43,8 @@ function parseOsmOpeningHours(value: string | null | undefined): any | null {
         cursor = (cursor + 1) % 7;
       }
     }
-    return result.size ? [...result] : [0, 1, 2, 3, 4, 5, 6];
+    if (result.size) return [...result];
+    return selector.trim() ? [] : [0, 1, 2, 3, 4, 5, 6];
   };
   for (const clause of raw.split(";").map((part) => part.trim()).filter(Boolean)) {
     const timeMatch = clause.match(/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/);
