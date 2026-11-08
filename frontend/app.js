@@ -2858,7 +2858,7 @@ async function loadGymCrowdForecast(gymId) {
   if (!target) return;
   target.innerHTML = '<div class="empty-state">Loading gym hours and crowd forecast…</div>';
   try {
-    const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`);
+    const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`, { timeoutMs: 150000 });
     const evaluation = result.evaluation || {};
     const trainingSummary = Number(result.trainingSamples || 0) > 0
       ? `Official training records: ${Number(result.trainingSamples)}`
