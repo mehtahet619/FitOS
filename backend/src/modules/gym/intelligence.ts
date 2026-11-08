@@ -31,9 +31,11 @@ function parseOsmOpeningHours(value: string | null | undefined): any | null {
   }
   const expandDays = (selector: string): number[] => {
     const result = new Set<number>();
-    const tokens = selector.match(/(?:Su|Mo|Tu|We|Th|Fr|Sa)(?:\s*-\s*(?:Su|Mo|Tu|We|Th|Fr|Sa))?/g) || [];
+    // Tokenize OSM weekday selectors without a complex regular expression.
+    const tokens = selector.replaceAll(",", " ").trim().split(" ").filter(Boolean);
     for (const token of tokens) {
-      const [startName, endName] = token.split("-").map((part) => part.trim());
+      const [startName, endName, ...unexpected] = token.split("-");
+      if (unexpected.length > 0) continue;
       const start = OSM_DAY_INDEX[startName], end = OSM_DAY_INDEX[endName || startName];
       if (start === undefined || end === undefined) continue;
       let cursor = start;
