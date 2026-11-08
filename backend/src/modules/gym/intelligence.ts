@@ -32,7 +32,11 @@ function parseOsmOpeningHours(value: string | null | undefined): any | null {
   const expandDays = (selector: string): number[] => {
     const result = new Set<number>();
     // Tokenize OSM weekday selectors without a complex regular expression.
+<<<<<<< HEAD
     const tokens = selector.replaceAll(",", " ").trim().split(" ").filter(Boolean);
+=======
+    const tokens = selector.split(",").join(" ").trim().split(" ").filter(Boolean);
+>>>>>>> origin/main
     for (const token of tokens) {
       const [startName, endName, ...unexpected] = token.split("-");
       if (unexpected.length > 0) continue;
@@ -133,11 +137,21 @@ function hourIsOpen(schedule: any | null, weekday: number, hour: number): boolea
   });
 }
 
+const gymDateFormatters = new Map<string, { weekday: Intl.DateTimeFormat; hour: Intl.DateTimeFormat }>();
+
 function localWeekdayHour(value: string | Date, timeZone: string): { weekday: number; hour: number } {
   const date = value instanceof Date ? value : new Date(value);
-  const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+  let formatters = gymDateFormatters.get(timeZone);
+  if (!formatters) {
+    formatters = {
+      weekday: new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }),
+      hour: new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }),
+    };
+    gymDateFormatters.set(timeZone, formatters);
+  }
+  const weekdayName = formatters.weekday.format(date);
   const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(date));
+  const hour = Number(formatters.hour.format(date));
   return { weekday, hour };
 }
 
@@ -191,13 +205,15 @@ function getCurrentOpeningStatus(schedule: any | null, timeZone: string) {
 }
 
 async function predictGymWeek(gym: any, timeZone: string) {
-  // Only independently licensed/authorized official observations train this model.
+  // Only authorized official records train the model. Reuse Intl formatters
+  // instead of constructing new formatters for every historical observation.
   const trainingRows = await db.all<any>(
     "SELECT observedAt, crowdPercent, 'official_dataset' AS source FROM GymCrowdOfficialObservation WHERE gymId = ? UNION ALL SELECT observedAt, crowdPercent, 'member_observation' AS source FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
     gym.id, gym.id
   );
   const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number }>();
-  const nowMs = Date.now();
+  const now = new Date();
+  const nowMs = now.getTime();
   for (const row of trainingRows) {
     const date = new Date(row.observedAt);
     if (!Number.isFinite(date.getTime())) continue;
@@ -215,18 +231,25 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
+<<<<<<< HEAD
   const modelVersion = `fitos-osm-member-hourly-v5-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
+=======
+  const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
+
+>>>>>>> origin/main
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
   const openingHoursKnown = Boolean(
     (Array.isArray(schedule) && schedule.length > 0) ||
     (schedule && typeof schedule.raw === "string" && Array.isArray(schedule.weekly))
   );
-  const now = new Date();
+
   const baseLocalDate = localDateAt(now, timeZone);
   const baseDate = new Date(`${baseLocalDate}T12:00:00.000Z`);
-  const output: any[] = [];
   const days: any[] = [];
+  const output: any[] = [];
+  const pendingSnapshots: Array<{ id: string; gymId: string; predictedFor: string; predictedCrowdPercent: number; modelVersion: string; generatedAt: string }> = [];
+
   for (let offset = 0; offset < 7; offset += 1) {
     const date = addDays(baseDate, offset);
     const dateKey = date.toISOString().slice(0, 10);
@@ -234,16 +257,19 @@ async function predictGymWeek(gym: any, timeZone: string) {
     const hours: any[] = [];
     for (let hour = 0; hour < 24; hour += 1) {
       if (!hourIsOpen(schedule, weekday, hour)) continue;
-      const key = `${weekday}:${hour}`;
-      const slot = bySlot.get(key);
+      const slot = bySlot.get(`${weekday}:${hour}`);
       const baseline = coldStartBaseline(weekday, hour);
       const learnedAverage = slot && slot.weight > 0 ? slot.weightedSum / slot.weight : null;
       const sampleWeight = slot ? Math.min(0.95, slot.count / (slot.count + 4)) : 0;
-      const predicted = Math.max(0, Math.min(100, Math.round(learnedAverage === null ? baseline : learnedAverage * sampleWeight + baseline * (1 - sampleWeight))));
+      const predicted = Math.max(0, Math.min(100, Math.round(
+        learnedAverage === null ? baseline : learnedAverage * sampleWeight + baseline * (1 - sampleWeight)
+      )));
       const ageDays = slot?.latestAt ? (nowMs - slot.latestAt) / 86400000 : Infinity;
-      const confidence = slot && slot.count >= 30 && ageDays <= 21 ? "high" : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
+      const confidence = slot && slot.count >= 30 && ageDays <= 21 ? "high"
+        : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
+<<<<<<< HEAD
       const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
       const todayInGymZone = localDateAt(now, timeZone);
       const currentGymHour = localWeekdayHour(now, timeZone).hour;
@@ -256,6 +282,12 @@ async function predictGymWeek(gym: any, timeZone: string) {
         }
       }
       const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
+=======
+      const item = {
+        date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label,
+        confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset",
+      };
+>>>>>>> origin/main
       hours.push(item);
       output.push(item);
     }
@@ -268,15 +300,53 @@ async function predictGymWeek(gym: any, timeZone: string) {
       hours,
     });
   }
+
+  // Load snapshots in one query. Never rewrite an existing prediction: its
+  // value must remain fixed so later member reports evaluate what was shown.
+  const rangeEnd = addDays(baseDate, 7).toISOString().slice(0, 10);
+  const existingSnapshots = await db.all<any>(
+    "SELECT predictedFor FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor >= ? AND predictedFor < ?",
+    gym.id, `${baseLocalDate}T00:00:00`, `${rangeEnd}T00:00:00`
+  );
+  const existingKeys = new Set(existingSnapshots.map((row) => String(row.predictedFor).replace(" ", "T").slice(0, 19)));
   const todayKey = localDateAt(now, timeZone);
   const currentHour = localWeekdayHour(now, timeZone).hour;
-  const recommendationDay = days.find((day) => day.hours.some((item: any) => day.date > todayKey || item.hour > currentHour));
+  const generatedAt = nowIso();
+
+  for (const item of output) {
+    const isFuture = item.date > todayKey || (item.date === todayKey && item.hour > currentHour);
+    if (!isFuture || existingKeys.has(item.predictedFor)) continue;
+    pendingSnapshots.push({
+      id: uuidv4(), gymId: gym.id, predictedFor: item.predictedFor,
+      predictedCrowdPercent: item.crowdPercent, modelVersion, generatedAt,
+    });
+  }
+
+  // Keep batches below SQLite's common bind-parameter limit; the same SQL
+  // works with SQLite, PostgreSQL and TiDB/MySQL adapters.
+  for (let offset = 0; offset < pendingSnapshots.length; offset += 80) {
+    const batch = pendingSnapshots.slice(offset, offset + 80);
+    const values: unknown[] = [];
+    const tuples = batch.map((snapshot) => {
+      values.push(snapshot.id, snapshot.gymId, snapshot.predictedFor, snapshot.predictedCrowdPercent, snapshot.modelVersion, snapshot.generatedAt);
+      return "(?, ?, ?, ?, ?, ?)";
+    });
+    await db.run(
+      `INSERT INTO GymCrowdForecastSnapshot (id, gymId, predictedFor, predictedCrowdPercent, modelVersion, generatedAt) VALUES ${tuples.join(", ")}`,
+      ...values
+    );
+  }
+
+  const recommendationDay = days.find((day) =>
+    day.hours.some((item: any) => day.date > todayKey || item.hour > currentHour)
+  );
   const recommendationHours = (recommendationDay?.hours || []).filter((item: any) =>
     recommendationDay.date > todayKey || item.hour > currentHour
   );
   const leastCrowded = [...recommendationHours].sort((a, b) => a.crowdPercent - b.crowdPercent)[0] || null;
   const busiest = [...recommendationHours].sort((a, b) => b.crowdPercent - a.crowdPercent)[0] || null;
   const evaluation = await getCrowdEvaluation(gym.id);
+
   return {
     days,
     predictions: output,
