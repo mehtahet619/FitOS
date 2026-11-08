@@ -2814,27 +2814,83 @@ async function loadGymSelectionForm() {
   $("gym-manual-create")?.addEventListener("click", async () => { const name = $("gym-manual-name").value.trim(); const city = cityInput.value.trim(); if (!name || !city) { searchStatus.textContent = "Enter a gym name and city."; return; } try { await Api.post("/gym/create", { name, city, address: $("gym-manual-address").value.trim(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; } });
 }
 
+function formatGymHour(hour) {
+  const value = Number(hour);
+  if (!Number.isFinite(value)) return String(hour);
+  return new Date(Date.UTC(2020, 0, 1, value)).toLocaleTimeString([], { hour: "numeric", hour12: true, timeZone: "UTC" });
+}
+
+function renderGymOpeningSchedule(schedule, known) {
+  if (!known || !Array.isArray(schedule) || !schedule.length) {
+    return '<div class="gym-hours-empty">Weekly opening hours have not been published by this gym yet. Crowd estimates are shown separately and do not confirm that the gym is open.</div>';
+  }
+  return `<section class="gym-opening-hours" aria-label="Weekly gym opening hours">
+    <div class="gym-crowd-section-heading"><strong>Weekly operating hours</strong><span>OpenStreetMap listing</span></div>
+    <div class="gym-opening-hours-grid">${schedule.map((day) => `
+      <div class="gym-opening-day">
+        <span>${gymEscapeHtml(day.day)}</span>
+        <strong>${day.closed || !day.intervals?.length ? "Closed / unavailable" : day.intervals.map(gymEscapeHtml).join(", ")}</strong>
+      </div>`).join("")}
+    </div>
+  </section>`;
+}
+
+function renderGymCrowdDay(day, index) {
+  const dateLabel = new Date(`${day.date}T12:00:00Z`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
+  const hoursMarkup = day.hours?.length
+    ? day.hours.map((item) => `
+      <div class="gym-crowd-hour">
+        <span>${formatGymHour(item.hour)}</span>
+        <div class="gym-crowd-track" role="img" aria-label="Predicted crowd ${item.crowdPercent} percent"><i style="width:${item.crowdPercent}%" class="${item.crowdPercent >= 80 ? "is-busy" : item.crowdPercent >= 55 ? "is-moderate" : "is-quiet"}"></i></div>
+        <b>${item.crowdPercent}%</b>
+        <small>${gymEscapeHtml(String(item.crowdLevel || "").replaceAll("_", " "))}</small>
+      </div>`).join("")
+    : '<p class="gym-hours-empty">No operating hours are listed for this day.</p>';
+  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen ? "Hours not verified" : "Closed / no hours listed");
+  return `<details class="gym-crowd-day" ${index === 0 ? "open" : ""}>
+    <summary><span><strong>${gymEscapeHtml(dateLabel)}</strong><small>${gymEscapeHtml(hoursLabel)}</small></span><span class="gym-crowd-day-count">${day.hours?.length || 0} hourly estimates</span></summary>
+    <div class="gym-crowd-day-content">${hoursMarkup}</div>
+  </details>`;
+}
+
 async function loadGymCrowdForecast(gymId) {
   const target = $("gym-crowd-forecast");
   if (!target) return;
+  target.innerHTML = '<div class="empty-state">Loading gym hours and crowd forecast…</div>';
   try {
     const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`);
     const evaluation = result.evaluation || {};
     const trainingSummary = Number(result.trainingSamples || 0) > 0
       ? `Official training records: ${Number(result.trainingSamples)}`
-      : "No official training dataset imported yet · cold-start estimates";
+      : "No official training dataset imported · using transparent cold-start estimates";
     const errorSummary = Number(evaluation.evaluatedCount || 0) > 0
       ? `Prediction MAE: ${Number(evaluation.mae).toFixed(1)} points · RMSE: ${Number(evaluation.rmse).toFixed(1)} · evaluated hours: ${Number(evaluation.evaluatedCount)}`
-      : "Prediction error: waiting for actual crowd reports";
-    target.innerHTML =
-      `<p class="card-sub">Next 7 days · ${trainingSummary} · ${errorSummary} · ${result.openingHoursKnown ? "Opening hours verified" : "Opening hours unavailable; showing all hours"}</p>` +
-      (result.days || []).map(day =>
-        `<section class="gym-crowd-day"><h3>${new Date(`${day.date}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</h3>${day.hours.map(item =>
-          `<div class="gym-crowd-hour"><span>${String(item.hour).padStart(2, "0")}:00</span><div class="gym-crowd-track"><i style="width:${item.crowdPercent}%" class="${item.crowdPercent >= 80 ? "is-busy" : item.crowdPercent >= 55 ? "is-moderate" : "is-quiet"}"></i></div><b>${item.crowdPercent}%</b><small>${item.crowdLevel.replaceAll("_", " ")}</small></div>`
-        ).join("")}</section>`
-      ).join("");
+      : "Prediction error tracking starts when actual crowd reports are submitted";
+    const recommendations = result.recommendations || {};
+    const least = recommendations.leastCrowded;
+    const busiest = recommendations.busiest;
+    const recommendationMarkup = recommendations.date && (least || busiest)
+      ? `<section class="gym-crowd-recommendations">
+          ${least ? `<div><span>Best estimated time</span><strong>${formatGymHour(least.hour)}</strong><small>${least.crowdPercent}% predicted crowd · ${least.confidence} confidence</small></div>` : ""}
+          ${busiest ? `<div><span>Busiest estimated time</span><strong>${formatGymHour(busiest.hour)}</strong><small>${busiest.crowdPercent}% predicted crowd · ${busiest.confidence} confidence</small></div>` : ""}
+        </section>`
+      : '<p class="gym-hours-empty">No operating-hour forecast is available yet.</p>';
+    target.innerHTML = `
+      <div class="gym-crowd-meta">
+        <p>Next 7 days · ${gymEscapeHtml(trainingSummary)}</p>
+        <p>${gymEscapeHtml(errorSummary)}</p>
+        <p>${result.openingHoursKnown ? "Operating hours parsed from the gym listing." : "Opening hours are not published; hourly estimates are not proof of opening."}</p>
+      </div>
+      ${renderGymOpeningSchedule(result.openingSchedule, result.openingHoursKnown)}
+      <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on the first upcoming open day</span></div>
+      ${recommendationMarkup}
+      <div class="gym-crowd-section-heading"><strong>7-day hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
+      <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates based on authorized historical training data when available, otherwise a low-confidence weekday/weekend baseline. FitOS does not currently measure live occupancy through this forecast.</p>
+    `;
   } catch (error) {
-    target.textContent = error.message || "Could not load the forecast.";
+    target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
+    $("gym-crowd-retry")?.addEventListener("click", () => { void loadGymCrowdForecast(gymId); });
   }
 }
 
