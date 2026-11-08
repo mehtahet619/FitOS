@@ -207,7 +207,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     "SELECT observedAt, crowdPercent, 'official_dataset' AS source FROM GymCrowdOfficialObservation WHERE gymId = ? UNION ALL SELECT observedAt, crowdPercent, 'member_observation' AS source FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
     gym.id, gym.id
   );
-  const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number }>();
+  const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number; sources: Record<string, number> }>();
   const now = new Date();
   const nowMs = now.getTime();
   for (const row of trainingRows) {
