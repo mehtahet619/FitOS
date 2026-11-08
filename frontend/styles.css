@@ -3305,3 +3305,49 @@ html[data-theme="light"] .eyebrow { color: #397d58; }
 html[data-theme="light"] .site-footer { color: #637268; }
 html[data-theme="light"] .site-footer nav a { color: #526258; }
 html[data-theme="light"] .site-footer > small { color: #68766c; }
+
+/* Gym crowd forecast and weekly operating hours */
+#screen-gym .gym-crowd-meta { display:grid; gap:5px; margin:12px 0 16px; }
+#screen-gym .gym-crowd-meta p { margin:0; color:var(--muted); font-size:12px; line-height:1.55; }
+#screen-gym .gym-crowd-section-heading { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:16px 0 9px; }
+#screen-gym .gym-crowd-section-heading strong { color:var(--ink); font-size:14px; }
+#screen-gym .gym-crowd-section-heading > span { color:var(--muted); font-size:10px; text-align:right; }
+#screen-gym .gym-opening-hours { margin:14px 0 18px; }
+#screen-gym .gym-opening-hours-grid { display:grid; grid-template-columns:1fr; gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+#screen-gym .gym-opening-day { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 11px; border-bottom:1px solid var(--border); }
+#screen-gym .gym-opening-day:last-child { border-bottom:0; }
+#screen-gym .gym-opening-day > span { color:var(--muted); font-size:12px; min-width:82px; }
+#screen-gym .gym-opening-day > strong { color:var(--ink); font-size:12px; font-weight:600; text-align:right; }
+#screen-gym .gym-hours-empty { padding:11px; border:1px dashed var(--border); border-radius:10px; color:var(--muted); font-size:12px; line-height:1.55; }
+#screen-gym .gym-crowd-recommendations { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin:10px 0 18px; }
+#screen-gym .gym-crowd-recommendations > div { min-width:0; padding:12px; border:1px solid var(--border); border-radius:12px; background:var(--surface,var(--card)); display:grid; gap:4px; }
+#screen-gym .gym-crowd-recommendations span { color:var(--muted); font-size:10px; }
+#screen-gym .gym-crowd-recommendations strong { color:var(--ink); font-size:20px; }
+#screen-gym .gym-crowd-recommendations small { color:var(--muted); font-size:10px; line-height:1.45; }
+#screen-gym .gym-crowd-days { display:grid; gap:8px; }
+#screen-gym .gym-crowd-day { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); }
+#screen-gym .gym-crowd-day > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; cursor:pointer; list-style:none; }
+#screen-gym .gym-crowd-day > summary::-webkit-details-marker { display:none; }
+#screen-gym .gym-crowd-day > summary > span:first-child { display:grid; gap:3px; }
+#screen-gym .gym-crowd-day > summary strong { color:var(--ink); font-size:12px; }
+#screen-gym .gym-crowd-day > summary small { color:var(--muted); font-size:10px; }
+#screen-gym .gym-crowd-day-count { color:var(--muted); font-size:10px; text-align:right; }
+#screen-gym .gym-crowd-day-content { padding:0 10px 10px; }
+#screen-gym .gym-crowd-day-content .gym-crowd-hour { display:grid; grid-template-columns:55px minmax(35px,1fr) 34px 72px; align-items:center; gap:7px; padding:7px 0; border-top:1px solid var(--border); }
+#screen-gym .gym-crowd-day-content .gym-crowd-hour > span,
+#screen-gym .gym-crowd-day-content .gym-crowd-hour b { color:var(--ink); font-size:10px; }
+#screen-gym .gym-crowd-day-content .gym-crowd-hour b { text-align:right; }
+#screen-gym .gym-crowd-day-content .gym-crowd-hour small { color:var(--muted); font-size:9px; text-transform:capitalize; }
+#screen-gym .gym-crowd-track { height:7px; overflow:hidden; border-radius:99px; background:var(--border); }
+#screen-gym .gym-crowd-track i { display:block; height:100%; border-radius:inherit; background:#6eae83; }
+#screen-gym .gym-crowd-track i.is-moderate { background:#c5a65d; }
+#screen-gym .gym-crowd-track i.is-busy { background:#c8786e; }
+#screen-gym .gym-crowd-disclaimer { margin:12px 0 2px; color:var(--muted); font-size:10px; line-height:1.55; }
+html[data-theme="dark"] #screen-gym .gym-opening-hours-grid,
+html[data-theme="dark"] #screen-gym .gym-crowd-day,
+html[data-theme="dark"] #screen-gym .gym-crowd-recommendations > div { background:#1a211d; border-color:#303b34; }
+html[data-theme="dark"] #screen-gym .gym-crowd-day-content .gym-crowd-hour { border-top-color:#303b34; }
+@media (max-width:360px) {
+  #screen-gym .gym-crowd-day-content .gym-crowd-hour { grid-template-columns:48px minmax(25px,1fr) 30px 62px; gap:5px; }
+  #screen-gym .gym-opening-day { padding:8px; }
+}
