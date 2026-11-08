@@ -110,7 +110,8 @@ function addDays(date: Date, amount: number): Date {
 
 function hourIsOpen(schedule: any | null, weekday: number, hour: number): boolean {
   const periods = Array.isArray(schedule) ? schedule : schedule?.periods;
-  if (!periods?.length) return true; // Unknown schedule: show estimates but label hours as unverified.
+  if (!schedule || !Array.isArray(periods)) return true; // Unknown schedule: show estimates but label hours as unverified.
+  if (periods.length === 0) return false; // A parsed schedule with no periods means no listed opening times.
   const current = weekday * 24 + hour;
   return periods.some((period: any) => {
     const openDay = Number(period.open?.day);
@@ -180,7 +181,10 @@ async function predictGymWeek(gym: any, timeZone: string) {
   const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
-  const openingHoursKnown = Boolean((Array.isArray(schedule) ? schedule : schedule?.periods)?.length || schedule?.weekly?.length);
+  const openingHoursKnown = Boolean(
+    (Array.isArray(schedule) && schedule.length > 0) ||
+    (schedule && typeof schedule.raw === "string" && Array.isArray(schedule.weekly))
+  );
   const now = new Date();
   const baseLocalDate = localDateAt(now, timeZone);
   const baseDate = new Date(`${baseLocalDate}T12:00:00.000Z`);
@@ -227,8 +231,12 @@ async function predictGymWeek(gym: any, timeZone: string) {
       hours,
     });
   }
-  const firstOpenDay = days.find((day) => day.hours.length > 0);
-  const recommendationHours = firstOpenDay?.hours || [];
+  const todayKey = localDateAt(now, timeZone);
+  const currentHour = localWeekdayHour(now, timeZone).hour;
+  const recommendationDay = days.find((day) => day.hours.some((item: any) => day.date > todayKey || item.hour > currentHour));
+  const recommendationHours = (recommendationDay?.hours || []).filter((item: any) =>
+    recommendationDay.date > todayKey || item.hour > currentHour
+  );
   const leastCrowded = [...recommendationHours].sort((a, b) => a.crowdPercent - b.crowdPercent)[0] || null;
   const busiest = [...recommendationHours].sort((a, b) => b.crowdPercent - a.crowdPercent)[0] || null;
   const evaluation = await getCrowdEvaluation(gym.id);
@@ -243,7 +251,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     trainingSource: "authorized_official_dataset_only",
     modelVersion,
     recommendations: {
-      date: firstOpenDay?.date || null,
+      date: recommendationDay?.date || null,
       leastCrowded: leastCrowded ? { hour: leastCrowded.hour, crowdPercent: leastCrowded.crowdPercent, confidence: leastCrowded.confidence } : null,
       busiest: busiest ? { hour: busiest.hour, crowdPercent: busiest.crowdPercent, confidence: busiest.confidence } : null,
     },
