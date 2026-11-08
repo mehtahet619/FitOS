@@ -123,9 +123,10 @@ function hourIsOpen(schedule: any | null, weekday: number, hour: number): boolea
     const start = openDay * 24 * 60 + openHour * 60 + openMinute;
     let end = closeDay * 24 * 60 + closeHour * 60 + closeMinute;
     if (end <= start) end += 7 * 24 * 60;
-    let candidate = current * 60;
-    if (candidate < start) candidate += 7 * 24 * 60;
-    return candidate >= start && candidate < end;
+    let candidateStart = current * 60;
+    if (candidateStart < start) candidateStart += 7 * 24 * 60;
+    const candidateEnd = candidateStart + 60;
+    return candidateStart < end && candidateEnd > start;
   });
 }
 
