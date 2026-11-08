@@ -16,6 +16,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const mysql = require("mysql2/promise");
+require("dotenv").config({ path: path.resolve(__dirname, "../.env.migration.local") });
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
 function arg(name) {
