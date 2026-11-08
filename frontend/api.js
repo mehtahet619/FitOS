@@ -162,7 +162,7 @@ const Api = (() => {
   return {
     setTokens,
     clearTokens,
-    get: (path) => request(path),
+    get: (path, opts = {}) => request(path, opts),
     post: (path, body, opts = {}) => request(path, { ...opts, method: "POST", body }),
     put: (path, body) => request(path, { method: "PUT", body }),
     del: (path) => request(path, { method: "DELETE" }),
