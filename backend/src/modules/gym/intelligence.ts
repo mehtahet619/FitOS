@@ -113,7 +113,7 @@ function addDays(date: Date, amount: number): Date {
 
 function hourIsOpen(schedule: any | null, weekday: number, hour: number): boolean {
   const periods = Array.isArray(schedule) ? schedule : schedule?.periods;
-  if (!schedule || !Array.isArray(periods)) return true; // Unknown schedule: show estimates but label hours as unverified.
+  if (!schedule || !Array.isArray(periods)) return false; // Never invent opening hours when OSM has no schedule.
   if (periods.length === 0) return false; // A parsed schedule with no periods means no listed opening times.
   const current = weekday * 24 + hour;
   return periods.some((period: any) => {
@@ -169,14 +169,45 @@ async function getCrowdEvaluation(gymId: string) {
   return { evaluatedCount, mae: mae === null ? null : Number(mae.toFixed(2)), rmse: mse === null ? null : Number(Math.sqrt(mse).toFixed(2)) };
 }
 
+function getCurrentOpeningStatus(schedule: any | null, timeZone: string) {
+  if (!schedule || !Array.isArray(schedule.periods)) {
+    return { status: "unknown", isOpen: null, checkedAt: nowIso(), source: "openstreetmap_opening_hours", reason: "No verified opening-hours schedule is available for this gym." };
+  }
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  const current = weekday * 1440 + hour * 60 + minute;
+  const week = 7 * 1440;
+  const isOpen = schedule.periods.some((period: any) => {
+    const open = period.open || {};
+    const close = period.close || {};
+    const start = Number(open.day) * 1440 + Number(open.hour || 0) * 60 + Number(open.minute || 0);
+    let end = Number(close.day ?? open.day) * 1440 + Number(close.hour ?? 24) * 60 + Number(close.minute || 0);
+    if (end <= start) end += week;
+    return [current, current + week].some((candidate) => candidate >= start && candidate < end);
+  });
+  return {
+    status: isOpen ? "open" : "closed",
+    isOpen,
+    checkedAt: nowIso(),
+    source: "openstreetmap_opening_hours",
+    timezone: timeZone,
+  };
+}
+
 async function predictGymWeek(gym: any, timeZone: string) {
   // Only authorized official records train the model. Reuse Intl formatters
   // instead of constructing new formatters for every historical observation.
   const trainingRows = await db.all<any>(
-    "SELECT observedAt, crowdPercent FROM GymCrowdOfficialObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
-    gym.id
+    "SELECT observedAt, crowdPercent, 'official_dataset' AS source FROM GymCrowdOfficialObservation WHERE gymId = ? UNION ALL SELECT observedAt, crowdPercent, 'member_observation' AS source FROM GymCrowdObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
+    gym.id, gym.id
   );
-  const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number }>();
+  const bySlot = new Map<string, { weightedSum: number; weight: number; count: number; latestAt: number; sources: Record<string, number> }>();
   const now = new Date();
   const nowMs = now.getTime();
   for (const row of trainingRows) {
@@ -186,7 +217,9 @@ async function predictGymWeek(gym: any, timeZone: string) {
     const key = `${weekday}:${hour}`;
     const ageDays = Math.max(0, (nowMs - date.getTime()) / 86400000);
     const weight = Math.pow(0.5, ageDays / 45);
-    const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0 };
+    const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0, sources: {} as Record<string, number> };
+    const source = String(row.source || "official_dataset");
+    slot.sources[source] = (slot.sources[source] || 0) + 1;
     slot.weightedSum += Number(row.crowdPercent) * weight;
     slot.weight += weight;
     slot.count += 1;
@@ -194,8 +227,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
-  const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
-
+  const modelVersion = `fitos-osm-member-hourly-v5-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
   const openingHoursKnown = Boolean(
@@ -228,10 +260,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
         : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
-      const item = {
-        date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label,
-        confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset",
-      };
+      const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
       hours.push(item);
       output.push(item);
     }
@@ -239,7 +268,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     days.push({
       date: dateKey,
       weekday: OSM_DAY_NAMES[weekday],
-      isOpen: hours.length > 0,
+      isOpen: openingHoursKnown ? hours.length > 0 : null,
       openingIntervals: daySchedule?.intervals || [],
       hours,
     });
@@ -296,10 +325,12 @@ async function predictGymWeek(gym: any, timeZone: string) {
     predictions: output,
     timezone: timeZone,
     openingHoursKnown,
+    currentStatus: getCurrentOpeningStatus(schedule, timeZone),
     openingSchedule: schedule?.weekly || null,
     openingHoursText: schedule?.raw || null,
     trainingSamples: trainingRows.length,
-    trainingSource: "authorized_official_dataset_only",
+    trainingSampleBreakdown: { officialDataset: trainingRows.filter((row: any) => row.source === "official_dataset").length, memberObservations: trainingRows.filter((row: any) => row.source === "member_observation").length },
+    trainingSource: "authorized_dataset_and_fitOS_member_observations",
     modelVersion,
     recommendations: {
       date: recommendationDay?.date || null,

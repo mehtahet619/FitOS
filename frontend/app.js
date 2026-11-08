@@ -2846,7 +2846,7 @@ function renderGymCrowdDay(day, index) {
         <small>${gymEscapeHtml(String(item.crowdLevel || "").replaceAll("_", " "))}</small>
       </div>`).join("")
     : '<p class="gym-hours-empty">No operating hours are listed for this day.</p>';
-  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen ? "Hours not verified" : "Closed / no hours listed");
+  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen === null ? "Opening hours unavailable" : "Closed / no opening hours listed");
   return `<details class="gym-crowd-day" ${index === 0 ? "open" : ""}>
     <summary><span><strong>${gymEscapeHtml(dateLabel)}</strong><small>${gymEscapeHtml(hoursLabel)}</small></span><span class="gym-crowd-day-count">${day.hours?.length || 0} hourly estimates</span></summary>
     <div class="gym-crowd-day-content">${hoursMarkup}</div>
@@ -2860,9 +2860,12 @@ async function loadGymCrowdForecast(gymId) {
   try {
     const result = await Api.get(`/gym/${encodeURIComponent(gymId)}/forecast`, { timeoutMs: 150000 });
     const evaluation = result.evaluation || {};
+    const sourceBreakdown = result.trainingSampleBreakdown || {};
+    const officialSamples = Number(sourceBreakdown.officialDataset || 0);
+    const memberSamples = Number(sourceBreakdown.memberObservations || 0);
     const trainingSummary = Number(result.trainingSamples || 0) > 0
-      ? `Official training records: ${Number(result.trainingSamples)}`
-      : "No official training dataset imported · using transparent cold-start estimates";
+      ? `Training records: ${Number(result.trainingSamples)} (${officialSamples} licensed dataset · ${memberSamples} FitOS member reports)`
+      : "No crowd observations yet · using low-confidence baseline estimates";
     const errorSummary = Number(evaluation.evaluatedCount || 0) > 0
       ? `Prediction MAE: ${Number(evaluation.mae).toFixed(1)} points · RMSE: ${Number(evaluation.rmse).toFixed(1)} · evaluated hours: ${Number(evaluation.evaluatedCount)}`
       : "Prediction error tracking starts when actual crowd reports are submitted";
@@ -2881,12 +2884,17 @@ async function loadGymCrowdForecast(gymId) {
         <p>${gymEscapeHtml(errorSummary)}</p>
         <p>${result.openingHoursKnown ? "Operating hours parsed from the gym listing." : "Opening hours are not published; hourly estimates are not proof of opening."}</p>
       </div>
+      <section class="gym-crowd-current-status">
+        <strong>Current gym status</strong>
+        <span class="gym-crowd-status-pill ${result.currentStatus?.status === "open" ? "is-open" : result.currentStatus?.status === "closed" ? "is-closed" : "is-unknown"}">${result.currentStatus?.status === "open" ? "OPEN NOW" : result.currentStatus?.status === "closed" ? "CLOSED NOW" : "HOURS UNKNOWN"}</span>
+        <small>${result.currentStatus?.status === "unknown" ? "OpenStreetMap has no verified opening-hours entry for this gym." : `Checked ${new Date(result.currentStatus.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${gymEscapeHtml(result.currentStatus.timezone || result.timezone || "local time")}`}</small>
+      </section>
       ${renderGymOpeningSchedule(result.openingSchedule, result.openingHoursKnown)}
       <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on the first upcoming open day</span></div>
       ${recommendationMarkup}
       <div class="gym-crowd-section-heading"><strong>7-day hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
       <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
-      <p class="gym-crowd-disclaimer">Crowd levels are estimates based on authorized historical training data when available, otherwise a low-confidence weekday/weekend baseline. FitOS does not currently measure live occupancy through this forecast.</p>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from licensed historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours come from OpenStreetMap and may be missing or outdated.</p>
     `;
   } catch (error) {
     target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
