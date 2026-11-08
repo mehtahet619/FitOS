@@ -84,10 +84,25 @@
 
   async function refreshXp() {
     if (historyRequest) return historyRequest;
-    historyRequest = Api.get("/workouts/history")
-      .then((response) => {
+    historyRequest = Promise.all([
+      Api.get("/workouts/history"),
+      Api.get("/friends/leaderboard"),
+    ])
+      .then(([response, leaderboard]) => {
         const history = Array.isArray(response) ? response : (response?.history || response?.workouts || []);
         const stats = calculateRewards(history);
+        const members = Array.isArray(leaderboard?.members) ? leaderboard.members : [];
+        const own = members.find((member) => member.isYou);
+        if (!own) {
+          throw new Error("Your rewards profile is missing from the friends leaderboard. XP was not replaced with a guessed value.");
+        }
+        // The server is the single source of truth for lifetime XP. Workout
+        // history is retained for the live streak display, not a second XP
+        // calculation that can drift from the leaderboard.
+        stats.workoutCount = Math.max(0, Number(own.workouts) || 0);
+        stats.workoutXp = stats.workoutCount * XP_PER_WORKOUT;
+        stats.totalXp = Math.max(0, Number(own.xp) || 0);
+        stats.consistencyXp = Math.max(0, stats.totalXp - stats.workoutXp);
         updateXpDisplay(stats);
         return stats;
       })
