@@ -3351,3 +3351,13 @@ html[data-theme="dark"] #screen-gym .gym-crowd-day-content .gym-crowd-hour { bor
   #screen-gym .gym-crowd-day-content .gym-crowd-hour { grid-template-columns:48px minmax(25px,1fr) 30px 62px; gap:5px; }
   #screen-gym .gym-opening-day { padding:8px; }
 }
+
+
+/* Gym intelligence current opening status */
+.gym-crowd-current-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;margin:12px 0;border:1px solid var(--border-color,rgba(128,128,128,.25));border-radius:12px}
+.gym-crowd-current-status>strong{font-size:.92rem}
+.gym-crowd-current-status>small{flex-basis:100%;color:var(--text-secondary, #777);font-size:.78rem}
+.gym-crowd-status-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:.72rem;font-weight:700;letter-spacing:.04em}
+.gym-crowd-status-pill.is-open{background:rgba(34,160,105,.14);color:#168653}
+.gym-crowd-status-pill.is-closed{background:rgba(220,70,70,.13);color:#c44343}
+.gym-crowd-status-pill.is-unknown{background:rgba(140,140,140,.14);color:var(--text-secondary, #777)}
