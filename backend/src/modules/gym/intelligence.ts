@@ -260,6 +260,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
         : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
+<<<<<<< HEAD
       const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
       const todayInGymZone = localDateAt(now, timeZone);
       const currentGymHour = localWeekdayHour(now, timeZone).hour;
@@ -271,6 +272,8 @@ async function predictGymWeek(gym: any, timeZone: string) {
           await db.run("INSERT INTO GymCrowdForecastSnapshot (id, gymId, predictedFor, predictedCrowdPercent, modelVersion, generatedAt) VALUES (?, ?, ?, ?, ?, ?)", uuidv4(), gym.id, predictedFor, predicted, modelVersion, nowIso());
         }
       }
+=======
+>>>>>>> origin/main
       const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
       hours.push(item);
       output.push(item);
