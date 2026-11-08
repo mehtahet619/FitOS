@@ -94,6 +94,7 @@ async function main() {
       "SELECT id, focus, status, durationMin, createdAt, completedAt, planStepIndex, cycleId, equipmentMode, equipmentSnapshot, generatorVersion FROM Workout WHERE userId=? AND status='completed' AND completedAt IS NOT NULL ORDER BY completedAt, id"
     ).all(localUser.id);
     if (!localWorkouts.length) throw new Error("No completed local workouts were found for this account.");
+    const sourceStats = xpFor(localWorkouts);
 
     target = await mysql.createConnection(getMysqlConfig(process.env.FITOS_PRODUCTION_DATABASE_URL));
     const [dbRows] = await target.query("SELECT DATABASE() AS databaseName");
@@ -138,6 +139,8 @@ async function main() {
     console.log(JSON.stringify({
       mode: apply ? "APPLY" : "DRY_RUN",
       sourceCompletedWorkouts: localWorkouts.length,
+      sourceExpectedXp: sourceStats.xp,
+      sourceConsistencyBonusDays: sourceStats.streakBonusDays,
       productionCompletedWorkoutsBefore: before.completed,
       alreadyPresentOrDuplicate: alreadyPresent,
       recordsToInsert: toInsert.length,
