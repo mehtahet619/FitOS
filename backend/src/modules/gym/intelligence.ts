@@ -32,11 +32,7 @@ function parseOsmOpeningHours(value: string | null | undefined): any | null {
   const expandDays = (selector: string): number[] => {
     const result = new Set<number>();
     // Tokenize OSM weekday selectors without a complex regular expression.
-<<<<<<< HEAD
-    const tokens = selector.replaceAll(",", " ").trim().split(" ").filter(Boolean);
-=======
     const tokens = selector.split(",").join(" ").trim().split(" ").filter(Boolean);
->>>>>>> origin/main
     for (const token of tokens) {
       const [startName, endName, ...unexpected] = token.split("-");
       if (unexpected.length > 0) continue;
@@ -231,12 +227,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
-<<<<<<< HEAD
   const modelVersion = `fitos-osm-member-hourly-v5-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
-=======
-  const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
-
->>>>>>> origin/main
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
   const openingHoursKnown = Boolean(
@@ -269,7 +260,6 @@ async function predictGymWeek(gym: any, timeZone: string) {
         : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
-<<<<<<< HEAD
       const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
       const todayInGymZone = localDateAt(now, timeZone);
       const currentGymHour = localWeekdayHour(now, timeZone).hour;
@@ -282,12 +272,6 @@ async function predictGymWeek(gym: any, timeZone: string) {
         }
       }
       const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
-=======
-      const item = {
-        date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label,
-        confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset",
-      };
->>>>>>> origin/main
       hours.push(item);
       output.push(item);
     }
