@@ -25,7 +25,8 @@
     "import:exercises": "ts-node scripts/import-exercises.ts",
     "seed:equipment-aliases": "ts-node scripts/seed-equipment-aliases.ts",
     "vision:eval": "ts-node scripts/evaluate-equipment-vision.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate:local-rewards": "node scripts/migrate-local-rewards.cjs"
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",
