@@ -133,7 +133,7 @@
       const workouts = document.createElement("span");
       workouts.textContent = String(Number(member.weeklyWorkouts) || 0) + " workouts this week";
       const xp = document.createElement("strong");
-      xp.textContent = (Number(member.workouts) || 0) * XP_PER_WORKOUT + " XP";
+      xp.textContent = (Number(member.xp) || 0).toLocaleString() + " XP";
       stats.append(workouts, xp);
       item.append(top, name, stats);
       rows.appendChild(item);
