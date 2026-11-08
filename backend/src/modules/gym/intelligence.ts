@@ -205,7 +205,9 @@ async function predictGymWeek(gym: any, timeZone: string) {
     const key = `${weekday}:${hour}`;
     const ageDays = Math.max(0, (nowMs - date.getTime()) / 86400000);
     const weight = Math.pow(0.5, ageDays / 45);
-    const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0 };
+    const slot = bySlot.get(key) ?? { weightedSum: 0, weight: 0, count: 0, latestAt: 0, sources: {} as Record<string, number> };
+    const source = String(row.source || "official_dataset");
+    slot.sources[source] = (slot.sources[source] || 0) + 1;
     slot.weightedSum += Number(row.crowdPercent) * weight;
     slot.weight += weight;
     slot.count += 1;
@@ -213,7 +215,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
-  const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
+  const modelVersion = `fitos-osm-member-hourly-v5-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
   const openingHoursKnown = Boolean(
@@ -253,7 +255,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
           await db.run("INSERT INTO GymCrowdForecastSnapshot (id, gymId, predictedFor, predictedCrowdPercent, modelVersion, generatedAt) VALUES (?, ?, ?, ?, ?, ?)", uuidv4(), gym.id, predictedFor, predicted, modelVersion, nowIso());
         }
       }
-      const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset" };
+      const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
       hours.push(item);
       output.push(item);
     }
