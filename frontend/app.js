@@ -2820,19 +2820,26 @@ function formatGymHour(hour) {
   return new Date(Date.UTC(2020, 0, 1, value)).toLocaleTimeString([], { hour: "numeric", hour12: true, timeZone: "UTC" });
 }
 
-function renderGymOpeningSchedule(schedule, known) {
-  if (!known || !Array.isArray(schedule) || !schedule.length) {
-    return '<div class="gym-hours-empty">Weekly opening hours have not been published by this gym yet. Crowd estimates are shown separately and do not confirm that the gym is open.</div>';
-  }
-  return `<section class="gym-opening-hours" aria-label="Weekly gym opening hours">
-    <div class="gym-crowd-section-heading"><strong>Weekly operating hours</strong><span>OpenStreetMap listing</span></div>
-    <div class="gym-opening-hours-grid">${schedule.map((day) => `
-      <div class="gym-opening-day">
-        <span>${gymEscapeHtml(day.day)}</span>
-        <strong>${day.closed || !day.intervals?.length ? "Closed / unavailable" : day.intervals.map(gymEscapeHtml).join(", ")}</strong>
-      </div>`).join("")}
-    </div>
+function renderGymTodayHours(day, known) {
+  const intervals = Array.isArray(day?.openingIntervals) ? day.openingIntervals : [];
+  const hoursText = intervals.length ? intervals.map(gymEscapeHtml).join(", ") : "Opening hours unavailable";
+  const statusText = day?.isOpen === true ? "Open today" : day?.isOpen === false ? "Closed today" : "Hours unknown";
+  return `<section class="gym-opening-hours" aria-label="Today's gym opening hours">
+    <div class="gym-crowd-section-heading"><strong>Hours (Today)</strong><span>${gymEscapeHtml(statusText)}</span></div>
+    <div class="gym-opening-day"><span>Today</span><strong>${known ? hoursText : "The gym has not published verified opening hours."}</strong></div>
   </section>`;
+}
+
+function renderGymTodayCrowdChart(day) {
+  const hours = Array.isArray(day?.hours) ? day.hours : [];
+  if (!hours.length) return '<div class="gym-hours-empty">No crowd forecast is available for today.</div>';
+  const max = Math.max(100, ...hours.map(item => Number(item.crowdPercent) || 0));
+  const bars = hours.map(item => {
+    const pct = Math.max(0, Math.min(100, Number(item.crowdPercent) || 0));
+    const level = pct >= 80 ? "is-busy" : pct >= 55 ? "is-moderate" : "is-quiet";
+    return `<div class="gym-crowd-hour"><span>${formatGymHour(item.hour)}</span><div class="gym-crowd-track" role="img" aria-label="Predicted crowd ${pct} percent"><i class="${level}" style="width:${pct}%"></i></div><b>${pct}%</b><small>${gymEscapeHtml(String(item.crowdLevel || "").replaceAll("_", " "))}</small></div>`;
+  }).join("");
+  return `<div class="gym-crowd-today-chart"><p>Expected crowd level throughout today.</p>${bars}</div>`;
 }
 
 function renderGymCrowdDay(day, index) {
@@ -2869,18 +2876,19 @@ async function loadGymCrowdForecast(gymId) {
     const errorSummary = Number(evaluation.evaluatedCount || 0) > 0
       ? `Prediction MAE: ${Number(evaluation.mae).toFixed(1)} points · RMSE: ${Number(evaluation.rmse).toFixed(1)} · evaluated hours: ${Number(evaluation.evaluatedCount)}`
       : "Prediction error tracking starts when actual crowd reports are submitted";
-    const recommendations = result.recommendations || {};
-    const least = recommendations.leastCrowded;
-    const busiest = recommendations.busiest;
-    const recommendationMarkup = recommendations.date && (least || busiest)
+    const today = (result.days || [])[0] || null;
+    const todayHours = Array.isArray(today?.hours) ? today.hours : [];
+    const leastToday = [...todayHours].sort((a, b) => a.crowdPercent - b.crowdPercent)[0] || null;
+    const busiestToday = [...todayHours].sort((a, b) => b.crowdPercent - a.crowdPercent)[0] || null;
+    const recommendationMarkup = leastToday
       ? `<section class="gym-crowd-recommendations">
-          ${least ? `<div><span>Best estimated time</span><strong>${formatGymHour(least.hour)}</strong><small>${least.crowdPercent}% predicted crowd · ${least.confidence} confidence</small></div>` : ""}
-          ${busiest ? `<div><span>Busiest estimated time</span><strong>${formatGymHour(busiest.hour)}</strong><small>${busiest.crowdPercent}% predicted crowd · ${busiest.confidence} confidence</small></div>` : ""}
+          <div><span>Best time to visit today</span><strong>${formatGymHour(leastToday.hour)}</strong><small>${leastToday.crowdPercent}% predicted crowd · ${leastToday.confidence} confidence</small></div>
+          ${busiestToday ? `<div><span>Busiest time today</span><strong>${formatGymHour(busiestToday.hour)}</strong><small>${busiestToday.crowdPercent}% predicted crowd · ${busiestToday.confidence} confidence</small></div>` : ""}
         </section>`
-      : '<p class="gym-hours-empty">No operating-hour forecast is available yet.</p>';
+      : '<p class="gym-hours-empty">No crowd recommendation is available for today.</p>';
     target.innerHTML = `
       <div class="gym-crowd-meta">
-        <p>Next 7 days · ${gymEscapeHtml(trainingSummary)}</p>
+        <p>${gymEscapeHtml(trainingSummary)}</p>
         <p>${gymEscapeHtml(errorSummary)}</p>
         <p>${result.openingHoursKnown ? "Operating hours parsed from the gym listing." : "Opening hours are not published; hourly estimates are not proof of opening."}</p>
       </div>
@@ -2889,12 +2897,12 @@ async function loadGymCrowdForecast(gymId) {
         <span class="gym-crowd-status-pill ${result.currentStatus?.status === "open" ? "is-open" : result.currentStatus?.status === "closed" ? "is-closed" : "is-unknown"}">${result.currentStatus?.status === "open" ? "OPEN NOW" : result.currentStatus?.status === "closed" ? "CLOSED NOW" : "HOURS UNKNOWN"}</span>
         <small>${result.currentStatus?.status === "unknown" ? "OpenStreetMap has no verified opening-hours entry for this gym." : `Checked ${new Date(result.currentStatus.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${gymEscapeHtml(result.currentStatus.timezone || result.timezone || "local time")}`}</small>
       </section>
-      ${renderGymOpeningSchedule(result.openingSchedule, result.openingHoursKnown)}
-      <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on the first upcoming open day</span></div>
+      ${renderGymTodayHours(today, result.openingHoursKnown)}
+      <div class="gym-crowd-section-heading"><strong>Live Gym Forecast (Today)</strong><span>Hourly estimates, not live occupancy</span></div>
+      ${renderGymTodayCrowdChart(today)}
+      <div class="gym-crowd-section-heading"><strong>Best Time to Visit (Today)</strong></div>
       ${recommendationMarkup}
-      <div class="gym-crowd-section-heading"><strong>7-day hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
-      <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
-      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from licensed historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours come from OpenStreetMap and may be missing or outdated.</p>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from authorized historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours come from OpenStreetMap and may be missing or outdated.</p>
     `;
   } catch (error) {
     target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
@@ -2919,7 +2927,7 @@ function renderGym(status, history, selectedGym) {
   el.innerHTML = `
     <div class="card gym-intelligence-card">
       <div class="card-label"> Gym crowd intelligence</div>
-      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading 7-day forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><div id="gym-discovery-map" class="fitos-osm-map"></div><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
+      ${selectedGym ? `<strong>${gymEscapeHtml(selectedGym.name)}</strong><p class="card-sub">${gymEscapeHtml(selectedGym.city)} · Shared gym dataset</p><div id="gym-crowd-forecast"><div class="empty-state">Loading today’s gym forecast…</div></div><label class="form-label" for="gym-report-level">How crowded is it right now?</label><select class="input" id="gym-report-level"><option value="20">Quiet</option><option value="45">Moderate</option><option value="70">Busy</option><option value="90">Very busy</option></select><button class="btn btn-outline" id="gym-report-crowd" type="button">Share crowd observation</button><button class="btn btn-outline" id="gym-change-selection" type="button">Change gym</button>` : `<p class="card-sub">Select your city, then choose your gym. Members of the same gym share its crowd history.</p><label class="form-label" for="gym-city-input">City</label><input class="input" id="gym-city-input" list="gym-city-options" placeholder="Start typing a city" autocomplete="off"><datalist id="gym-city-options"></datalist><div id="gym-city-status" class="card-sub"></div><label class="form-label" for="gym-search-input">Gym search</label><input class="input" id="gym-search-input" value="gyms" placeholder="Gym name"><button class="btn btn-mint" id="gym-search-button" type="button">Find gyms</button><div id="gym-search-status" class="card-sub"></div><select class="input" id="gym-result-select" hidden><option value="">Select your gym</option></select><button class="btn btn-mint" id="gym-save-selection" type="button" hidden>Use this gym</button><div id="gym-discovery-map" class="fitos-osm-map"></div><details><summary>Can’t find your gym? Add it manually</summary><input class="input" id="gym-manual-name" placeholder="Gym name"><input class="input" id="gym-manual-address" placeholder="Address (optional)"><button class="btn btn-outline" id="gym-manual-create" type="button">Add gym</button></details>`}
     </div>
     <div class="card">
       <div class="card-label"> Attendance</div>

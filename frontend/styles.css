@@ -3372,3 +3372,12 @@ html[data-theme="dark"] #screen-gym .gym-crowd-day-content .gym-crowd-hour { bor
 .gym-crowd-status-pill.is-open{background:rgba(34,160,105,.14);color:#168653}
 .gym-crowd-status-pill.is-closed{background:rgba(220,70,70,.13);color:#c44343}
 .gym-crowd-status-pill.is-unknown{background:rgba(140,140,140,.14);color:var(--text-secondary, #777)}
+
+/* Today's gym crowd forecast */
+#screen-gym .gym-crowd-today-chart { display:grid; gap:0; margin:10px 0 16px; }
+#screen-gym .gym-crowd-today-chart > p { margin:0 0 8px; color:var(--muted); font-size:12px; }
+#screen-gym .gym-crowd-today-chart .gym-crowd-hour { display:grid; grid-template-columns:55px minmax(35px,1fr) 34px 72px; align-items:center; gap:7px; padding:8px 0; border-top:1px solid var(--border); }
+#screen-gym .gym-crowd-today-chart .gym-crowd-hour > span,
+#screen-gym .gym-crowd-today-chart .gym-crowd-hour b { color:var(--ink); font-size:10px; }
+#screen-gym .gym-crowd-today-chart .gym-crowd-hour b { text-align:right; }
+#screen-gym .gym-crowd-today-chart .gym-crowd-hour small { color:var(--muted); font-size:9px; text-transform:capitalize; }
