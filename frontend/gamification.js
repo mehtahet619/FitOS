@@ -1,8 +1,9 @@
 (() => {
   "use strict";
 
-  // XP is calculated in the browser from the user's existing workout history.
-  // The friends leaderboard remains a separate feature and never controls XP.
+  // XP is calculated by the server (GET /friends/leaderboard) from the signed-in
+  // user's completed workouts. The browser never invents or caches an XP total;
+  // local workout history is only used for the live streak display.
   const SHARE_TEXT = "Bhai abhi to gym chalne";
   const SHARE_URL = "https://adaptive-fit-web.onrender.com/";
   const XP_PER_WORKOUT = 100;
