@@ -13,14 +13,78 @@ const observationSchema = z.object({
   capacity: z.number().int().positive().optional(),
 });
 
+
+const OSM_DAY_INDEX: Record<string, number> = { Su: 0, Mo: 1, Tu: 2, We: 3, Th: 4, Fr: 5, Sa: 6 };
+const OSM_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function parseOsmOpeningHours(value: string | null | undefined): any | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const weekly = OSM_DAY_NAMES.map((day) => ({ day, intervals: [] as string[], closed: false }));
+  const periods: any[] = [];
+  if (raw === "24/7") {
+    for (let day = 0; day < 7; day += 1) {
+      weekly[day].intervals.push("00:00–24:00");
+      periods.push({ open: { day, hour: 0, minute: 0 }, close: { day, hour: 24, minute: 0 } });
+    }
+    return { source: "openstreetmap", raw, weekly, periods };
+  }
+  const expandDays = (selector: string): number[] => {
+    const result = new Set<number>();
+    const tokens = selector.match(/(?:Su|Mo|Tu|We|Th|Fr|Sa)(?:\s*-\s*(?:Su|Mo|Tu|We|Th|Fr|Sa))?/g) || [];
+    for (const token of tokens) {
+      const [startName, endName] = token.split("-").map((part) => part.trim());
+      const start = OSM_DAY_INDEX[startName], end = OSM_DAY_INDEX[endName || startName];
+      if (start === undefined || end === undefined) continue;
+      let cursor = start;
+      for (let count = 0; count < 7; count += 1) {
+        result.add(cursor);
+        if (cursor === end) break;
+        cursor = (cursor + 1) % 7;
+      }
+    }
+    if (result.size) return [...result];
+    return selector.trim() ? [] : [0, 1, 2, 3, 4, 5, 6];
+  };
+  for (const clause of raw.split(";").map((part) => part.trim()).filter(Boolean)) {
+    const timeMatch = clause.match(/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/);
+    const selector = timeMatch ? clause.slice(0, timeMatch.index).trim() : clause.replace(/\b(off|closed|open)\b/ig, "").trim();
+    const days = expandDays(selector);
+    if (/\b(off|closed)\b/i.test(clause)) {
+      days.forEach((day) => { weekly[day].closed = true; weekly[day].intervals = []; });
+      continue;
+    }
+    const intervals = [...clause.matchAll(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g)];
+    if (!intervals.length) continue;
+    for (const day of days) {
+      for (const match of intervals) {
+        const openHour = Number(match[1]), openMinute = Number(match[2]);
+        const closeHour = Number(match[3]), closeMinute = Number(match[4]);
+        if (openHour > 24 || closeHour > 24 || openMinute > 59 || closeMinute > 59) continue;
+        const overnight = closeHour * 60 + closeMinute <= openHour * 60 + openMinute;
+        const closeDay = overnight ? (day + 1) % 7 : day;
+        weekly[day].intervals.push(`${String(openHour).padStart(2, "0")}:${String(openMinute).padStart(2, "0")}–${String(closeHour).padStart(2, "0")}:${String(closeMinute).padStart(2, "0")}`);
+        periods.push({
+          open: { day, hour: openHour, minute: openMinute },
+          close: { day: closeDay, hour: closeHour, minute: closeMinute },
+        });
+      }
+    }
+  }
+  if (!periods.length && !weekly.some((day) => day.closed)) return null;
+  return { source: "openstreetmap", raw, weekly, periods };
+}
+
 async function upsertPlace(place: OsmPlace, city: string): Promise<any> {
   const placeId = place.id;
   const existing = await db.get<any>("SELECT * FROM Gym WHERE placeId = ?", placeId);
   const now = nowIso();
+  const parsedHours = parseOsmOpeningHours(place.openingHours);
+  const openingHoursJson = parsedHours ? JSON.stringify(parsedHours) : null;
   if (existing) {
     await db.run(
-      "UPDATE Gym SET name = ?, address = ?, city = ?, latitude = ?, longitude = ?, updatedAt = ? WHERE id = ?",
-      place.name, place.address || "", city || place.city, place.latitude, place.longitude, now, existing.id
+      "UPDATE Gym SET name = ?, address = ?, city = ?, latitude = ?, longitude = ?, openingHoursJson = ?, updatedAt = ? WHERE id = ?",
+      place.name, place.address || "", city || place.city, place.latitude, place.longitude, openingHoursJson || existing.openingHoursJson || null, now, existing.id
     );
     return await db.get<any>("SELECT * FROM Gym WHERE id = ?", existing.id);
   }
@@ -28,7 +92,7 @@ async function upsertPlace(place: OsmPlace, city: string): Promise<any> {
   await db.run(
     "INSERT INTO Gym (id, placeId, name, address, city, latitude, longitude, rating, ratingCount, openingHoursJson, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id, placeId, place.name, place.address || "", city || place.city, place.latitude, place.longitude,
-    null, null, null, now, now
+    null, null, openingHoursJson, now, now
   );
   return await db.get<any>("SELECT * FROM Gym WHERE id = ?", id);
 }
@@ -45,19 +109,25 @@ function addDays(date: Date, amount: number): Date {
   return next;
 }
 
-function hourIsOpen(periods: any[] | null, weekday: number, hour: number): boolean {
-  if (!periods?.length) return true; // Unknown schedule: return a full-day forecast with openingHoursKnown=false.
+function hourIsOpen(schedule: any | null, weekday: number, hour: number): boolean {
+  const periods = Array.isArray(schedule) ? schedule : schedule?.periods;
+  if (!schedule || !Array.isArray(periods)) return true; // Unknown schedule: show estimates but label hours as unverified.
+  if (periods.length === 0) return false; // A parsed schedule with no periods means no listed opening times.
   const current = weekday * 24 + hour;
-  return periods.some((period) => {
+  return periods.some((period: any) => {
     const openDay = Number(period.open?.day);
     const openHour = Number(period.open?.hour ?? 0);
+    const openMinute = Number(period.open?.minute ?? 0);
     const closeDay = Number(period.close?.day ?? openDay);
     const closeHour = Number(period.close?.hour ?? 24);
-    const start = openDay * 24 + openHour;
-    let end = closeDay * 24 + closeHour;
-    if (end <= start) end += 168;
-    const candidate = current < start ? current + 168 : current;
-    return candidate >= start && candidate < end;
+    const closeMinute = Number(period.close?.minute ?? 0);
+    const start = openDay * 24 * 60 + openHour * 60 + openMinute;
+    let end = closeDay * 24 * 60 + closeHour * 60 + closeMinute;
+    if (end <= start) end += 7 * 24 * 60;
+    let candidateStart = current * 60;
+    if (candidateStart < start) candidateStart += 7 * 24 * 60;
+    const candidateEnd = candidateStart + 60;
+    return candidateStart < end && candidateEnd > start;
   });
 }
 
@@ -88,8 +158,7 @@ async function getCrowdEvaluation(gymId: string) {
 }
 
 async function predictGymWeek(gym: any, timeZone: string) {
-  // Training data is intentionally isolated from FitOS member reports.
-  // Only independently licensed/authorized official dataset rows are used.
+  // Only independently licensed/authorized official observations train this model.
   const trainingRows = await db.all<any>(
     "SELECT observedAt, crowdPercent FROM GymCrowdOfficialObservation WHERE gymId = ? ORDER BY observedAt DESC LIMIT 20000",
     gym.id
@@ -111,16 +180,25 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
-  const modelVersion = `fitos-official-hourly-v3-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
-  const periods = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null;
+  const modelVersion = `fitos-official-hourly-v4-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
+  let schedule: any = null;
+  try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
+  const openingHoursKnown = Boolean(
+    (Array.isArray(schedule) && schedule.length > 0) ||
+    (schedule && typeof schedule.raw === "string" && Array.isArray(schedule.weekly))
+  );
   const now = new Date();
+  const baseLocalDate = localDateAt(now, timeZone);
+  const baseDate = new Date(`${baseLocalDate}T12:00:00.000Z`);
   const output: any[] = [];
+  const days: any[] = [];
   for (let offset = 0; offset < 7; offset += 1) {
-    const date = addDays(now, offset);
-    const dateKey = localDateAt(date, timeZone);
-    const weekday = new Date(`${dateKey}T12:00:00Z`).getUTCDay();
+    const date = addDays(baseDate, offset);
+    const dateKey = date.toISOString().slice(0, 10);
+    const weekday = date.getUTCDay();
+    const hours: any[] = [];
     for (let hour = 0; hour < 24; hour += 1) {
-      if (!hourIsOpen(periods, weekday, hour)) continue;
+      if (!hourIsOpen(schedule, weekday, hour)) continue;
       const key = `${weekday}:${hour}`;
       const slot = bySlot.get(key);
       const baseline = coldStartBaseline(weekday, hour);
@@ -132,7 +210,6 @@ async function predictGymWeek(gym: any, timeZone: string) {
       const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
       const existing = await db.get<any>("SELECT id, evaluatedAt FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor = ?", gym.id, predictedFor);
-      // Freeze a forecast once the target hour starts or an actual value is recorded.
       const todayInGymZone = localDateAt(now, timeZone);
       const currentGymHour = localWeekdayHour(now, timeZone).hour;
       const targetIsFuture = dateKey > todayInGymZone || (dateKey === todayInGymZone && hour > currentGymHour);
@@ -143,22 +220,43 @@ async function predictGymWeek(gym: any, timeZone: string) {
           await db.run("INSERT INTO GymCrowdForecastSnapshot (id, gymId, predictedFor, predictedCrowdPercent, modelVersion, generatedAt) VALUES (?, ?, ?, ?, ?, ?)", uuidv4(), gym.id, predictedFor, predicted, modelVersion, nowIso());
         }
       }
-      output.push({ date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset" });
+      const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: "authorized_official_dataset" };
+      hours.push(item);
+      output.push(item);
     }
+    const daySchedule = schedule?.weekly?.[weekday] || null;
+    days.push({
+      date: dateKey,
+      weekday: OSM_DAY_NAMES[weekday],
+      isOpen: hours.length > 0,
+      openingIntervals: daySchedule?.intervals || [],
+      hours,
+    });
   }
-  const days = [...new Set(output.map((item) => item.date))].map((date) => ({
-    date,
-    hours: output.filter((item) => item.date === date),
-  }));
+  const todayKey = localDateAt(now, timeZone);
+  const currentHour = localWeekdayHour(now, timeZone).hour;
+  const recommendationDay = days.find((day) => day.hours.some((item: any) => day.date > todayKey || item.hour > currentHour));
+  const recommendationHours = (recommendationDay?.hours || []).filter((item: any) =>
+    recommendationDay.date > todayKey || item.hour > currentHour
+  );
+  const leastCrowded = [...recommendationHours].sort((a, b) => a.crowdPercent - b.crowdPercent)[0] || null;
+  const busiest = [...recommendationHours].sort((a, b) => b.crowdPercent - a.crowdPercent)[0] || null;
   const evaluation = await getCrowdEvaluation(gym.id);
   return {
     days,
     predictions: output,
     timezone: timeZone,
-    openingHoursKnown: Boolean(periods?.length),
+    openingHoursKnown,
+    openingSchedule: schedule?.weekly || null,
+    openingHoursText: schedule?.raw || null,
     trainingSamples: trainingRows.length,
     trainingSource: "authorized_official_dataset_only",
     modelVersion,
+    recommendations: {
+      date: recommendationDay?.date || null,
+      leastCrowded: leastCrowded ? { hour: leastCrowded.hour, crowdPercent: leastCrowded.crowdPercent, confidence: leastCrowded.confidence } : null,
+      busiest: busiest ? { hour: busiest.hour, crowdPercent: busiest.crowdPercent, confidence: busiest.confidence } : null,
+    },
     evaluation,
   };
 }
