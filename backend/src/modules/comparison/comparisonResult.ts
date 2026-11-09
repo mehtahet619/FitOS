@@ -1,5 +1,5 @@
 /**
- * Normalises the FitOS comparison service's response for the Vision Coach.
+ * Normalises the FACHS comparison service's response for the Vision Coach.
  *
  * The service's OpenAPI document declares an untyped `200` response (no
  * response model is published), so the success payload is not formally
