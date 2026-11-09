@@ -1,4 +1,4 @@
-# FitOS post-launch growth setup
+# FACHS post-launch growth setup
 
 ## Current architecture
 
@@ -30,7 +30,7 @@ The values are public measurement IDs, not secrets. The build injects them into 
 
 ## Google Analytics 4
 
-1. Open [Google Analytics](https://analytics.google.com/), create or select the FitOS GA4 property.
+1. Open [Google Analytics](https://analytics.google.com/), create or select the FACHS GA4 property.
 2. Go to **Admin → Data streams → Web**, create/select the stream for the exact canonical origin, and copy the Measurement ID.
 3. Add the ID as Render static-site environment variable `GA4_MEASUREMENT_ID`, then deploy.
 4. Accept analytics in a fresh browser session. In GA4 open **Reports → Realtime** and verify one page view and the expected event after performing a successful test action. Reject analytics and verify no further events are sent.
@@ -38,7 +38,7 @@ The values are public measurement IDs, not secrets. The build injects them into 
 
 ## Microsoft Clarity
 
-1. Open [Microsoft Clarity](https://clarity.microsoft.com/), create a web project for the canonical FitOS origin, and go to **Settings → Setup** to copy the Project ID.
+1. Open [Microsoft Clarity](https://clarity.microsoft.com/), create a web project for the canonical FACHS origin, and go to **Settings → Setup** to copy the Project ID.
 2. Add it to Render as `CLARITY_PROJECT_ID` and deploy.
 3. In Clarity project settings enable the consent mode option where available. The site sends Clarity Consent API v2 signals after the visitor chooses accept/reject. The app screens other than the public landing screen are marked for masking; inputs are masked by Clarity by default.
 4. Accept consent on the deployed site, then use Clarity's installation verification / live recordings to verify activity. Do not inspect or share recordings containing personal account details.
@@ -68,9 +68,9 @@ The repository alone cannot establish real visitor p75 Core Web Vitals, API late
 
 ## Business listings and social profiles
 
-FitOS is currently represented as an online fitness software product in this repository. Do not create Bing Places or Apple Business Connect local listings without a real eligible public business location. Apple Business Connect is not an App Store listing; review App Store Connect separately if a native iOS app is released.
+FACHS is currently represented as an online fitness software product in this repository. Do not create Bing Places or Apple Business Connect local listings without a real eligible public business location. Apple Business Connect is not an App Store listing; review App Store Connect separately if a native iOS app is released.
 
-The public homepage already has Open Graph / Twitter metadata and structured Organization/WebSite data. Only add links to social profiles that the FitOS operator confirms are authentic. Use campaign-specific UTM parameters on outbound campaign links, not on canonical URLs.
+The public homepage already has Open Graph / Twitter metadata and structured Organization/WebSite data. Only add links to social profiles that the FACHS operator confirms are authentic. Use campaign-specific UTM parameters on outbound campaign links, not on canonical URLs.
 
 ## Pre-launch verification checklist
 
