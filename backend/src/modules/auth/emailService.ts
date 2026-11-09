@@ -26,7 +26,7 @@ function saveLocalMail(mail: LocalMail): void {
 export function getLocalVerificationCode(email: string): { subject: string; code: string } | undefined {
   const mail = [...localOutbox].reverse().find((item) =>
     item.email === email.trim().toLowerCase() &&
-    item.subject === "Verify your FitOS account" &&
+    item.subject === "Verify your FACHS account" &&
     Date.now() - item.createdAt < LOCAL_CODE_TTL_MS
   );
   const code = mail?.text.match(/(?:code is:|code:)\s*\n?\s*(\d{6})/i)?.[1];
@@ -80,11 +80,11 @@ async function verifyResendTransport(): Promise<void> {
 
 export const emailService = {
   async sendLoginOTP(name: string, email: string, otp: string): Promise<void> {
-    const mail = { to: email, subject: "Your FitOS sign-in code", text: `Hi ${name},\n\nYour FitOS sign-in code is:\n\n${otp}\n\nThis code expires in 10 minutes and can only be used once. If you did not request it, you can safely ignore this email.\n\nFitOS Team` };
+    const mail = { to: email, subject: "Your FACHS sign-in code", text: `Hi ${name},\n\nYour FACHS sign-in code is:\n\n${otp}\n\nThis code expires in 10 minutes and can only be used once. If you did not request it, you can safely ignore this email.\n\nFitOS Team` };
     await sendResendMail(mail, "login");
   },
   async sendVerificationOTP(name: string, email: string, otp: string): Promise<void> {
-    const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Verify your FitOS account", text: `Hi ${name},\n\nYour FitOS verification code is:\n\n${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nFitOS Team` };
+    const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Verify your FACHS account", text: `Hi ${name},\n\nYour FACHS verification code is:\n\n${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nFitOS Team` };
     if (process.env.NODE_ENV !== "production" && process.env.ENABLE_LOCAL_EMAIL_PREVIEW === "true" && !resendConfigured()) {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
@@ -92,7 +92,7 @@ export const emailService = {
     await sendResendMail({ to: mail.to, subject: mail.subject, text: mail.text }, "registration");
   },
   async sendPasswordResetOTP(name: string, email: string, otp: string): Promise<void> {
-    const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Reset your FitOS password", text: `Hi ${name},\n\nYour FitOS password reset code is:\n\n${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this code, ignore this email.\n\nFitOS Team` };
+    const mail = { from: process.env.EMAIL_FROM, to: email, subject: "Reset your FACHS password", text: `Hi ${name},\n\nYour FACHS password reset code is:\n\n${otp}\n\nThis code expires in 10 minutes.\n\nIf you did not request this code, ignore this email.\n\nFitOS Team` };
     if (process.env.NODE_ENV !== "production" && process.env.ENABLE_LOCAL_EMAIL_PREVIEW === "true" && !resendConfigured()) {
       saveLocalMail({ email: email.toLowerCase(), subject: mail.subject, text: mail.text, createdAt: Date.now() });
       return;
