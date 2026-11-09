@@ -1,4 +1,4 @@
-/* FitOS Diet food intelligence: barcode lookup, OCR-assisted labels, food diary and personalized guidance.
+/* FACHS Diet food intelligence: barcode lookup, OCR-assisted labels, food diary and personalized guidance.
    Product data is community-contributed. OCR and recommendations are estimates and require user review. */
 (() => {
   "use strict";
@@ -262,7 +262,7 @@
   }
   async function findNearby() {
     const feedback = el("fos-nearby-status");
-    feedback.textContent = "Checking the existing FitOS nearby-food feature…";
+    feedback.textContent = "Checking the existing FACHS nearby-food feature…";
     try {
       if (typeof window.findHealthyFood === "function") {
         await window.findHealthyFood();
