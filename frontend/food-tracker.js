@@ -601,7 +601,7 @@
     if (!query) return setStatus("food-nearby-status", "Enter a place name or use GPS.", true);
     const submit = $("food-nearby-manual-form").querySelector('button[type="submit"]');
     if (submit) { submit.disabled = true; submit.textContent = "Locating…"; }
-    setStatus("food-nearby-status", "Finding the location, then checking real nearby menus…");
+    setStatus("food-nearby-status", "Finding nearby food options…");
     try {
       const url = new URL("https://nominatim.openstreetmap.org/search");
       url.searchParams.set("format", "jsonv2");
