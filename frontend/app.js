@@ -407,7 +407,7 @@ function showScreen(id) {
     if (!data.authenticated) {
       Api.clearTokens(); AuthState.status = "UNAUTHENTICATED"; clearProtectedContent();
       if (["/verify-email", "/forgot-password", "/reset-password"].includes(normalizePath(location.pathname))) await routeCurrent();
-      else if (normalizePath(location.pathname) === "/") await routeCurrent();
+      else if (["/", "/help"].includes(normalizePath(location.pathname))) await routeCurrent();
       else navigate("/login", true);
       return;
     }
