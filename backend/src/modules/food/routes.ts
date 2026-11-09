@@ -56,7 +56,7 @@ foodRouter.post("/healthy-nearby", async (req: AuthedRequest, res) => {
     rawMenuRecordsFound: result.diagnostics?.rawMenuRecordsFound ?? 0,
     normalizedDishesFound: result.diagnostics?.normalizedDishesFound ?? 0,
     error: vegetarianOnly
-      ? "The provider did not identify any menu dishes as vegetarian. FitOS will not guess whether a dish is vegetarian."
+      ? "The provider did not identify any menu dishes as vegetarian. FACHS will not guess whether a dish is vegetarian."
       : result.diagnostics?.error || "The provider returned no verified menu dish names. No dishes were invented.",
   });
   const analyses = await getAiProvider().analyzeHealthyDishes({ dishes, preferences: {
