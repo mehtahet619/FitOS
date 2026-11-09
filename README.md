@@ -1,10 +1,10 @@
-# FitOS
+# FACHS
 
 **Your personal fitness companion for smarter workouts, better food choices, and consistent progress.**
 
-FitOS brings workout planning, gym insights, nutrition tracking, and fitness progress together in one place. It helps you make informed decisions based on your goals, your available equipment, and your daily activity.
+FACHS brings workout planning, gym insights, nutrition tracking, and fitness progress together in one place. It helps you make informed decisions based on your goals, your available equipment, and your daily activity.
 
-## What FitOS does
+## What FACHS does
 
 ### Personalized workouts
 - Creates workout plans around your fitness goal, training split, available gym days, and session time.
@@ -50,8 +50,8 @@ FitOS brings workout planning, gym insights, nutrition tracking, and fitness pro
 
 ## Built around your choices
 
-FitOS is designed to guide, not control. Your workout recommendations can adapt when equipment is unavailable, and nutrition insights help you understand your choices without restricting them. You stay in control of your training, food, and fitness journey.
+FACHS is designed to guide, not control. Your workout recommendations can adapt when equipment is unavailable, and nutrition insights help you understand your choices without restricting them. You stay in control of your training, food, and fitness journey.
 
 ---
 
-**FitOS: Train smarter. Eat mindfully. Stay consistent.**
+**FACHS: Train smarter. Eat mindfully. Stay consistent.**
