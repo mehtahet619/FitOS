@@ -280,7 +280,7 @@ export async function generateWorkout(
   });
 
   // OpenRouter is an enhancement, not a hard dependency for workout creation.
-  // If it fails or returns too few valid exercises, use FitOS's bundled catalogue.
+  // If it fails or returns too few valid exercises, use FACHS's bundled catalogue.
   if (aiExercises.length !== requestedCount) {
     console.warn(`[workouts] AI returned ${aiExercises.length}/${requestedCount}; falling back to the bundled exercise catalogue.`);
     const catalogue = exerciseRecommendationService.getRecommendedExercises({
@@ -374,7 +374,7 @@ export async function generateWorkout(
 
   if (selectedExercises.length !== requestedCount) {
     throw new Error(
-      `FitOS could only find ${selectedExercises.length} unique compatible exercises; ${requestedCount} were requested. Add more exercises or equipment to your catalogue.`
+      `FACHS could only find ${selectedExercises.length} unique compatible exercises; ${requestedCount} were requested. Add more exercises or equipment to your catalogue.`
     );
   }
   const exerciseIds = await ensureExerciseRows(database, selectedExercises);
