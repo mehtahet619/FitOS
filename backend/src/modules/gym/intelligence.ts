@@ -152,9 +152,6 @@ function localWeekdayHour(value: string | Date, timeZone: string): { weekday: nu
   return { weekday, hour };
 }
 
-const ASSUMED_OPEN_HOUR = 5;
-const ASSUMED_CLOSE_HOUR = 23;
-
 function coldStartBaseline(weekday: number, hour: number): number {
   const weekend = weekday === 0 || weekday === 6;
   return weekend
@@ -231,7 +228,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     bySlot.set(key, slot);
   }
   const latestTrainingAt = trainingRows.reduce((latest, row) => Math.max(latest, new Date(row.observedAt).getTime() || 0), 0);
-  const modelVersion = `fitos-osm-member-hourly-v5-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
+  const modelVersion = `fitos-verified-hours-today-v6-${trainingRows.length}-${latestTrainingAt || "coldstart"}`;
   let schedule: any = null;
   try { schedule = gym.openingHoursJson ? JSON.parse(gym.openingHoursJson) : null; } catch { schedule = null; }
   const openingHoursKnown = Boolean(
@@ -245,18 +242,19 @@ async function predictGymWeek(gym: any, timeZone: string) {
   const output: any[] = [];
   const pendingSnapshots: Array<{ id: string; gymId: string; predictedFor: string; predictedCrowdPercent: number; modelVersion: string; generatedAt: string }> = [];
 
-  const mlRows = await loadMlForecast(gym.id, `${baseLocalDate}T00:00:00`, `${addDays(baseDate, 7).toISOString().slice(0, 10)}T00:00:00`);
+  const tomorrowKey = addDays(baseDate, 1).toISOString().slice(0, 10);
+  const mlRows = await loadMlForecast(gym.id, `${baseLocalDate}T00:00:00`, `${tomorrowKey}T00:00:00`);
   const mlRun = mlRows.size ? await latestMlRun() : null;
 
-  for (let offset = 0; offset < 7; offset += 1) {
+  for (let offset = 0; offset < 1; offset += 1) {
     const date = addDays(baseDate, offset);
     const dateKey = date.toISOString().slice(0, 10);
     const weekday = date.getUTCDay();
     const hours: any[] = [];
     for (let hour = 0; hour < 24; hour += 1) {
-      // OSM often has no opening_hours for local gyms. Previously that produced an empty
-      // forecast; now we predict over a clearly-flagged assumed 05:00-23:00 window instead.
-      const open = openingHoursKnown ? hourIsOpen(schedule, weekday, hour) : (hour >= ASSUMED_OPEN_HOUR && hour < ASSUMED_CLOSE_HOUR);
+      // Only forecast hours explicitly present in the gym's verified schedule.
+      // Unknown hours and special closures must never be replaced with guessed hours.
+      const open = openingHoursKnown && hourIsOpen(schedule, weekday, hour);
       if (!open) continue;
       const slot = bySlot.get(`${weekday}:${hour}`);
       const baseline = coldStartBaseline(weekday, hour);
@@ -297,7 +295,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
 
   // Load snapshots in one query. Never rewrite an existing prediction: its
   // value must remain fixed so later member reports evaluate what was shown.
-  const rangeEnd = addDays(baseDate, 7).toISOString().slice(0, 10);
+  const rangeEnd = addDays(baseDate, 1).toISOString().slice(0, 10);
   const existingSnapshots = await db.all<any>(
     "SELECT predictedFor FROM GymCrowdForecastSnapshot WHERE gymId = ? AND predictedFor >= ? AND predictedFor < ?",
     gym.id, `${baseLocalDate}T00:00:00`, `${rangeEnd}T00:00:00`
@@ -346,7 +344,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     predictions: output,
     timezone: timeZone,
     openingHoursKnown,
-    openingHoursAssumed: !openingHoursKnown,
+    openingHoursAssumed: false,
     mlModel: mlRun,
     mlCoverage: output.length ? Number((output.filter((i) => i.source === "ml").length / output.length).toFixed(2)) : 0,
     currentStatus: getCurrentOpeningStatus(schedule, timeZone),
