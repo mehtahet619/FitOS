@@ -73,9 +73,10 @@ async function expirePreviousDayWorkout(dbConn: typeof db, userId: string, now =
   const state = await getPlanState(dbConn, userId);
   if (!state?.activeWorkoutId || state.cycleStatus !== "IN_PROGRESS") return false;
   const workout = await dbConn.get<any>(
-    `SELECT id, status, createdAt FROM Workout WHERE id = ? AND userId = ?`,
-    state.activeWorkoutId, userId
+    `SELECT * FROM Workout WHERE id = ?`,
+    state.activeWorkoutId
   );
+  if (workout && workout.userId !== userId) return false;
   if (!workout || workout.status !== "pending" || !workout.createdAt) return false;
   if (localDateKey(workout.createdAt) >= localDateKey(now)) return false;
 
