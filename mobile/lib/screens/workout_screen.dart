@@ -229,7 +229,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             children: [
               const Text("Step 1: Choose your workout structure", style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              const Text("FitOS locks this structure until the full cycle is complete.", style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              const Text("FACHS locks this structure until the full cycle is complete.", style: TextStyle(color: AppColors.muted, fontSize: 12)),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
