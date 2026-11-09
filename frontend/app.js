@@ -401,10 +401,20 @@ function showScreen(id) {
 /* ---------------- Boot ---------------- */
   async function boot() {
     const generation = ++authBootGeneration;
+    const currentPath = normalizePath(location.pathname);
+    updateRouteMetadata(currentPath);
+
+    // The Help Center is public. Do not check or restore an authenticated session here.
+    if (currentPath === "/help") {
+      AuthState.status = "UNAUTHENTICATED";
+      showScreen("screen-help");
+      initializeHelpCenter();
+      return;
+    }
+
     AuthState.status = "AUTH_LOADING";
-  const isLandingRoute = ["/", "/help"].includes(normalizePath(location.pathname));
-  updateRouteMetadata(normalizePath(location.pathname));
-  if (isLandingRoute) showScreen(normalizePath(location.pathname) === "/help" ? "screen-help" : "screen-landing");
+  const isLandingRoute = currentPath === "/";
+  if (isLandingRoute) showScreen("screen-landing");
   else { window.FitOSIntroStart?.(); showScreen("screen-intro"); }
   $("auth-submit").disabled = true;
   try {
