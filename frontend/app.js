@@ -124,7 +124,7 @@ const AuthState = {
     if (this.status === "UNAUTHENTICATED") return;
     this.status = "UNAUTHENTICATED"; this.user = null; this.profileComplete = null; this.generation += 1;
     Api.clearTokens(); clearProtectedContent();
-    if (normalizePath(location.pathname) === "/") void routeCurrent();
+    if (["/", "/help"].includes(normalizePath(location.pathname))) void routeCurrent();
     else if (!location.pathname.startsWith("/verify-email") && !location.pathname.startsWith("/verify-login") && !location.pathname.startsWith("/forgot-password") && !location.pathname.startsWith("/reset-password")) navigate("/login", true);
   },
 };
@@ -135,6 +135,7 @@ const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workou
 const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
 const routeMetadata = {
   "/": ["AI Workout Planner Based on Gym Equipment | FACHS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FACHS."],
+  "/help": ["Help Center | FACHS", "Find help with FACHS workouts, equipment scanning, nutrition, gym discovery, and account access."],
   "/login": ["Log in to FACHS | Personalized Workout Planner", "Log in to your FACHS account to continue your workout and nutrition plan."],
   "/register": ["Create your FACHS account | Adaptive Workout Planner", "Create a FACHS account to build an equipment-aware training plan around your goals."],
   "/verify-email": ["Verify your email | FACHS", "Verify your email address to finish setting up your FACHS account."],
@@ -160,7 +161,7 @@ function updateRouteMetadata(path) {
   const canonicalTag = document.querySelector('link[rel="canonical"]');
   const canonicalUrl = `${publicSiteUrl}${path === "/" ? "/" : path}`;
   if (descriptionTag) descriptionTag.content = description;
-  if (robotsTag) robotsTag.content = path === "/" ? "index, follow, max-image-preview:large" : "noindex, nofollow";
+  if (robotsTag) robotsTag.content = ["/", "/help"].includes(path) ? "index, follow, max-image-preview:large" : "noindex, nofollow";
   if (canonicalTag) canonicalTag.href = canonicalUrl;
   document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
   document.querySelector('meta[property="og:description"]')?.setAttribute("content", description);
@@ -201,10 +202,100 @@ function startResendCountdown(seconds, buttonId = "verify-resend", countdownId =
   const paint = () => { $(countdownId).textContent = remaining > 0 ? `Resend available in ${remaining}s` : "You can request a new code."; button.disabled = remaining > 0; };
   paint(); resendTimer = setInterval(() => { remaining -= 1; paint(); if (remaining <= 0) clearInterval(resendTimer); }, 1000);
 }
-async function routeCurrent() {
+
+/* ---------------- Public help center ---------------- */
+function initializeHelpCenter() {
+  const search = $("help-search-input");
+  const items = Array.from(document.querySelectorAll("[data-help-item]"));
+  const groups = Array.from(document.querySelectorAll("[data-help-group]"));
+  const filters = Array.from(document.querySelectorAll("[data-help-filter]"));
+  const empty = $("help-empty-state");
+  const count = $("help-search-count");
+  if (!search || search.dataset.initialized === "true") return;
+  search.dataset.initialized = "true";
+  let activeFilter = "all";
+  const apply = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let visible = 0;
+    items.forEach((item) => {
+      const group = item.closest("[data-help-group]");
+      const categoryMatch = activeFilter === "all" || group?.dataset.helpGroup === activeFilter;
+      const textMatch = !query || item.textContent.toLocaleLowerCase().includes(query);
+      item.hidden = !(categoryMatch && textMatch);
+      if (!item.hidden) visible += 1;
+    });
+    groups.forEach((group) => {
+      group.hidden = !Array.from(group.querySelectorAll("[data-help-item]")).some((item) => !item.hidden);
+    });
+    empty.hidden = visible !== 0;
+    count.textContent = query ? `${visible} ${visible === 1 ? "article" : "articles"} found` : `${visible} help articles`;
+  };
+  search.addEventListener("input", apply);
+  filters.forEach((button) => button.addEventListener("click", () => {
+    activeFilter = button.dataset.helpFilter || "all";
+    filters.forEach((entry) => {
+      const selected = entry === button;
+      entry.classList.toggle("active", selected);
+      entry.setAttribute("aria-pressed", String(selected));
+    });
+    apply();
+  }));
+  $("help-clear-search")?.addEventListener("click", () => {
+    search.value = "";
+    activeFilter = "all";
+    filters.forEach((entry) => {
+      const selected = entry.dataset.helpFilter === "all";
+      entry.classList.toggle("active", selected);
+      entry.setAttribute("aria-pressed", String(selected));
+    });
+    apply();
+    search.focus();
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { search.value = ""; apply(); }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      search.focus();
+    }
+  });
+  $("help-copy-report")?.addEventListener("click", async () => {
+    const message = $("help-report-message").value.trim();
+    if (!message) {
+      $("help-report-status").textContent = "Please describe the issue first.";
+      $("help-report-message").focus();
+      return;
+    }
+    const report = [
+      "FACHS bug report",
+      `Issue: ${message}`,
+      `Page: ${location.href}`,
+      `Browser: ${navigator.userAgent}`,
+      `Reported at: ${new Date().toISOString()}`,
+    ].join("\\n");
+    try {
+      await navigator.clipboard.writeText(report);
+      $("help-report-status").textContent = "Bug report copied. Share it with the FACHS support team.";
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = report;
+      field.setAttribute("readonly", "");
+      field.style.position = "absolute";
+      field.style.left = "-9999px";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      $("help-report-status").textContent = copied ? "Bug report copied. Share it with the FACHS support team." : "Copy was blocked by your browser. Please copy the issue details manually.";
+    }
+  });
+  apply();
+}
+\nasync function routeCurrent() {
   const path = normalizePath(location.pathname);
   updateRouteMetadata(path);
-  const publicRoutes = { "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
+  const publicRoutes = { "/help": "screen-help", "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
   const knownRoutes = new Set(["/", ...Object.keys(routeTabs), ...Object.keys(publicRoutes)]);
   if (!knownRoutes.has(path)) { showScreen("screen-not-found"); return; }
   if (AuthState.status === "AUTH_LOADING") {
@@ -304,9 +395,9 @@ function showScreen(id) {
   async function boot() {
     const generation = ++authBootGeneration;
     AuthState.status = "AUTH_LOADING";
-  const isLandingRoute = normalizePath(location.pathname) === "/";
+  const isLandingRoute = ["/", "/help"].includes(normalizePath(location.pathname));
   updateRouteMetadata(normalizePath(location.pathname));
-  if (isLandingRoute) showScreen("screen-landing");
+  if (isLandingRoute) showScreen(normalizePath(location.pathname) === "/help" ? "screen-help" : "screen-landing");
   else { window.FitOSIntroStart?.(); showScreen("screen-intro"); }
   $("auth-submit").disabled = true;
   try {
