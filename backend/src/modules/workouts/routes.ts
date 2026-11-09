@@ -511,7 +511,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     }));
     return res.status(422).json({
       code: "WORKOUT_MUSCLE_TARGET_MISMATCH",
-      error: "FitOS rejected the generated workout because one or more exercises do not match the current plan's target muscles. No workout was saved. Please retry after the exercise catalog or AI provider is corrected.",
+      error: "FACHS rejected the generated workout because one or more exercises do not match the current plan's target muscles. No workout was saved. Please retry after the exercise catalog or AI provider is corrected.",
       targetMuscles: requiredUnit.muscles,
       rejectedExercises: mismatchedExercises.map(({ exerciseName, primaryMuscle }) => ({ exerciseName, primaryMuscle })),
     });
@@ -1079,7 +1079,7 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   });
   if (!nextAlternative) {
     return res.status(422).json({
-      error: `Sorry, we couldn't find a suitable alternative for "${base.name}" with your available equipment. We're constantly improving FitOS and working to make better recommendations. Please try another exercise or update your gym equipment.`,
+      error: `Sorry, we couldn't find a suitable alternative for "${base.name}" with your available equipment. We're constantly improving FACHS and working to make better recommendations. Please try another exercise or update your gym equipment.`,
       requiresEquipment: baseRequiresEquipment,
     });
   }
@@ -1210,7 +1210,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     ? canonicalExercises.find((exercise) => exercise.id === parsed.data.confirmedExerciseId)
     : resolveExerciseByName(exerciseName, canonicalExercises);
   if (parsed.data.confirmedExerciseId && !selectedExercise) {
-    return res.status(400).json({ error: "Choose an exercise from the FitOS exercise catalog." });
+    return res.status(400).json({ error: "Choose an exercise from the FACHS exercise catalog." });
   }
   if (!selectedExercise) {
     if (!parsed.data.validateWithAi) {
@@ -1284,7 +1284,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
         }
         return res.status(422).json({
           code: "EXERCISE_CONFIRMATION_REQUIRED",
-          error: "FitOS validated this exercise and added it to the exercise catalog. Confirm to use it in this workout.",
+          error: "FACHS validated this exercise and added it to the exercise catalog. Confirm to use it in this workout.",
           suggestions: [{
             id: aiExercise.id,
             name: aiExercise.name,
@@ -1298,7 +1298,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     }
     return res.status(422).json({
       code: "EXERCISE_CATALOG_ENTRY_MISSING",
-      error: `No matching exercise record exists in the FitOS catalog for "${exerciseName}". Choose a listed exercise or validate it as a new exercise.`,
+      error: `No matching exercise record exists in the FACHS catalog for "${exerciseName}". Choose a listed exercise or validate it as a new exercise.`,
       suggestions: [],
     });
   }
@@ -1322,7 +1322,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   }
   const isBodyweight = normalizeExerciseValue(equipmentName) === "bodyweight";
   const selectedEquipment = aliasToEquipment.get(normalizeExerciseValue(equipmentName));
-  if (!isBodyweight && !selectedEquipment) return res.status(400).json({ error: "Choose equipment from the FitOS equipment catalog." });
+  if (!isBodyweight && !selectedEquipment) return res.status(400).json({ error: "Choose equipment from the FACHS equipment catalog." });
 
   let snapshotIds: string[] = [];
   try {
@@ -1393,7 +1393,7 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
   if (recommendations.length !== otherSlots.length) {
     return res.status(422).json({
       code: "WORKOUT_REBALANCE_UNAVAILABLE",
-      error: "FitOS couldn't find enough distinct exercises for this workout with the selected equipment. Your current workout was left unchanged.",
+      error: "FACHS couldn't find enough distinct exercises for this workout with the selected equipment. Your current workout was left unchanged.",
     });
   }
   const persisted = await ensureExerciseRows(db, recommendations);
