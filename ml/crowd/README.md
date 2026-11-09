@@ -1,4 +1,4 @@
-# FitOS crowd-prediction pipeline
+# FACHS crowd-prediction pipeline
 
 Open-source, no Google APIs. `extract -> clean -> features -> train -> evaluate -> gate -> publish`
 
@@ -25,5 +25,5 @@ pytest tests
 Set `GYM_ML_PIPELINE_KEY` on the Render API service too. The nightly GitHub Action needs repo secrets `FITOS_API_URL` and `GYM_ML_PIPELINE_KEY`.
 
 ## What the data can and cannot tell you
-Labels come only from FitOS itself: member reports (absolute 0-100) and check-ins (relative demand; check-in is once a day and optional, so it is a noisy proxy). Weather, holidays and per-gym patterns help only once there is enough data; until then the gate keeps the baseline.
+Labels come only from FACHS itself: member reports (absolute 0-100) and check-ins (relative demand; check-in is once a day and optional, so it is a noisy proxy). Weather, holidays and per-gym patterns help only once there is enough data; until then the gate keeps the baseline.
 Google Maps "Popular Times" is deliberately not used: it has no public API, scraping it violates Google's terms, and the API rejects it as a training source.
