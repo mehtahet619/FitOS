@@ -178,7 +178,7 @@ selection remain owned by the existing workout-plan and CSV flow.
 
 ### All Gym Equipment Workflow (live webcam frames)
 
-FitOS can use the published `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic` workflow for live browser-camera detection. The workflow definition declares one `image` input and a `predictions` JSON output. The browser requests camera access and samples frames sequentially through the existing authenticated `POST /equipment/detect` route; each frame is sent to Roboflow from the backend. No Roboflow key is exposed to the browser and users do not need to upload photos. This is sampled live-frame inference over the Workflow HTTP endpoint, not a persistent WebRTC session.
+FACHS can use the published `all-gym-equipment-vall-gym-equipment-yhr3r-1-yolov8n-t3-logic` workflow for live browser-camera detection. The workflow definition declares one `image` input and a `predictions` JSON output. The browser requests camera access and samples frames sequentially through the existing authenticated `POST /equipment/detect` route; each frame is sent to Roboflow from the backend. No Roboflow key is exposed to the browser and users do not need to upload photos. This is sampled live-frame inference over the Workflow HTTP endpoint, not a persistent WebRTC session.
 
 Enable it in `backend/.env` or the backend hosting environment:
 
@@ -188,7 +188,7 @@ ROBOFLOW_API_KEY="your_api_key_here"
 EQUIPMENT_DETECTION_CONFIDENCE_THRESHOLD="0.50"
 ```
 
-The gym-equipment flag takes precedence over `ROBOFLOW_WORKFLOW_MODE`; the existing SAM3 provider remains available by leaving the new flag `false`. Frame requests are sequential, use a 30-second timeout, and retry transient failures at most twice. Results are mapped to canonical equipment already in the FitOS database; unknown model classes are ignored.
+The gym-equipment flag takes precedence over `ROBOFLOW_WORKFLOW_MODE`; the existing SAM3 provider remains available by leaving the new flag `false`. Frame requests are sequential, use a 30-second timeout, and retry transient failures at most twice. Results are mapped to canonical equipment already in the FACHS database; unknown model classes are ignored.
 
 Smoke test from `backend/` (requires `ROBOFLOW_API_KEY`):
 
@@ -329,12 +329,12 @@ Routing is available through `GET /gym/route?fromLat=23.0&fromLng=72.5&toLat=22.
 **Training/evaluation separation**
 - The predictor trains only from rows in GymCrowdOfficialObservation, populated through the authenticated-by-secret dataset ingestion endpoint.
 - Member-submitted reports in GymCrowdObservation are never training data. They are used only to compare an already-saved hourly prediction with the observed crowd level.
-- GymCrowdForecastSnapshot freezes the prediction for each gym-local hour. When an actual report arrives for that hour, FitOS records the actual value, absolute error, and evaluation timestamp.
+- GymCrowdForecastSnapshot freezes the prediction for each gym-local hour. When an actual report arrives for that hour, FACHS records the actual value, absolute error, and evaluation timestamp.
 - GET /gym/:gymId/evaluation returns evaluated-hour count, MAE, and RMSE.
 - New authorized official dataset rows are appended and deduplicated. The next forecast request rebuilds the weekday/hour model from the updated official dataset, using a 45-day recency half-life. This is the retraining loop; prediction outputs are never fed back as training labels.
 - A generic weekday/weekend cold-start estimate is shown with low confidence until official records exist.
 
-**Important source limitation:** Public OSM place data contains no crowd time-series feed. Google Maps/Popular Times content is rejected by the ingestion endpoint and must not be scraped or copied into FitOS's ML dataset. Supply a separate independently licensed/authorized official dataset instead. FitOS does not use Roboflow, CCTV, cameras, or external crowd APIs for this feature.
+**Important source limitation:** Public OSM place data contains no crowd time-series feed. Google Maps/Popular Times content is rejected by the ingestion endpoint and must not be scraped or copied into FACHS's ML dataset. Supply a separate independently licensed/authorized official dataset instead. FACHS does not use Roboflow, CCTV, cameras, or external crowd APIs for this feature.
 
 Configure:
 ```env
