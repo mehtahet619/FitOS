@@ -18,7 +18,7 @@ foodScannerRouter.get("/product/:barcode", async (req, res) => {
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,brands,quantity,image_front_url,nutriments,serving_size,serving_quantity,allergens_tags`, {
-      signal: controller.signal, headers: { "User-Agent": "FitOS/1.0 (food nutrition scanner)" }
+      signal: controller.signal, headers: { "User-Agent": "FACHS/1.0 (food nutrition scanner)" }
     });
     if (!response.ok) return res.status(502).json({ error: "Product lookup is temporarily unavailable. Retry or enter the label manually." });
     const payload = await response.json() as { status?: number; product?: any };
