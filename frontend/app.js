@@ -307,6 +307,12 @@ function initializeHelpCenter() {
     showScreen("screen-landing");
     return;
   }
+  if (path === "/help") {
+    // Help is public and must remain available without an authenticated session.
+    showScreen("screen-help");
+    initializeHelpCenter();
+    return;
+  }
   if (path === "/login" || path === "/register") {
     if (AuthState.status === "AUTHENTICATED") { navigate("/gym", true); return; }
     State.isRegisterMode = path === "/register";
