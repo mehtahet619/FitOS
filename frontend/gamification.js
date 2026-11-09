@@ -219,7 +219,7 @@
         }
         await refreshLeaderboard(rows);
       }).catch(() => {
-        rows.textContent = "Friends leaderboard is temporarily unavailable. Your XP and consistency are calculated separately from your workout history.";
+        rows.textContent = "Friends leaderboard is temporarily unavailable. Your XP is loaded from the server and will appear once it is reachable.";
       });
 
       document.getElementById("fitos-gamification-share").addEventListener("click", async () => {

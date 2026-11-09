@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { AuthedRequest } from "../../common/auth";
+import { loadMlForecast, latestMlRun, HIGH_CROWD_THRESHOLD } from "./crowdMl";
 import { searchOsmCities, searchOsmGyms, getOsmRoute, OsmPlace } from "../../maps/osmProvider";
 
 const observationSchema = z.object({
@@ -151,6 +152,9 @@ function localWeekdayHour(value: string | Date, timeZone: string): { weekday: nu
   return { weekday, hour };
 }
 
+const ASSUMED_OPEN_HOUR = 5;
+const ASSUMED_CLOSE_HOUR = 23;
+
 function coldStartBaseline(weekday: number, hour: number): number {
   const weekend = weekday === 0 || weekday === 6;
   return weekend
@@ -241,26 +245,43 @@ async function predictGymWeek(gym: any, timeZone: string) {
   const output: any[] = [];
   const pendingSnapshots: Array<{ id: string; gymId: string; predictedFor: string; predictedCrowdPercent: number; modelVersion: string; generatedAt: string }> = [];
 
+  const mlRows = await loadMlForecast(gym.id, `${baseLocalDate}T00:00:00`, `${addDays(baseDate, 7).toISOString().slice(0, 10)}T00:00:00`);
+  const mlRun = mlRows.size ? await latestMlRun() : null;
+
   for (let offset = 0; offset < 7; offset += 1) {
     const date = addDays(baseDate, offset);
     const dateKey = date.toISOString().slice(0, 10);
     const weekday = date.getUTCDay();
     const hours: any[] = [];
     for (let hour = 0; hour < 24; hour += 1) {
-      if (!hourIsOpen(schedule, weekday, hour)) continue;
+      // OSM often has no opening_hours for local gyms. Previously that produced an empty
+      // forecast; now we predict over a clearly-flagged assumed 05:00-23:00 window instead.
+      const open = openingHoursKnown ? hourIsOpen(schedule, weekday, hour) : (hour >= ASSUMED_OPEN_HOUR && hour < ASSUMED_CLOSE_HOUR);
+      if (!open) continue;
       const slot = bySlot.get(`${weekday}:${hour}`);
       const baseline = coldStartBaseline(weekday, hour);
       const learnedAverage = slot && slot.weight > 0 ? slot.weightedSum / slot.weight : null;
       const sampleWeight = slot ? Math.min(0.95, slot.count / (slot.count + 4)) : 0;
-      const predicted = Math.max(0, Math.min(100, Math.round(
+      const baselinePredicted = Math.max(0, Math.min(100, Math.round(
         learnedAverage === null ? baseline : learnedAverage * sampleWeight + baseline * (1 - sampleWeight)
       )));
-      const ageDays = slot?.latestAt ? (nowMs - slot.latestAt) / 86400000 : Infinity;
-      const confidence = slot && slot.count >= 30 && ageDays <= 21 ? "high"
-        : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
-      const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
       const predictedFor = `${dateKey}T${String(hour).padStart(2, "0")}:00:00`;
-      const item = { date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence, samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [] };
+      const mlHit = mlRows.get(predictedFor);
+      const predicted = mlHit ? Math.max(0, Math.min(100, Math.round(mlHit.crowdPercent))) : baselinePredicted;
+      const ageDays = slot?.latestAt ? (nowMs - slot.latestAt) / 86400000 : Infinity;
+      const baselineConfidence = slot && slot.count >= 30 && ageDays <= 21 ? "high"
+        : slot && slot.count >= 8 && ageDays <= 45 ? "medium" : "low";
+      const confidence = mlHit ? mlHit.confidence : baselineConfidence;
+      const label = predicted >= 80 ? "very_busy" : predicted >= 60 ? "busy" : predicted >= 35 ? "moderate" : "quiet";
+      const item = {
+        date: dateKey, hour, predictedFor, crowdPercent: predicted, crowdLevel: label, confidence,
+        samples: slot?.count ?? 0, trainingSource: slot?.sources ? Object.keys(slot.sources) : [],
+        // "Will it be high?" -> model probability when available, otherwise the threshold on the estimate.
+        isHighCrowd: mlHit?.highProbability != null ? mlHit.highProbability >= 0.5 : predicted >= HIGH_CROWD_THRESHOLD,
+        highProbability: mlHit?.highProbability ?? null,
+        source: mlHit ? "ml" : "baseline",
+        modelVersion: mlHit ? mlHit.modelVersion : modelVersion,
+      };
       hours.push(item);
       output.push(item);
     }
@@ -291,7 +312,7 @@ async function predictGymWeek(gym: any, timeZone: string) {
     if (!isFuture || existingKeys.has(item.predictedFor)) continue;
     pendingSnapshots.push({
       id: uuidv4(), gymId: gym.id, predictedFor: item.predictedFor,
-      predictedCrowdPercent: item.crowdPercent, modelVersion, generatedAt,
+      predictedCrowdPercent: item.crowdPercent, modelVersion: item.modelVersion, generatedAt,
     });
   }
 
@@ -325,6 +346,9 @@ async function predictGymWeek(gym: any, timeZone: string) {
     predictions: output,
     timezone: timeZone,
     openingHoursKnown,
+    openingHoursAssumed: !openingHoursKnown,
+    mlModel: mlRun,
+    mlCoverage: output.length ? Number((output.filter((i) => i.source === "ml").length / output.length).toFixed(2)) : 0,
     currentStatus: getCurrentOpeningStatus(schedule, timeZone),
     openingSchedule: schedule?.weekly || null,
     openingHoursText: schedule?.raw || null,
