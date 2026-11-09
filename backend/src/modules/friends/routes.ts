@@ -60,7 +60,7 @@ friendsRouter.get("/leaderboard", async (req: AuthedRequest, res) => {
     const isYou = id === userId;
     return {
       id,
-      name: nameById.get(id) || (isYou ? "You" : "FitOS member"),
+      name: nameById.get(id) || (isYou ? "You" : "FACHS member"),
       isYou,
       workouts: stats.workouts,
       weeklyWorkouts: weeklyById.get(id) ?? 0,
