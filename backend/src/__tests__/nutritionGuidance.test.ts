@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-describe("FitOS nutrition guidance", () => {
+describe("FACHS nutrition guidance", () => {
   afterEach(() => { delete (globalThis as any).window; });
 
   async function loadGuidance() {
