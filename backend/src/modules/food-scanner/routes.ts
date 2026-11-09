@@ -61,7 +61,7 @@ class OffError extends Error {
 async function offFetchOnce(url: string, timeoutMs: number) {
   let response: Response;
   try {
-    response = await fetch(url, { headers: { "User-Agent": "FitOS/1.0 (food scanner)" }, signal: AbortSignal.timeout(timeoutMs) });
+    response = await fetch(url, { headers: { "User-Agent": "FACHS/1.0 (food scanner)" }, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
     if (name === "TimeoutError" || name === "AbortError") throw new OffError("Product lookup took too long. Please try again, or enter the label manually.", 504);
@@ -258,7 +258,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     }
   }
 
-  // All upstream calls stay on the FitOS server. Browsers cannot reliably call
+  // All upstream calls stay on the FACHS server. Browsers cannot reliably call
   // Open Food Facts directly because of cross-origin restrictions.
   let primaryError = false;
   try {
@@ -269,7 +269,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     url.searchParams.set("page_size", "20");
     url.searchParams.set("fields", OFF_FIELDS);
     const response = await fetch(url.toString(), {
-      headers: { "User-Agent": "FitOS/1.0 (food scanner)" },
+      headers: { "User-Agent": "FACHS/1.0 (food scanner)" },
       signal: AbortSignal.timeout(Math.max(OFF_TIMEOUT_MS, 12000)),
     });
     if (response.ok) {
@@ -303,7 +303,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     fallbackUrl.searchParams.set("page_size", "20");
     fallbackUrl.searchParams.set("fields", OFF_FIELDS);
     const fallbackResponse = await fetch(fallbackUrl.toString(), {
-      headers: { "User-Agent": "FitOS/1.0 (food scanner)", Accept: "application/json" },
+      headers: { "User-Agent": "FACHS/1.0 (food scanner)", Accept: "application/json" },
       signal: AbortSignal.timeout(Math.max(OFF_TIMEOUT_MS, 12000)),
     });
     if (fallbackResponse.ok) {
