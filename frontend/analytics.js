@@ -108,7 +108,7 @@
     banner.hidden = consentValue() !== null;
     banner.innerHTML = `
       <div class="fitos-consent-copy">
-        <strong>Help us improve FitOS</strong>
+        <strong>Help us improve FACHS</strong>
         <p>Optional analytics help us understand site usage and usability. They stay off unless you accept. You can change this choice later in Cookie settings.</p>
         <a href="/privacy">Read our Privacy Policy</a>
       </div>
