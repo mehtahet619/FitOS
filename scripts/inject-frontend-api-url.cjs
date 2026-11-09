@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const apiBaseUrl = process.env.API_BASE_URL;
 if (!apiBaseUrl || !/^https:\/\//i.test(apiBaseUrl)) {
-  throw new Error("Set API_BASE_URL to the HTTPS URL of the FitOS API service.");
+  throw new Error("Set API_BASE_URL to the HTTPS URL of the FACHS API service.");
 }
 const publicSiteUrl = process.env.PUBLIC_SITE_URL;
 const ga4MeasurementId = process.env.GA4_MEASUREMENT_ID || "";
@@ -15,7 +15,7 @@ if (clarityProjectId && !/^[a-z0-9]+$/i.test(clarityProjectId)) {
   throw new Error("CLARITY_PROJECT_ID must contain only letters and numbers.");
 }
 if (!publicSiteUrl) {
-  throw new Error("Set PUBLIC_SITE_URL to the canonical HTTPS origin of the FitOS website.");
+  throw new Error("Set PUBLIC_SITE_URL to the canonical HTTPS origin of the FACHS website.");
 }
 let publicSiteOrigin;
 try {
