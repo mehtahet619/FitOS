@@ -1,5 +1,5 @@
 /**
- * Client for the published FitOS-independent Roboflow people-counting workflow.
+ * Client for the published FACHS-independent Roboflow people-counting workflow.
  * The workflow definition declares one image input and one JSON output, "predictions".
  * Keep the returned output generic so future workflow output changes do not get
  * silently coerced into an assumed detection schema.
