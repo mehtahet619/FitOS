@@ -292,7 +292,8 @@ function initializeHelpCenter() {
   });
   apply();
 }
-\nasync function routeCurrent() {
+
+async function routeCurrent() {
   const path = normalizePath(location.pathname);
   updateRouteMetadata(path);
   const publicRoutes = { "/help": "screen-help", "/login": "screen-auth", "/register": "screen-auth", "/verify-email": "screen-verify-email", "/verify-login": "screen-login-otp", "/forgot-password": "screen-forgot-password", "/reset-password": "screen-reset-password" };
