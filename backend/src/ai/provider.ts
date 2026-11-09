@@ -1,7 +1,7 @@
 import { requestAiText } from "./gateway";
 import { HealthyDishRankingSchema } from "./schemas";
 /**
- * AI provider abstraction for FitOS.
+ * AI provider abstraction for FACHS.
  * Nearby-food ranking uses OpenRouter first and Anthropic Claude as fallback.
  * The model may rank only real supplied dish records; all IDs and scores are
  * validated before results are returned. Nutrition values are never filled in
