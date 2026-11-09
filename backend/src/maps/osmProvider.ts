@@ -1,5 +1,5 @@
 /**
- * OpenStreetMap location services for FitOS.
+ * OpenStreetMap location services for FACHS.
  * Photon: city autocomplete/geocoding. Overpass: gyms and food places.
  * OSRM: route geometry, distance and duration.
  *
@@ -9,7 +9,7 @@
 type JsonRecord = Record<string, any>;
 const cache = new Map<string, { expiresAt: number; value: any }>();
 const TTL_MS = 10 * 60 * 1000;
-const USER_AGENT = "FitOS/1.0 (fitness location discovery; https://github.com/mehtahet619/FitOS)";
+const USER_AGENT = "FACHS/1.0 (fitness location discovery; https://github.com/mehtahet619/FACHS)";
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
