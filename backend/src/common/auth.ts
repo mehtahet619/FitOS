@@ -45,7 +45,7 @@ function sessionCookieOptions() {
     // The Render web and API services are different sites. Lax cookies are
     // omitted by credentialed cross-site fetches, including /auth/refresh.
     sameSite: production ? "none" as const : "lax" as const,
-    // Partitioned cookies remain available to the FitOS top-level site in
+    // Partitioned cookies remain available to the FACHS top-level site in
     // browsers that block unpartitioned third-party cookies.
     ...(production ? { partitioned: true } : {}),
     path: "/" as const,
@@ -73,7 +73,7 @@ export function clearSessionCookies(res: Response): void {
   const options = sessionCookieOptions();
   res.clearCookie(SESSION_COOKIE_ACCESS, options); res.clearCookie(SESSION_COOKIE_REFRESH, options);
 }
-export function isMobileClient(req: Request): boolean { return req.header("X-FitOS-Client") === "mobile"; }
+export function isMobileClient(req: Request): boolean { return req.header("X-FACHS-Client") === "mobile"; }
 
 async function resolveIdentity(req: Request): Promise<{ userId: string; sessionId: string } | undefined> {
   const token = getAccessToken(req);
