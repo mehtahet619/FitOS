@@ -52,15 +52,18 @@ function localDateKey(value: string | Date = new Date()): string {
 }
 async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
   const today = localDateKey();
-  const latest = await dbConn.get<{ completedAt: string }>(
-    `SELECT completedAt FROM Workout
+  const latest = await dbConn.get<{ completedAt: string; createdAt: string }>(
+    `SELECT completedAt, createdAt FROM Workout
      WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
      ORDER BY completedAt DESC LIMIT 1`,
     userId
   );
   if (!latest?.completedAt) return { locked: false, completedAt: null };
-  // The daily lock follows the app's local calendar day, never a rolling 22-hour window.
-  return { locked: localDateKey(latest.completedAt) === today, completedAt: latest.completedAt };
+  // A workout belongs to the local calendar day on which it was created.
+  // Completing yesterday's stale workout today must never lock today's session.
+  const completedToday = localDateKey(latest.createdAt) === today
+    && localDateKey(latest.completedAt) === today;
+  return { locked: completedToday, completedAt: completedToday ? latest.completedAt : null };
 }
 
 /**
@@ -869,6 +872,22 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
     return res.status(404).json({ error: "Workout not found" });
   if (workout.status === "completed")
     return res.status(409).json({ error: "This workout has already been completed." });
+  // Never let a previous day's pending workout be completed using today's
+  // timestamp. The expiry reconciliation above may already have advanced the
+  // plan and changed its status to expired; this guard also covers stale rows
+  // that are no longer the plan's active workout.
+  if (workout.createdAt && localDateKey(workout.createdAt) < localDateKey()) {
+    return res.status(409).json({
+      code: "WORKOUT_EXPIRED",
+      error: "This workout belongs to a previous day and has expired. Refresh your workout plan to load today's session.",
+    });
+  }
+  if (workout.status !== "pending") {
+    return res.status(409).json({
+      code: "WORKOUT_NOT_ACTIVE",
+      error: "This workout is no longer active. Refresh your workout plan to continue.",
+    });
+  }
 
   const workoutExercises = await db.all<any>(
     `SELECT id, exerciseId, targetSets FROM WorkoutExercise WHERE workoutId = ?`,
