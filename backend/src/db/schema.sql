@@ -631,7 +631,7 @@ CREATE INDEX IF NOT EXISTS idx_gym_prediction_gym_time ON GymCrowdPrediction(gym
 
 
 -- Independently licensed official crowd data is the only training source.
--- FitOS member reports are stored separately and used for forecast evaluation only.
+-- FACHS member reports are stored separately and used for forecast evaluation only.
 CREATE TABLE IF NOT EXISTS GymCrowdOfficialObservation (
   id TEXT PRIMARY KEY,
   gymId TEXT NOT NULL REFERENCES Gym(id) ON DELETE CASCADE,
