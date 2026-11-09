@@ -83,7 +83,7 @@ const MAX_SUBMITTED_FRAMES = 60;
 const FRAME_SAMPLE_STRIDE = 2;
 
 const COMPARISON_UNAVAILABLE_MESSAGE =
-  "Exercise form analysis is temporarily unavailable. We're working to restore it. You can continue using the other FitOS features.";
+  "Exercise form analysis is temporarily unavailable. We're working to restore it. You can continue using the other FACHS features.";
 const COMPARISON_NO_RESULT_MESSAGE = "We couldn't analyze this movement right now. Please try again in a moment.";
 
 function round4(value) {
@@ -715,7 +715,7 @@ const VisionCoach = {
       ? 'Tap "Start Camera" to begin pose analysis in your browser.'
       : this.trackingReason
         ? `Pose tracking for ${exerciseName}: ${this.trackingReason} Rep counting is not enabled for this movement.`
-        : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FitOS for AI analysis. Feedback depends on model confidence.`;
+        : `AI coaching for ${exerciseName}: keep your full body in frame. Sampled pose data and occasional camera frames may be sent to FACHS for AI analysis. Feedback depends on model confidence.`;
     document.querySelectorAll("#vision-segment button").forEach((button) => {
       button.classList.toggle("active", Boolean(key) && button.dataset.exercise === key);
     });
