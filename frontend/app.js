@@ -3314,7 +3314,7 @@ function renderGymTour(equipment, plan, savedProfile) {
               }
               evidence.set(name, current);
             }
-            renderEvidence(workspace, `Roboflow responded in ${result.latencyMs ?? "?"} ms · review each result`);
+            renderEvidence(workspace, "Detection results ready · review each result");
           } catch (error) {
             renderEvidence(workspace, `Detection paused: ${error.message || "try another angle"}`);
           } finally {
