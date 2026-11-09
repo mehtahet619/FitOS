@@ -16,7 +16,7 @@ export interface ExerciseRecommendationInput {
   excludedExerciseNames?: Iterable<string>;
   /** Movement families already represented by an exercise selected for this workout. */
   excludedExerciseFamilyKeys?: Iterable<string>;
-  /** Equipment names and aliases from the existing FitOS equipment catalog. */
+  /** Equipment names and aliases from the existing FACHS equipment catalog. */
   availableEquipment: Iterable<string>;
   equipmentMode: RecommendationEquipmentMode;
   /** Changes tie-breaking between workout generations so users do not get the same first exercises every time. */
