@@ -428,7 +428,7 @@ async function normalizeEquipment(
 }
 
 /**
- * Seed the canonical FitOS muscle list.
+ * Seed the canonical FACHS muscle list.
  */
 async function seedMuscles(
   database: PostgresDatabase
