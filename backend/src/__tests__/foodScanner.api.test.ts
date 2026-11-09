@@ -72,10 +72,10 @@ describe("barcode lookup: Open Food Facts responses", () => {
     const r = await get("/nutrition/foods/barcode/3017620422003");
     expect(r.status).toBe(504); expect(r.body.error).toMatch(/too long/); expect(r.body.error).not.toMatch(/aborted/i);
   });
-  it("429 is surfaced as a rate-limit message and not retried", async () => {
+  it("429 is surfaced as a generic temporary-busy message and not retried", async () => {
     h.setOff(() => ({ status: 429, body: {} }));
     const r = await get("/nutrition/foods/barcode/3017620422003");
-    expect(r.status).toBe(503); expect(r.body.error).toMatch(/rate-limiting/); expect(h.offCalls).toHaveLength(1);
+    expect(r.status).toBe(503); expect(r.body.error).toMatch(/temporarily busy/); expect(h.offCalls).toHaveLength(1);
   });
   it("502 on invalid JSON from upstream", async () => {
     h.setOff(() => ({ raw: "<html>oops</html>" }));
