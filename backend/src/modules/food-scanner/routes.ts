@@ -64,16 +64,16 @@ async function offFetchOnce(url: string, timeoutMs: number) {
     response = await fetch(url, { headers: { "User-Agent": "FitOS/1.0 (food scanner)" }, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
-    if (name === "TimeoutError" || name === "AbortError") throw new OffError("Open Food Facts took too long to respond. Please try again, or enter the label manually.", 504);
-    throw new OffError("Could not reach Open Food Facts. Check your connection and try again, or enter the label manually.");
+    if (name === "TimeoutError" || name === "AbortError") throw new OffError("Product lookup took too long. Please try again, or enter the label manually.", 504);
+    throw new OffError("Could not complete product lookup. Check your connection and try again, or enter the label manually.");
   }
   if (response.status === 404) return { notFound: true as const, data: null as any };
-  if (response.status === 429) throw new OffError("Open Food Facts is rate-limiting requests right now. Please wait a moment and try again.", 503);
-  if (!response.ok) throw new OffError("Open Food Facts is temporarily unavailable. Please try again, or enter the label manually.");
+  if (response.status === 429) throw new OffError("Product lookup is temporarily busy. Please wait a moment and try again.", 503);
+  if (!response.ok) throw new OffError("Product lookup is temporarily unavailable. Please try again, or enter the label manually.");
   try {
     return { notFound: false as const, data: (await response.json()) as any };
   } catch {
-    throw new OffError("Open Food Facts returned an unreadable response. Please try again.");
+    throw new OffError("Product lookup returned an unreadable response. Please try again.");
   }
 }
 async function offFetch(url: string, timeoutMs = OFF_TIMEOUT_MS) {
@@ -103,10 +103,10 @@ foodScannerRouter.get("/foods/barcode/:code", async (req, res) => {
     }
     if (product) return res.json({ found: true, product });
     if (sawRecordWithoutName) return res.status(422).json({ found: false, code, error: "The product record has no name. Use manual entry after checking the package label." });
-    return res.status(404).json({ found: false, code, error: "Product not found in Open Food Facts. Search by name or enter the package label manually." });
+    return res.status(404).json({ found: false, code, error: "Product not found. Search by name or enter the package label manually." });
   } catch (error) {
     if (error instanceof OffError) return res.status(error.status).json({ error: error.message });
-    return res.status(502).json({ error: "Open Food Facts lookup failed. Please try again." });
+    return res.status(502).json({ error: "Product lookup failed. Please try again." });
   }
 });
 // Spoonacular food ingredient search. Keep the API key server-side in SPOONACULAR_API_KEY.
@@ -323,7 +323,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
 
   return res.status(502).json({
     error: primaryError
-      ? "Open Food Facts search is temporarily unavailable. Please try again shortly."
+      ? "Product search is temporarily unavailable. Please try again shortly."
       : "No matching products were returned. Try another spelling or a shorter query.",
   });
 });
