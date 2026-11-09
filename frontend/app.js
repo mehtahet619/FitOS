@@ -2879,10 +2879,6 @@ async function loadGymCrowdForecast(gymId) {
         </section>`
       : '<p class="gym-hours-empty">No operating-hour forecast is available yet.</p>';
     target.innerHTML = `
-      <div class="gym-crowd-meta">
-        <p>Today's forecast · ${gymEscapeHtml(trainingSummary)}</p>
-        <p>${gymEscapeHtml(errorSummary)}</p>
-      </div>
       <section class="gym-crowd-current-status">
         <strong>Current gym status</strong>
         <span class="gym-crowd-status-pill ${result.currentStatus?.status === "open" ? "is-open" : result.currentStatus?.status === "closed" ? "is-closed" : "is-unknown"}">${result.currentStatus?.status === "open" ? "OPEN NOW" : result.currentStatus?.status === "closed" ? "CLOSED NOW" : "HOURS UNKNOWN"}</span>
