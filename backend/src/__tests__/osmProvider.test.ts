@@ -46,6 +46,9 @@ describe("OpenStreetMap location helpers", () => {
     const gyms = await searchOsmGyms("Bharuch", "gyms");
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    const overpassBody = new URLSearchParams(String(fetchMock.mock.calls[1][1]?.body)).get("data") || "";
+    expect(overpassBody).toContain("around:20000");
+    expect(overpassBody).toContain('"sport"="bodybuilding"');
     expect(gyms).toHaveLength(1);
     expect(gyms[0].name).toBe("Fit Gym");
     expect(gyms[0].source).toBe("openstreetmap");
