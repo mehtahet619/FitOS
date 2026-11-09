@@ -1,4 +1,4 @@
-# Contributing to FitOS
+# Contributing to FACHS
 
 ## Pull request flow
 
