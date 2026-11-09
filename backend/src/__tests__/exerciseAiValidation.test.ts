@@ -84,7 +84,7 @@ describe("uncatalogued exercise AI validation", () => {
     });
   });
 
-  it("rejects model outputs that cannot map to FitOS muscles and equipment", async () => {
+  it("rejects model outputs that cannot map to FACHS muscles and equipment", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-test-key");
