@@ -2,6 +2,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 
 class EquipmentScanScreen extends StatefulWidget {
@@ -59,6 +60,12 @@ class _EquipmentScanScreenState extends State<EquipmentScanScreen> {
       final bytes = await file.readAsBytes();
       final base64Image = base64Encode(bytes);
       final result = await ApiClient.instance.post("/equipment/detect", {"imageBase64": base64Image});
+      if (result["configured"] != false) {
+        capturePostHogEvent(
+          'equipment_detection_completed',
+          properties: {'detection_count': (result["detections"] as List?)?.length ?? 0},
+        );
+      }
       setState(() => _result = result);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -81,6 +88,10 @@ class _EquipmentScanScreenState extends State<EquipmentScanScreen> {
         final currentNames = (current as List).map((e) => e["name"] as String).toSet();
         currentNames.addAll(names);
         await ApiClient.instance.post("/equipment/user/equipment", {"equipmentNames": currentNames.toList()});
+        capturePostHogEvent(
+          'equipment_selection_saved',
+          properties: {'equipment_count': currentNames.length},
+        );
         if (!mounted) return;
         Navigator.of(context).pop();
       } catch (e) {

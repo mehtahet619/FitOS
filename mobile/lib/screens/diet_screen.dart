@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 
 class DietScreen extends StatefulWidget {
@@ -52,6 +53,7 @@ class _DietScreenState extends State<DietScreen> {
     setState(() => _generating = true);
     try {
       await ApiClient.instance.post("/nutrition/generate", {});
+      capturePostHogEvent('nutrition_plan_generated');
       await _load();
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -77,6 +79,13 @@ class _DietScreenState extends State<DietScreen> {
       }
       final pos = await Geolocator.getCurrentPosition();
       final result = await ApiClient.instance.get("/food/nearby?lat=${pos.latitude}&lng=${pos.longitude}&foodId=$foodId");
+      capturePostHogEvent(
+        'nearby_food_search_completed',
+        properties: {
+          'search_configured': result["configured"] != false,
+          'result_count': (result["places"] as List?)?.length ?? 0,
+        },
+      );
       setState(() {
         _nearbyByFood[foodId] = result;
         _nearbyLoadingFoodId = null;

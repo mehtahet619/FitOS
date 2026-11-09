@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 import 'home_shell.dart';
 
@@ -34,6 +35,10 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_isRegister && !_verifyStep) {
         if (_nameCtrl.text.trim().isEmpty) throw ApiException(400, "Enter your name.");
         await ApiClient.instance.post("/auth/register/request-otp", {"name": _nameCtrl.text.trim(), "email": email, "password": password});
+        capturePostHogEvent(
+          'auth_registration_requested',
+          properties: {'registration_flow': 'email_otp'},
+        );
         if (mounted) setState(() { _verifyStep = true; _error = "Enter the 6-digit code sent to $email"; });
         return;
       }
@@ -41,6 +46,10 @@ class _AuthScreenState extends State<AuthScreen> {
           ? await ApiClient.instance.post("/auth/register/verify-otp", {"email": email, "otp": _otpCtrl.text.trim()})
           : await ApiClient.instance.post("/auth/login", {"email": email, "password": password});
       await ApiClient.instance.setTokens(access: data["accessToken"], refresh: data["refreshToken"]);
+      capturePostHogEvent(
+        _verifyStep ? 'auth_registration_completed' : 'auth_login_completed',
+        properties: {'auth_method': _verifyStep ? 'email_otp' : 'password'},
+      );
       if (_verifyStep) { sessionStorageClear(); }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeShell()));

@@ -5,6 +5,7 @@ import 'workout_screen.dart';
 import 'diet_screen.dart';
 import 'gym_screen.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import 'auth_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -33,7 +34,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(actions: [IconButton(icon: const Icon(Icons.logout), tooltip: "Log out", onPressed: () async { await ApiClient.instance.logout(); if (!context.mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthScreen()), (_) => false); })]),
+      appBar: AppBar(actions: [IconButton(icon: const Icon(Icons.logout), tooltip: "Log out", onPressed: () async { await ApiClient.instance.logout(); resetPostHog(); if (!context.mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthScreen()), (_) => false); })]),
       body: SafeArea(child: IndexedStack(index: _index, children: _screens)),
       bottomNavigationBar: SafeArea(
         child: Container(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 import 'equipment_scan_screen.dart';
 
@@ -62,6 +63,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     setState(() => _generating = true);
     try {
       await ApiClient.instance.post("/workouts/plan", {"structureKey": _selectedStructure});
+      capturePostHogEvent(
+        'workout_plan_selected',
+        properties: {'workout_structure': _selectedStructure},
+      );
       await _load();
     } on ApiException catch (e) {
       setState(() {
@@ -79,6 +84,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       await ApiClient.instance.post("/workouts/generate", scannedEquipment == null
           ? {"equipmentMode": "FULL_GYM"}
           : {"equipmentMode": "SCANNED", "detectedEquipmentNames": scannedEquipment});
+      capturePostHogEvent(
+        'workout_generated',
+        properties: {
+          'equipment_mode': scannedEquipment == null ? 'full_gym' : 'scanned',
+          if (scannedEquipment != null) 'equipment_count': scannedEquipment.length,
+        },
+      );
       await _load();
     } on ApiException catch (e) {
       setState(() {
@@ -94,6 +106,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     setState(() => _generating = true);
     try {
       await ApiClient.instance.post("/workouts/plan/start-cycle", {});
+      capturePostHogEvent('workout_cycle_started');
       await _load();
     } on ApiException catch (e) {
       setState(() {
@@ -111,6 +124,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         "workoutExerciseId": workoutExerciseId,
         "reason": "no_equipment",
       });
+      capturePostHogEvent(
+        'workout_exercise_replaced',
+        properties: {'replacement_reason': 'no_equipment'},
+      );
       setState(() {
         _banner = result["explanation"];
         _bannerIsError = false;
@@ -133,6 +150,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Future<void> _completeWorkout() async {
     await ApiClient.instance.post("/workouts/${_workout!["id"]}/complete", {});
+    capturePostHogEvent('workout_completed');
     await _load();
   }
 

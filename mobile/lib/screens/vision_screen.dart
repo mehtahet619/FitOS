@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 
 /// NOTE ON IMPLEMENTATION CHOICE: ML Kit's live-video-frame pipeline
@@ -110,6 +111,10 @@ class _VisionScreenState extends State<VisionScreen> {
         _controller = controller;
         _running = true;
       });
+      capturePostHogEvent(
+        'vision_coach_started',
+        properties: {'exercise_type': _exercise.name},
+      );
       _loop();
     } catch (e) {
       setState(() => _error = "Couldn't start the camera: $e");
