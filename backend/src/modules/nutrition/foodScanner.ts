@@ -20,9 +20,9 @@ foodScannerRouter.get("/product/:barcode", async (req, res) => {
     const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,brands,quantity,image_front_url,nutriments,serving_size,serving_quantity,allergens_tags`, {
       signal: controller.signal, headers: { "User-Agent": "FitOS/1.0 (food nutrition scanner)" }
     });
-    if (!response.ok) return res.status(502).json({ error: "Open Food Facts is temporarily unavailable. Retry or enter the label manually." });
+    if (!response.ok) return res.status(502).json({ error: "Product lookup is temporarily unavailable. Retry or enter the label manually." });
     const payload = await response.json() as { status?: number; product?: any };
-    if (payload.status !== 1 || !payload.product) return res.status(404).json({ error: "Product not found in Open Food Facts. Enter nutrition from the package label." });
+    if (payload.status !== 1 || !payload.product) return res.status(404).json({ error: "Product not found. Enter nutrition from the package label." });
     const p = payload.product, n = p.nutriments || {};
     // The API response declares its nutrition basis as per_100g, so never
     // silently substitute per-serving values into these fields.
@@ -45,7 +45,7 @@ foodScannerRouter.get("/product/:barcode", async (req, res) => {
       allergens: p.allergens_tags || []
     }});
   } catch (error) {
-    return res.status(502).json({ error: error instanceof Error && error.name === "AbortError" ? "Open Food Facts request timed out." : "Could not reach Open Food Facts. Check your connection or enter the label manually." });
+    return res.status(502).json({ error: error instanceof Error && error.name === "AbortError" ? "Product lookup timed out." : "Could not complete product lookup. Check your connection or enter the label manually." });
   } finally { clearTimeout(timeout); }
 });
 
