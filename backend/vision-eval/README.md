@@ -12,7 +12,7 @@ Add each approved test photo under `vision-eval/images/`, update its `image` or 
 
 First verify in Render that `ROBOFLOW_WORKFLOW_MODE=true` and `ROBOFLOW_API_KEY` are configured for the **backend** service, and that the live deployment contains the Roboflow provider changes. The test report flags a provider mismatch rather than silently scoring YOLO output as SAM3.
 
-From `backend/`, set the production API and a short-lived access token for an authorized FitOS account in your current terminal session, then run:
+From `backend/`, set the production API and a short-lived access token for an authorized FACHS account in your current terminal session, then run:
 
 ```powershell
 $env:VISION_EVAL_API_BASE = "https://adaptive-fit-api.onrender.com"
