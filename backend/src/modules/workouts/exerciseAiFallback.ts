@@ -275,7 +275,7 @@ export async function validateUncataloguedExercise(
         : [];
       if (!primaryMuscle || !equipmentName || !Array.isArray(parsed.secondaryMuscles)
         || secondaryMuscles.some((muscle) => !muscle)) {
-        rejected = { valid: false, secondaryMuscles: [], confidence, reason: "The exercise could not be mapped to FitOS muscles and equipment." };
+        rejected = { valid: false, secondaryMuscles: [], confidence, reason: "The exercise could not be mapped to FACHS muscles and equipment." };
         continue;
       }
       return {
