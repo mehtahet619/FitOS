@@ -3381,3 +3381,55 @@ html[data-theme="dark"] #screen-gym .gym-crowd-day-content .gym-crowd-hour { bor
 #screen-gym .gym-crowd-today-chart .gym-crowd-hour b { color:var(--ink); font-size:10px; }
 #screen-gym .gym-crowd-today-chart .gym-crowd-hour b { text-align:right; }
 #screen-gym .gym-crowd-today-chart .gym-crowd-hour small { color:var(--muted); font-size:9px; text-transform:capitalize; }
+
+/* ---------------- Public help center ---------------- */
+.help-screen{min-height:100vh;background:var(--page,#f4f2ec);color:var(--ink,#20251f);overflow:auto}
+.help-header,.help-footer{width:min(1160px,calc(100% - 48px));margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.help-header{padding:24px 0}
+.help-header nav,.help-footer nav{display:flex;align-items:center;gap:22px}
+.help-header nav a,.help-footer nav a{color:inherit;text-decoration:none;font-size:.9rem}
+.help-header .site-brand,.help-footer .site-brand{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;font-weight:800;letter-spacing:.08em}
+.help-hero{padding:76px 24px 54px;text-align:center;background:radial-gradient(ellipse at 50% 0%,rgba(113,190,135,.17),transparent 60%)}
+.help-hero h1{font-size:clamp(2.5rem,6vw,5rem);line-height:1.02;letter-spacing:-.055em;margin:14px 0}
+.help-hero h1 span{color:#438b5b}
+.help-hero>p:not(.eyebrow):not(.help-search-count){max-width:620px;margin:0 auto;color:var(--muted,#68716a);line-height:1.7}
+.help-search{display:flex;align-items:center;gap:12px;width:min(620px,100%);margin:30px auto 8px;padding:0 17px;height:58px;border:1px solid rgba(60,80,65,.18);border-radius:15px;background:var(--surface,#fff);box-shadow:0 12px 35px rgba(31,48,35,.07);text-align:left}
+.help-search>span{font-size:1.6rem;color:#438b5b}
+.help-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:inherit;font:inherit}
+.help-search kbd{padding:4px 8px;border:1px solid var(--border,rgba(60,80,65,.18));border-radius:6px;color:var(--muted,#68716a)}
+.help-search-count{font-size:.82rem;color:var(--muted,#68716a)}
+.help-content{width:min(1080px,calc(100% - 48px));margin:0 auto 76px}
+.help-category-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:58px}
+.help-category{display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;align-items:center;text-align:left;gap:2px 12px;padding:17px;border:1px solid var(--border,rgba(60,80,65,.15));border-radius:14px;background:var(--surface,#fff);color:inherit;cursor:pointer;transition:border-color .2s,transform .2s,background .2s}
+.help-category:hover{transform:translateY(-2px);border-color:#6aa77b}
+.help-category.active{border-color:#438b5b;background:rgba(93,163,111,.09)}
+.help-category>span{grid-row:1/3;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(93,163,111,.14);color:#438b5b;font-size:1.35rem}
+.help-category b{font-size:.95rem}.help-category small{color:var(--muted,#68716a);font-size:.78rem}
+.help-group{margin:0 0 44px;scroll-margin-top:20px}
+.help-group-heading{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:15px}
+.help-group-heading .eyebrow{margin:0 0 7px;color:#438b5b;font-size:.7rem;letter-spacing:.13em}
+.help-group-heading h2{margin:0;font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.035em}
+.help-group-heading>span{font-size:.68rem;letter-spacing:.12em;color:var(--muted,#68716a)}
+.help-article{border-bottom:1px solid var(--border,rgba(60,80,65,.14));padding:0 3px}
+.help-article:first-of-type{border-top:1px solid var(--border,rgba(60,80,65,.14))}
+.help-article summary{position:relative;list-style:none;padding:20px 42px 20px 0;font-weight:650;cursor:pointer}
+.help-article summary::-webkit-details-marker{display:none}
+.help-article summary:after{content:"+";position:absolute;right:6px;top:14px;font-size:1.5rem;font-weight:400;color:#438b5b}
+.help-article[open] summary:after{content:"−"}
+.help-article p{max-width:850px;margin:0;padding:0 34px 20px 0;color:var(--muted,#68716a);line-height:1.75;font-size:.94rem}
+.help-empty{text-align:center;padding:48px 20px;border:1px dashed var(--border,rgba(60,80,65,.2));border-radius:18px}
+.help-empty>span{font-size:2rem;color:#438b5b}.help-empty h3{margin:8px 0}.help-empty p{color:var(--muted,#68716a)}
+.help-contact{display:grid;grid-template-columns:1fr minmax(300px,.9fr);gap:44px;align-items:center;padding:64px max(24px,calc((100% - 1080px)/2));background:#17251d;color:#f5f8f4}
+.help-contact .eyebrow{color:#9dd9aa;letter-spacing:.14em;font-size:.72rem}
+.help-contact h2{font-size:clamp(2rem,4vw,3rem);letter-spacing:-.04em;margin:8px 0}
+.help-contact>div>p:last-child{color:#c3d0c6;line-height:1.7;max-width:520px}
+.help-report-card{padding:22px;border:1px solid rgba(255,255,255,.16);border-radius:16px;background:rgba(255,255,255,.06)}
+.help-report-card label{display:block;margin-bottom:9px;font-size:.9rem;font-weight:650}
+.help-report-card textarea{display:block;width:100%;resize:vertical;min-height:112px;padding:12px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(0,0,0,.16);color:#fff;font:inherit}
+.help-report-card textarea::placeholder{color:#b5c1b8}
+.help-report-card .button{margin-top:13px;background:#a6e1b3;color:#17251d;border:0}
+.help-report-card>p{font-size:.78rem;line-height:1.5;color:#c3d0c6}
+.help-footer{padding:25px 0 34px;color:var(--ink,#20251f);flex-wrap:wrap}
+.help-footer>span{font-size:.8rem;color:var(--muted,#68716a)}
+@media(max-width:700px){.help-header,.help-footer{width:calc(100% - 32px)}.help-header{padding:16px 0}.help-header nav{gap:12px}.help-header nav a{font-size:.8rem}.help-header nav .button{padding:10px 12px}.help-hero{padding:55px 18px 38px}.help-content{width:calc(100% - 32px)}.help-category-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:42px}.help-category{padding:12px;grid-template-columns:34px 1fr;gap:2px 9px}.help-category>span{width:33px;height:33px}.help-category small{font-size:.7rem}.help-group-heading>span{display:none}.help-contact{grid-template-columns:1fr;gap:20px;padding:46px 20px}.help-footer{justify-content:center;text-align:center}.help-footer>span{width:100%;order:3}.help-footer nav{gap:15px;flex-wrap:wrap;justify-content:center}}
+@media(prefers-reduced-motion:reduce){.help-category{transition:none}}
