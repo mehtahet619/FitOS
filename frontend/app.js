@@ -2846,7 +2846,7 @@ function renderGymCrowdDay(day, index) {
         <small>${gymEscapeHtml(String(item.crowdLevel || "").replaceAll("_", " "))}${item.isHighCrowd ? " · high crowd likely" : ""}${item.source === "ml" ? " · model" : ""}</small>
       </div>`).join("")
     : '<p class="gym-hours-empty">No operating hours are listed for this day.</p>';
-  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen === null ? "Opening hours unavailable · estimates use a 5 AM–11 PM window" : "Closed / no opening hours listed");
+  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen === null ? "Verified opening hours unavailable" : "Closed today");
   return `<details class="gym-crowd-day" ${index === 0 ? "open" : ""}>
     <summary><span><strong>${gymEscapeHtml(dateLabel)}</strong><small>${gymEscapeHtml(hoursLabel)}</small></span><span class="gym-crowd-day-count">${day.hours?.length || 0} hourly estimates</span></summary>
     <div class="gym-crowd-day-content">${hoursMarkup}</div>
@@ -2880,9 +2880,9 @@ async function loadGymCrowdForecast(gymId) {
       : '<p class="gym-hours-empty">No operating-hour forecast is available yet.</p>';
     target.innerHTML = `
       <div class="gym-crowd-meta">
-        <p>Next 7 days · ${gymEscapeHtml(trainingSummary)}</p>
+        <p>Today's forecast · ${gymEscapeHtml(trainingSummary)}</p>
         <p>${gymEscapeHtml(errorSummary)}</p>
-        <p>${result.openingHoursKnown ? "Operating hours parsed from the gym listing." : "Opening hours are not published; hourly estimates are not proof of opening."}</p>
+        <p>${result.openingHoursKnown ? "Today's hours are taken from the available gym schedule." : "Today's opening hours could not be verified, so no crowd prediction is shown."}</p>
       </div>
       <section class="gym-crowd-current-status">
         <strong>Current gym status</strong>
@@ -2890,11 +2890,11 @@ async function loadGymCrowdForecast(gymId) {
         <small>${result.currentStatus?.status === "unknown" ? "Verified opening hours are unavailable for this gym." : `Checked ${new Date(result.currentStatus.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${gymEscapeHtml(result.currentStatus.timezone || result.timezone || "local time")}`}</small>
       </section>
       ${renderGymOpeningSchedule(result.openingSchedule, result.openingHoursKnown)}
-      <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on the first upcoming open day</span></div>
+      <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on today's remaining open hours</span></div>
       ${recommendationMarkup}
-      <div class="gym-crowd-section-heading"><strong>7-day hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
+      <div class="gym-crowd-section-heading"><strong>Today's hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
       <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
-      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from licensed historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours may be unavailable or outdated.</p>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates based on available historical data and FitOS member reports. Predictions are shown only during listed opening hours. Holiday or temporary closures must be reflected in the gym's verified schedule.</p>
     `;
   } catch (error) {
     target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
