@@ -134,26 +134,26 @@ window.AuthState = AuthState;
 const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/gym": "gym", "/friends": "friends", "/history": "history", "/profile": "profile", "/settings": "settings" };
 const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
 const routeMetadata = {
-  "/": ["AI Workout Planner Based on Gym Equipment | FitOS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FitOS."],
-  "/login": ["Log in to FitOS | Personalized Workout Planner", "Log in to your FitOS account to continue your workout and nutrition plan."],
-  "/register": ["Create your FitOS account | Adaptive Workout Planner", "Create a FitOS account to build an equipment-aware training plan around your goals."],
-  "/verify-email": ["Verify your email | FitOS", "Verify your email address to finish setting up your FitOS account."],
-  "/verify-login": ["Verify sign-in code | FitOS", "Enter your one-time sign-in code to access your FitOS account."],
-  "/forgot-password": ["Reset your FitOS password | FitOS", "Request a secure password reset code for your FitOS account."],
-  "/reset-password": ["Choose a new password | FitOS", "Set a new password for your FitOS account."],
-  "/homepage": ["Your training dashboard | FitOS", "Your FitOS training, workout history, and fitness plan."],
-  "/today": ["Today’s training | FitOS", "Review today’s training plan and progress in FitOS."],
-  "/workout": ["Your workout plan | FitOS", "Build and follow a workout based on your goals and available equipment."],
-  "/workouts": ["Your workouts | FitOS", "View and manage your FitOS workout plan."],
-  "/nutrition": ["Food and nutrition planner | FitOS", "Explore meal planning and nearby food discovery in FitOS."],
-  "/equipment": ["Gym equipment planner | FitOS", "Review equipment and build workouts for your gym setup."],
-  "/gym": ["Gym check-in | FitOS", "Check in to your gym and review gym attendance in FitOS."],
-  "/history": ["Workout history | FitOS", "Review your logged FitOS training history."],
-  "/profile": ["Your profile and training goals | FitOS", "Manage your FitOS fitness profile, goals, and equipment."],
-  "/settings": ["FitOS settings | FitOS", "Manage your FitOS profile and preferences."],
+  "/": ["AI Workout Planner Based on Gym Equipment | FACHS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FACHS."],
+  "/login": ["Log in to FACHS | Personalized Workout Planner", "Log in to your FACHS account to continue your workout and nutrition plan."],
+  "/register": ["Create your FACHS account | Adaptive Workout Planner", "Create a FACHS account to build an equipment-aware training plan around your goals."],
+  "/verify-email": ["Verify your email | FACHS", "Verify your email address to finish setting up your FACHS account."],
+  "/verify-login": ["Verify sign-in code | FACHS", "Enter your one-time sign-in code to access your FACHS account."],
+  "/forgot-password": ["Reset your FACHS password | FACHS", "Request a secure password reset code for your FACHS account."],
+  "/reset-password": ["Choose a new password | FACHS", "Set a new password for your FACHS account."],
+  "/homepage": ["Your training dashboard | FACHS", "Your FACHS training, workout history, and fitness plan."],
+  "/today": ["Today’s training | FACHS", "Review today’s training plan and progress in FACHS."],
+  "/workout": ["Your workout plan | FACHS", "Build and follow a workout based on your goals and available equipment."],
+  "/workouts": ["Your workouts | FACHS", "View and manage your FACHS workout plan."],
+  "/nutrition": ["Food and nutrition planner | FACHS", "Explore meal planning and nearby food discovery in FACHS."],
+  "/equipment": ["Gym equipment planner | FACHS", "Review equipment and build workouts for your gym setup."],
+  "/gym": ["Gym check-in | FACHS", "Check in to your gym and review gym attendance in FACHS."],
+  "/history": ["Workout history | FACHS", "Review your logged FACHS training history."],
+  "/profile": ["Your profile and training goals | FACHS", "Manage your FACHS fitness profile, goals, and equipment."],
+  "/settings": ["FACHS settings | FACHS", "Manage your FACHS profile and preferences."],
 };
 function updateRouteMetadata(path) {
-  const [title, description] = routeMetadata[path] || ["FitOS | Your adaptive fitness planner", "Equipment-aware workouts and training support from FitOS."];
+  const [title, description] = routeMetadata[path] || ["FACHS | Your adaptive fitness planner", "Equipment-aware workouts and training support from FACHS."];
   document.title = title;
   const descriptionTag = document.querySelector('meta[name="description"]');
   const robotsTag = document.querySelector('meta[name="robots"]');
@@ -1059,7 +1059,7 @@ function renderGrowImpact(impact, workoutHistory = [], gymAttendanceHistory = []
           <button type="button" class="btn btn-primary grow-impact-save-settings">Save calendar settings</button>
         </details>
         ${rewardPanel}
-        <p class="grow-impact-virtual-label">Pilot reward · virtual commitment only. FitOS does not claim that a real tree has been planted.</p>
+        <p class="grow-impact-virtual-label">Pilot reward · virtual commitment only. FACHS does not claim that a real tree has been planted.</p>
       </div>
     </details>
   </section>`;
@@ -1327,7 +1327,7 @@ async function loadWorkout() {
 
 function renderGeneratedWorkout(generated, plan) {
   if (!generated?.workout || !Array.isArray(generated.exercises) || generated.exercises.length === 0) {
-    throw new Error("FitOS did not return a workout. Please try again.");
+    throw new Error("FACHS did not return a workout. Please try again.");
   }
   renderWorkout({
     ...generated.workout,
@@ -1363,7 +1363,7 @@ function renderLegacyWorkoutRefresh(workout, plan) {
   el.innerHTML = `
     <section class="card">
       <div class="card-label">Refresh today's workout</div>
-      <p class="card-sub">FitOS will build your ${escapeWorkoutText(focus)} session for ${escapeWorkoutText(muscles)}, using the duration you choose today and today's equipment.${completedSetCount ? ` ${completedSetCount} logged set${completedSetCount === 1 ? " stays" : "s stay"} in your history.` : ""}</p>
+      <p class="card-sub">FACHS will build your ${escapeWorkoutText(focus)} session for ${escapeWorkoutText(muscles)}, using the duration you choose today and today's equipment.${completedSetCount ? ` ${completedSetCount} logged set${completedSetCount === 1 ? " stays" : "s stay"} in your history.` : ""}</p>
       <div class="field"><label for="refresh-workout-duration">How long can you train today? (minutes)</label><input id="refresh-workout-duration" type="number" min="15" max="180" step="1" placeholder="Choose today's duration" required /></div>
       <button class="btn btn-primary" id="refresh-plan-workout">Build workout for this plan</button>
       <div id="refresh-plan-workout-feedback" aria-live="polite"></div>
@@ -1496,7 +1496,7 @@ function renderPlanStructurePrompt() {
   return `
     <div class="card">
       <div class="card-label">Step 1: Choose your workout structure</div>
-      <div class="card-sub">FitOS will enforce this structure until you complete a full cycle. You cannot jump to another plan mid-cycle.</div>
+      <div class="card-sub">FACHS will enforce this structure until you complete a full cycle. You cannot jump to another plan mid-cycle.</div>
       <div class="chip-group" id="plan-chips" style="margin-top:10px; margin-bottom:10px;">
         <button class="chip active" data-plan="PPL">
           <strong>Push-Pull-Legs</strong><br>
@@ -1616,7 +1616,7 @@ async function renderWorkoutEquipmentPicker(plan, parent) {
   heading.textContent = "Today's workout";
   const description = document.createElement("p");
   description.className = "card-sub";
-  description.textContent = "FitOS will automatically use the equipment saved in your Gym Scan profile. To add or remove equipment, use the Scan tab. You won't need to select machines again for each workout.";
+  description.textContent = "FACHS will automatically use the equipment saved in your Gym Scan profile. To add or remove equipment, use the Scan tab. You won't need to select machines again for each workout.";
   const durationField = document.createElement("div");
   durationField.className = "field";
   const durationLabel = document.createElement("label");
@@ -2030,7 +2030,7 @@ function renderWorkout(workout, plan) {
   const changeDurationPanel = canChangeDuration
     ? `<section class="card workout-duration-card">
         <div class="card-label">Change today's session length</div>
-        <p class="card-sub">Choose how long you have. FitOS will rebuild this ${escapeWorkoutText(workout.focus || "workout")} exercise list to fit that time. You can change it until you log your first set.</p>
+        <p class="card-sub">Choose how long you have. FACHS will rebuild this ${escapeWorkoutText(workout.focus || "workout")} exercise list to fit that time. You can change it until you log your first set.</p>
         <div class="field"><label for="active-workout-duration">Available time today (minutes)</label><input id="active-workout-duration" type="number" min="15" max="180" step="1" placeholder="Choose today's duration" required /></div>
         <button class="btn btn-outline" id="change-workout-duration">Update workout duration</button>
         <div id="change-workout-duration-feedback" aria-live="polite"></div>
@@ -2065,7 +2065,7 @@ function renderWorkout(workout, plan) {
         </section>`;
     })()
     : completedWorkout
-      ? `<section class="workout-complete-card"><div class="workout-complete-mark">✓</div><h2>Workout complete</h2><p>${loggedSets} of ${totalSets} planned sets logged. Nice work.</p>${nextPlanWorkout ? `<div class="workout-next-hint">Next in your plan: <strong>${escapeWorkoutText(nextPlanWorkout)}</strong></div>` : ""}<p>Please come back tomorrow for your next workout. FitOS will keep your next session ready.</p></section>`
+      ? `<section class="workout-complete-card"><div class="workout-complete-mark">✓</div><h2>Workout complete</h2><p>${loggedSets} of ${totalSets} planned sets logged. Nice work.</p>${nextPlanWorkout ? `<div class="workout-next-hint">Next in your plan: <strong>${escapeWorkoutText(nextPlanWorkout)}</strong></div>` : ""}<p>Please come back tomorrow for your next workout. FACHS will keep your next session ready.</p></section>`
       : `<section class="workout-next-card" aria-live="polite"><div class="workout-eyebrow">UP NEXT</div><h2>All planned sets are done</h2><p>Finish your workout to save it and move your plan forward.</p></section>`;
 
   const exerciseRows = progress.map((item, index) => {
@@ -2097,7 +2097,7 @@ function renderWorkout(workout, plan) {
           <button class="btn btn-primary" type="submit">Save and rebalance workout</button>
           <div class="workout-edit-suggestions" hidden></div>
           <button class="btn btn-outline" type="button" data-action="cancel-edit">Cancel</button>
-          <small>FitOS will rebuild the other exercises to cover the remaining workout targets.</small>
+          <small>FACHS will rebuild the other exercises to cover the remaining workout targets.</small>
         </form>`
       : swapButton;
     const demo = exercise.demoVideo || { kind: "instructions", title: `${exercise.exerciseName} instructions` };
@@ -2434,7 +2434,7 @@ function renderWorkout(workout, plan) {
       try {
         const result = await Api.post(`/workouts/${workout.id}/edit-exercise`, body, { timeoutMs: 30000 });
         await loadWorkout();
-        showWorkoutNotice(`Exercise updated. FitOS refreshed ${result.rebalancedExerciseCount} other movement${result.rebalancedExerciseCount === 1 ? "" : "s"} for workout coverage.`, "success");
+        showWorkoutNotice(`Exercise updated. FACHS refreshed ${result.rebalancedExerciseCount} other movement${result.rebalancedExerciseCount === 1 ? "" : "s"} for workout coverage.`, "success");
       } catch (error) {
         if (error.body?.code === "EXERCISE_CONFIRMATION_REQUIRED" && Array.isArray(error.body.suggestions)) {
           const suggestions = form.querySelector(".workout-edit-suggestions");
@@ -2479,7 +2479,7 @@ function renderWorkout(workout, plan) {
           });
           suggestions.replaceChildren(
             document.createTextNode(error.body.suggestions.some((candidate) => candidate.aiValidated)
-              ? "FitOS validated this exercise and added it to the catalogue. Confirm to use it in this workout."
+              ? "FACHS validated this exercise and added it to the catalogue. Confirm to use it in this workout."
               : "Did you mean one of these catalogue exercises?"),
             select,
             confirm,
@@ -2807,7 +2807,7 @@ async function loadGymSelectionForm() {
   $("gym-search-button")?.addEventListener("click", async () => {
     const city = cityInput.value.trim(); if (!city) { searchStatus.textContent = "Select a city first."; return; }
     const button = $("gym-search-button"); button.disabled = true; searchStatus.textContent = "Searching…";
-    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; renderOsmPlacesMap("gym-discovery-map", result.gyms || []); if (result.warning || result.provider === "database_fallback") { searchStatus.textContent = result.gyms?.length ? `Live OpenStreetMap search is temporarily unavailable. Showing ${result.gyms.length} gyms saved in FitOS. Try again shortly.` : "OpenStreetMap search is temporarily unavailable, so FitOS could not check mapped gyms. Try again shortly or add your gym manually."; } else { searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found within the city search area.` : "No gyms are mapped in OpenStreetMap within 20 km of this city. Try a nearby locality or add your gym manually."; } }
+    try { const query = $("gym-search-input").value.trim() || "gyms"; const result = await Api.get(`/gym/search?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}`); gymSelect.innerHTML = `<option value="">Select your gym</option>` + (result.gyms || []).map(gym => `<option value="${gymEscapeHtml(gym.id)}">${gymEscapeHtml(gym.name)} · ${gymEscapeHtml(gym.address || "")}</option>`).join(""); gymSelect.hidden = false; saveButton.hidden = false; renderOsmPlacesMap("gym-discovery-map", result.gyms || []); if (result.warning || result.provider === "database_fallback") { searchStatus.textContent = result.gyms?.length ? `Live OpenStreetMap search is temporarily unavailable. Showing ${result.gyms.length} gyms saved in FACHS. Try again shortly.` : "OpenStreetMap search is temporarily unavailable, so FACHS could not check mapped gyms. Try again shortly or add your gym manually."; } else { searchStatus.textContent = result.gyms?.length ? `${result.gyms.length} gyms found within the city search area.` : "No gyms are mapped in OpenStreetMap within 20 km of this city. Try a nearby locality or add your gym manually."; } }
     catch (error) { searchStatus.textContent = error.message; } finally { button.disabled = false; }
   });
   saveButton?.addEventListener("click", async () => { if (!gymSelect.value) { searchStatus.textContent = "Select a gym first."; return; } saveButton.disabled = true; try { await Api.post("/gym/select", { gymId: gymSelect.value, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata" }); await loadGym(); } catch (error) { searchStatus.textContent = error.message; saveButton.disabled = false; } });
@@ -2864,7 +2864,7 @@ async function loadGymCrowdForecast(gymId) {
     const officialSamples = Number(sourceBreakdown.officialDataset || 0);
     const memberSamples = Number(sourceBreakdown.memberObservations || 0);
     const trainingSummary = Number(result.trainingSamples || 0) > 0
-      ? `Training records: ${Number(result.trainingSamples)} (${officialSamples} licensed dataset · ${memberSamples} FitOS member reports)`
+      ? `Training records: ${Number(result.trainingSamples)} (${officialSamples} licensed dataset · ${memberSamples} FACHS member reports)`
       : "No crowd observations yet · using low-confidence baseline estimates";
     const errorSummary = Number(evaluation.evaluatedCount || 0) > 0
       ? `Prediction MAE: ${Number(evaluation.mae).toFixed(1)} points · RMSE: ${Number(evaluation.rmse).toFixed(1)} · evaluated hours: ${Number(evaluation.evaluatedCount)}`
@@ -2889,7 +2889,7 @@ async function loadGymCrowdForecast(gymId) {
       ${recommendationMarkup}
       <div class="gym-crowd-section-heading"><strong>Today's hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
       <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
-      <p class="gym-crowd-disclaimer">Crowd levels are estimates based on available historical data and FitOS member reports. Predictions are shown only during listed opening hours. Holiday or temporary closures must be reflected in the gym's verified schedule.</p>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates based on available historical data and FACHS member reports. Predictions are shown only during listed opening hours. Holiday or temporary closures must be reflected in the gym's verified schedule.</p>
     `;
   } catch (error) {
     target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
@@ -3065,7 +3065,7 @@ function renderGymTour(equipment, plan, savedProfile) {
     el.innerHTML = `
       <div class="card">
         <div class="card-label">${profileReady ? "Gym equipment profile" : "One-time gym tour"}</div>
-        <p class="card-sub">${profileReady ? "Your saved equipment is used for workouts at this gym." : "Record the whole gym once so FitOS can build your equipment profile."}</p>
+        <p class="card-sub">${profileReady ? "Your saved equipment is used for workouts at this gym." : "Record the whole gym once so FACHS can build your equipment profile."}</p>
         ${profileReady ? `
           <div class="banner banner-success">Gym equipment saved${profile.lastScanAt ? ` · scanned ${new Date(profile.lastScanAt).toLocaleDateString()}` : ""}</div>
           <div class="card-sub" style="margin-top:10px;">Your saved equipment is managed here and used automatically in the Workout tab.</div>
@@ -3240,7 +3240,7 @@ function renderGymTour(equipment, plan, savedProfile) {
       const name = button.dataset.equipment;
       const item = evidence.get(name);
       if (!item || item.status) return;
-      const correctedLabel = window.prompt(`FitOS detected "${name}". What equipment is this actually?`);
+      const correctedLabel = window.prompt(`FACHS detected "${name}". What equipment is this actually?`);
       if (!correctedLabel?.trim()) return;
       button.disabled = true;
       try {
@@ -3250,7 +3250,7 @@ function renderGymTour(equipment, plan, savedProfile) {
         });
         item.status = "REJECTED";
         item.correctedLabel = correctedLabel.trim();
-        renderEvidence(workspace, "Correction saved for the FitOS training dataset.");
+        renderEvidence(workspace, "Correction saved for the FACHS training dataset.");
       } catch (error) {
         button.disabled = false;
         renderEvidence(workspace, `Could not save correction: ${error.message || "try again"}`);
