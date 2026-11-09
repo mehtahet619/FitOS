@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 
 /**
- * Bridge between the FitOS API and the offline crowd-model pipeline (/ml/crowd).
+ * Bridge between the FACHS API and the offline crowd-model pipeline (/ml/crowd).
  *
  *   GET  /gym/ml/export       -> anonymised training data (hourly arrivals + member reports)
  *   POST /gym/ml/predictions  -> forecasts produced by the trained model
