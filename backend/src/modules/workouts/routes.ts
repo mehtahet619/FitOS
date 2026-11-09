@@ -52,18 +52,16 @@ function localDateKey(value: string | Date = new Date()): string {
 }
 async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
   const today = localDateKey();
-  const latest = await dbConn.get<{ completedAt: string; createdAt: string }>(
-    `SELECT completedAt, createdAt FROM Workout
+  const latest = await dbConn.get<{ completedAt: string }>(
+    `SELECT completedAt FROM Workout
      WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
      ORDER BY completedAt DESC LIMIT 1`,
     userId
   );
   if (!latest?.completedAt) return { locked: false, completedAt: null };
-  // A workout belongs to the local calendar day on which it was created.
-  // Completing yesterday's stale workout today must never lock today's session.
-  const completedToday = localDateKey(latest.createdAt) === today
-    && localDateKey(latest.completedAt) === today;
-  return { locked: completedToday, completedAt: completedToday ? latest.completedAt : null };
+  // The daily lock follows the app's local calendar day, never a rolling 22-hour window.
+  // The completion route separately rejects workouts created on an earlier day.
+  return { locked: localDateKey(latest.completedAt) === today, completedAt: latest.completedAt };
 }
 
 /**
