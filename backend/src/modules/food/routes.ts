@@ -115,7 +115,7 @@ foodRouter.get("/nearby", async (req: AuthedRequest, res) => {
     return res.json({
       configured: false,
       message:
-        "No live food discovery provider is available right now. FitOS uses OpenStreetMap for nearby place discovery; verified menu items require a separate menu provider.",
+        "Nearby food discovery is temporarily unavailable. Please try again later.",
       forQuery: food?.name ?? "healthy food",
       places: [],
     });
