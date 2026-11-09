@@ -13,11 +13,12 @@ const USER_AGENT = "FitOS/1.0 (fitness location discovery; https://github.com/me
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
 ];
 const PHOTON_URL = process.env.PHOTON_BASE_URL || "https://photon.komoot.io";
 const OSRM_URL = process.env.OSRM_BASE_URL || "https://router.project-osrm.org";
 const PHOTON_TIMEOUT_MS = 8000;
-const OVERPASS_TIMEOUT_MS = 9000;
+const OVERPASS_TIMEOUT_MS = 12000;
 
 function cached<T>(key: string): T | undefined {
   const hit = cache.get(key);
@@ -136,7 +137,10 @@ export async function searchOsmGyms(city: string, query = "gyms"): Promise<OsmPl
   const filter = /yoga|pilates/.test(q)
     ? '["sport"~"yoga|pilates"]'
     : '["leisure"="fitness_centre"]';
-  const overpassQuery = `[out:json][timeout:8];(nwr(around:10000,${center.latitude},${center.longitude})${filter};nwr(around:10000,${center.latitude},${center.longitude})["amenity"="gym"];nwr(around:10000,${center.latitude},${center.longitude})["sport"="fitness"];);out center tags 80;`;
+  // Search a wider city catchment. Many gyms are mapped in neighbouring
+  // localities rather than at the city-centre pin (e.g. Anand/Vallabh Vidyanagar).
+  const radiusMeters = 20000;
+  const overpassQuery = `[out:json][timeout:12];(nwr(around:${radiusMeters},${center.latitude},${center.longitude})${filter};nwr(around:${radiusMeters},${center.latitude},${center.longitude})["amenity"="gym"];nwr(around:${radiusMeters},${center.latitude},${center.longitude})["sport"="fitness"];nwr(around:${radiusMeters},${center.latitude},${center.longitude})["sport"="bodybuilding"];);out center tags 100;`;
   const elements = await overpass(overpassQuery);
   return normalizeElements(elements, center.latitude, center.longitude, city).slice(0, 30);
 }
