@@ -62,11 +62,11 @@
     lookupInProgress = true;
     const button = el("fos-lookup");
     if (button) { button.disabled = true; button.textContent = "Looking up…"; }
-    status("Looking up barcode in Open Food Facts…");
+    status("Looking up product…");
     el("fos-review").replaceChildren();
     try {
       const result = await call("/product/" + encodeURIComponent(barcode));
-      if (!result?.product) throw new Error("Open Food Facts returned no product data for this barcode.");
+      if (!result?.product) throw new Error("No product details were found for this barcode.");
       renderProduct(result.product);
       status("Product found. Verify the package details before logging.");
     } catch (error) {
@@ -98,7 +98,7 @@
   function renderProduct(product) {
     const p = product || {}, n = p.nutrition || {}, host = el("fos-review");
     host.innerHTML = `<div class="card"><h3>${esc(p.name || "Unnamed product")}</h3><p>${esc(p.brand || "")} · ${esc(p.packageSize || "")}</p>
-      <p>Open Food Facts data is community-contributed. Verify it against your package.</p>
+      <p>Product details may be incomplete. Verify them against your package.</p>
       ${p.sourceUrl ? `<p><a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">View source record</a></p>` : ""}
       <div class="field"><label for="pr-name">Food name</label><input id="pr-name" value="${esc(p.name || p.brand || "")}"></div>
       <div class="field"><label for="pr-serving">Serving description</label><input id="pr-serving" value="${esc(p.servingSize || "100 g")}"></div>
@@ -117,7 +117,7 @@
         if (!(grams > 0)) return status("The product serving weight is unavailable. Select 'Values per serving' or enter label values manually.", true);
         values.forEach((value, index) => values[index] = value * grams / 100);
       }
-      void save({foodName:name, barcode:p.barcode, servingDescription:el("pr-serving").value, servings, caloriesKcal:values[0], proteinG:values[1], carbsG:values[2], fatG:values[3], mealType:el("pr-meal").value, source:"Open Food Facts", verified:true, requestKey:crypto.randomUUID()});
+      void save({foodName:name, barcode:p.barcode, servingDescription:el("pr-serving").value, servings, caloriesKcal:values[0], proteinG:values[1], carbsG:values[2], fatG:values[3], mealType:el("pr-meal").value, source:"Product lookup", verified:true, requestKey:crypto.randomUUID()});
     });
   }
   async function save(body) {
