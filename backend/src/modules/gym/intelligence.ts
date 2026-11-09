@@ -385,7 +385,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
       return res.json({ configured: true, provider: "overpass_openstreetmap", attribution: "© OpenStreetMap contributors", city, gyms });
     } catch (providerError) {
       // Public Overpass instances can time out or rate-limit requests. Do not
-      // fail the entire gym search when FitOS already has gyms saved locally.
+      // fail the entire gym search when FACHS already has gyms saved locally.
       console.warn("[gym/search] OpenStreetMap discovery unavailable; using saved gyms.", providerError);
       const savedGyms = await db.all<any>(
         "SELECT * FROM Gym WHERE LOWER(city) = LOWER(?) ORDER BY name ASC LIMIT 50",
@@ -404,7 +404,7 @@ export function registerGymIntelligenceRoutes(router: Router): void {
           longitude: gym.longitude ?? null,
           openingHoursText: null,
         })),
-        warning: "Live gym discovery is temporarily unavailable. Showing gyms already saved in FitOS.",
+        warning: "Live gym discovery is temporarily unavailable. Showing gyms already saved in FACHS.",
       });
     }
   });
