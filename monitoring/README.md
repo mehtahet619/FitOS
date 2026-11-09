@@ -1,4 +1,4 @@
-# FitOS monitoring
+# FACHS monitoring
 
 The API exposes Prometheus metrics at `https://adaptive-fit-api.onrender.com/metrics`.
 
