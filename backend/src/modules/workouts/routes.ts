@@ -55,7 +55,7 @@ async function getDailyWorkoutCompletion(state: Awaited<ReturnType<typeof getPla
   // The daily lock must come from a unit completed in the ACTIVE plan cycle.
   // A legacy workout, a workout from another cycle, or an expired previous-day
   // workout must never lock today's session while this cycle still shows 0 done.
-  const completedToday = state?.units
+  const completedToday = (Array.isArray(state?.units) ? state.units : [])
     .filter((unit) => unit.status === "COMPLETED" && unit.completedAt && localDateKey(unit.completedAt) === today)
     .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0];
   return {
@@ -485,7 +485,7 @@ workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
     }
   }
 
-  const dailyCompletion = await getDailyWorkoutCompletion(db, userId);
+  const dailyCompletion = await getDailyWorkoutCompletion(state);
   if (dailyCompletion.locked) {
     return res.status(429).json({
       code: "DAILY_WORKOUT_LIMIT_REACHED",
