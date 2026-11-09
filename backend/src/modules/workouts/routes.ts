@@ -300,7 +300,6 @@ const generateSchema = z.object({
 });
 workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
-  await expirePreviousDayWorkout(db, userId);
   const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);
   if (!profile) return res.status(400).json({ error: "Complete onboarding (PUT /user/profile) first" });
 
