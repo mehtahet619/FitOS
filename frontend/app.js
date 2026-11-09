@@ -2882,7 +2882,6 @@ async function loadGymCrowdForecast(gymId) {
       <div class="gym-crowd-meta">
         <p>Today's forecast · ${gymEscapeHtml(trainingSummary)}</p>
         <p>${gymEscapeHtml(errorSummary)}</p>
-        <p>${result.openingHoursKnown ? "Today's hours are taken from the available gym schedule." : "Today's opening hours could not be verified, so no crowd prediction is shown."}</p>
       </div>
       <section class="gym-crowd-current-status">
         <strong>Current gym status</strong>
