@@ -14,7 +14,7 @@ comparisonRouter.use(requireAuth);
  * the wording cannot drift between the two.
  */
 const UNAVAILABLE_MESSAGE =
-  "Exercise form analysis is temporarily unavailable. We're working to restore it. You can continue using the other FitOS features.";
+  "Exercise form analysis is temporarily unavailable. We're working to restore it. You can continue using the other FACHS features.";
 const NO_RESULT_MESSAGE = "We couldn't analyze this movement right now. Please try again in a moment.";
 const INVALID_REQUEST_MESSAGE = "That movement data couldn't be analyzed. Capture one full repetition and try again.";
 
