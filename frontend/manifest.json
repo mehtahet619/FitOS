@@ -1,6 +1,6 @@
 {
-  "name": "FitOS",
-  "short_name": "FitOS",
+  "name": "FACHS",
+  "short_name": "FACHS",
   "description": "Equipment-aware workouts, adaptive training, food discovery, vision coaching, and gym check-in.",
   "start_url": "./index.html",
   "scope": "./",
