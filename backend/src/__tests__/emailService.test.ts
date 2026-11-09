@@ -34,6 +34,6 @@ describe("SMTP transport configuration", () => {
     process.env.ENABLE_LOCAL_EMAIL_PREVIEW = "true";
     const address = "local-preview@example.test";
     await emailService.sendVerificationOTP("Preview User", address, "483921");
-    expect(getLocalVerificationCode(address)).toEqual({ subject: "Verify your FitOS account", code: "483921" });
+    expect(getLocalVerificationCode(address)).toEqual({ subject: "Verify your FACHS account", code: "483921" });
   });
 });
