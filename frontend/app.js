@@ -1431,7 +1431,8 @@ function renderCircularProgress(plan) {
   const cycleStatus = plan.cycleStatus;
   const isComplete = cycleStatus === "COMPLETED";
   
-  const progressPercent = total > 0 ? (completed / total) * 100 : 0;
+  const safeCompleted = Math.min(total, Math.max(0, completed));
+  const progressPercent = total > 0 ? (safeCompleted / total) * 100 : 0;
   const circumference = 2 * Math.PI * 45; // 2 * PI * r (r=45)
   const dashOffset = circumference * (1 - progressPercent / 100);
   
@@ -1443,14 +1444,9 @@ function renderCircularProgress(plan) {
       <div class="circular-progress">
         <svg viewBox="0 0 100 100">
           <circle class="circular-progress-bg" cx="50" cy="50" r="45" />
-          <circle class="circular-progress-fill" 
+          <circle class="circular-progress-fill"
                   cx="50" cy="50" r="45"
-                  style="stroke-dashoffset: ${dashOffset};" />
-          ${currentIndex < plan.units.length ? `
-            <circle class="circular-progress-current"
-                    cx="50" cy="50" r="45"
-                    style="stroke-dashoffset: ${circumference * (1 - (currentIndex + 1) / plan.units.length * 100)};" />
-          ` : ''}
+                  style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${dashOffset};" />
         </svg>
         <div class="circular-progress-text">
           <div class="circular-progress-done">${completed}/${total}</div>
