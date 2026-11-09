@@ -2706,7 +2706,7 @@ function renderNearby(data, foodName) {
         <div class="restaurant-meta">${Number(r.place.distanceKm || 0).toFixed(1)} km away · ${r.place.rating ? `${r.place.rating} rating` : "Rating unavailable"} · Open status unavailable</div>
       </div>`)
     .join("");
-  el.innerHTML = `<div class="card"><div class="card-label">Nearby for "${gymEscapeHtml(foodName)}"</div><div id="food-nearby-osm-map" class="fitos-osm-map"></div>${rows}<p class="card-sub">Map data © OpenStreetMap contributors</p></div>`;
+  el.innerHTML = `<div class="card"><div class="card-label">Nearby for "${gymEscapeHtml(foodName)}"</div><div id="food-nearby-osm-map" class="fitos-osm-map"></div>${rows}</div>`;
   renderOsmPlacesMap("food-nearby-osm-map", data.places.map((item) => item.place));
 }
 
@@ -2825,7 +2825,7 @@ function renderGymOpeningSchedule(schedule, known) {
     return '<div class="gym-hours-empty">Weekly opening hours have not been published by this gym yet. Crowd estimates are shown separately and do not confirm that the gym is open.</div>';
   }
   return `<section class="gym-opening-hours" aria-label="Weekly gym opening hours">
-    <div class="gym-crowd-section-heading"><strong>Weekly operating hours</strong><span>OpenStreetMap listing</span></div>
+    <div class="gym-crowd-section-heading"><strong>Weekly operating hours</strong><span>Gym listing</span></div>
     <div class="gym-opening-hours-grid">${schedule.map((day) => `
       <div class="gym-opening-day">
         <span>${gymEscapeHtml(day.day)}</span>
@@ -2846,7 +2846,7 @@ function renderGymCrowdDay(day, index) {
         <small>${gymEscapeHtml(String(item.crowdLevel || "").replaceAll("_", " "))}${item.isHighCrowd ? " · high crowd likely" : ""}${item.source === "ml" ? " · model" : ""}</small>
       </div>`).join("")
     : '<p class="gym-hours-empty">No operating hours are listed for this day.</p>';
-  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen === null ? "Opening hours not listed on OpenStreetMap · assuming 5 AM–11 PM" : "Closed / no opening hours listed");
+  const hoursLabel = day.openingIntervals?.length ? day.openingIntervals.join(", ") : (day.isOpen === null ? "Opening hours unavailable · estimates use a 5 AM–11 PM window" : "Closed / no opening hours listed");
   return `<details class="gym-crowd-day" ${index === 0 ? "open" : ""}>
     <summary><span><strong>${gymEscapeHtml(dateLabel)}</strong><small>${gymEscapeHtml(hoursLabel)}</small></span><span class="gym-crowd-day-count">${day.hours?.length || 0} hourly estimates</span></summary>
     <div class="gym-crowd-day-content">${hoursMarkup}</div>
@@ -2887,14 +2887,14 @@ async function loadGymCrowdForecast(gymId) {
       <section class="gym-crowd-current-status">
         <strong>Current gym status</strong>
         <span class="gym-crowd-status-pill ${result.currentStatus?.status === "open" ? "is-open" : result.currentStatus?.status === "closed" ? "is-closed" : "is-unknown"}">${result.currentStatus?.status === "open" ? "OPEN NOW" : result.currentStatus?.status === "closed" ? "CLOSED NOW" : "HOURS UNKNOWN"}</span>
-        <small>${result.currentStatus?.status === "unknown" ? "OpenStreetMap has no verified opening-hours entry for this gym." : `Checked ${new Date(result.currentStatus.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${gymEscapeHtml(result.currentStatus.timezone || result.timezone || "local time")}`}</small>
+        <small>${result.currentStatus?.status === "unknown" ? "Verified opening hours are unavailable for this gym." : `Checked ${new Date(result.currentStatus.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${gymEscapeHtml(result.currentStatus.timezone || result.timezone || "local time")}`}</small>
       </section>
       ${renderGymOpeningSchedule(result.openingSchedule, result.openingHoursKnown)}
       <div class="gym-crowd-section-heading"><strong>Visit recommendations</strong><span>Based on the first upcoming open day</span></div>
       ${recommendationMarkup}
       <div class="gym-crowd-section-heading"><strong>7-day hourly crowd forecast</strong><span>Estimates, not live occupancy</span></div>
       <div class="gym-crowd-days">${(result.days || []).map(renderGymCrowdDay).join("") || '<div class="gym-hours-empty">No forecast data returned.</div>'}</div>
-      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from licensed historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours come from OpenStreetMap and may be missing or outdated.</p>
+      <p class="gym-crowd-disclaimer">Crowd levels are estimates learned from licensed historical data and FitOS member reports when available. With no observations, the forecast is a low-confidence baseline, not a live occupancy measurement. Gym opening hours may be unavailable or outdated.</p>
     `;
   } catch (error) {
     target.innerHTML = `<div class="banner banner-error">${gymEscapeHtml(error.message || "Could not load the forecast.")}</div><button class="btn btn-outline" id="gym-crowd-retry" type="button">Retry forecast</button>`;
