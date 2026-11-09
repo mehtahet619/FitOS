@@ -110,7 +110,7 @@
       .catch((error) => {
         const status = document.getElementById("fitos-gamification-status");
         if (status) status.textContent = "Workout history could not be loaded. Your XP will update when it is available.";
-        console.warn("[FitOS] Could not calculate rewards from workout history.", error);
+        console.warn("[FACHS] Could not calculate rewards from workout history.", error);
         throw error;
       })
       .finally(() => { historyRequest = null; });
@@ -143,7 +143,7 @@
       top.append(rank, avatar);
       const name = document.createElement("div");
       name.className = "fitos-friend-name";
-      name.textContent = (member.name || "FitOS member") + (member.isYou ? " (You)" : "");
+      name.textContent = (member.name || "FACHS member") + (member.isYou ? " (You)" : "");
       const stats = document.createElement("div");
       stats.className = "fitos-friend-stats";
       const workouts = document.createElement("span");
@@ -166,11 +166,11 @@
       card = document.createElement("section");
       card.id = "fitos-gamification-card";
       card.className = "fitos-gamification-card";
-      card.setAttribute("aria-label", "FitOS gamification");
+      card.setAttribute("aria-label", "FACHS gamification");
       card.innerHTML = `
         <div class="fitos-gamification-top">
           <div>
-            <div class="fitos-gamification-eyebrow">FITOS REWARDS</div>
+            <div class="fitos-gamification-eyebrow">FACHS REWARDS</div>
             <div class="fitos-gamification-xp" id="fitos-gamification-xp">Calculating XP…</div>
             <div class="fitos-gamification-level" id="fitos-gamification-level">Level 1</div>
           </div>
@@ -228,11 +228,11 @@
           const data = await Api.get("/friends/leaderboard");
           inviteUrl = data.inviteUrl || SHARE_URL;
         } catch (error) {
-          console.warn("[FitOS] Invite link unavailable", error);
+          console.warn("[FACHS] Invite link unavailable", error);
         }
         const button = document.getElementById("fitos-gamification-share");
         try {
-          if (navigator.share) await navigator.share({ title: "FitOS", text: message, url: inviteUrl });
+          if (navigator.share) await navigator.share({ title: "FACHS", text: message, url: inviteUrl });
           else if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(message + "\n" + inviteUrl);
             button.textContent = "Copied!";
@@ -240,7 +240,7 @@
             window.prompt("Copy your invite:", message + "\n" + inviteUrl);
           }
         } catch (error) {
-          if (error?.name !== "AbortError") console.warn("[FitOS] Share unavailable.", error);
+          if (error?.name !== "AbortError") console.warn("[FACHS] Share unavailable.", error);
         }
       });
 
