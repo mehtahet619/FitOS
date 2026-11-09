@@ -1,4 +1,4 @@
-/* Evidence-informed, non-medical nutrition guidance for FitOS. */
+/* Evidence-informed, non-medical nutrition guidance for FACHS. */
 (() => {
   "use strict";
   const finite = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
