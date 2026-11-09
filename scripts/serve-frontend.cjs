@@ -33,5 +33,5 @@ http.createServer((req, res) => {
     res.end(content);
   });
 }).listen(port, "127.0.0.1", () => {
-  console.log(`FitOS frontend ready at http://localhost:${port}`);
+  console.log(`FACHS frontend ready at http://localhost:${port}`);
 });
