@@ -1,4 +1,4 @@
-/* FitOS barcode scanner: native BarcodeDetector where it really supports retail codes, otherwise a bundled
+/* FACHS barcode scanner: native BarcodeDetector where it really supports retail codes, otherwise a bundled
    ZXing decoder (vendor/zxing-library-*.min.js, Apache-2.0) running on camera frames. Loads as a plain
    <script> (window.FitOSBarcode) and as a CommonJS module for tests. */
 (function (root, factory) {
