@@ -1,5 +1,5 @@
 /**
- * Server-side client for the FitOS Comparative Exercise API
+ * Server-side client for the FACHS Comparative Exercise API
  * (https://fitos-comparison-api.onrender.com).
  *
  * Contract taken from the service's published OpenAPI document:
