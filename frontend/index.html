@@ -282,6 +282,88 @@
   </section>
 
 
+
+  <!-- ============ PUBLIC HELP CENTER ============ -->
+  <section id="screen-help" class="screen help-screen" aria-labelledby="help-title">
+    <a class="skip-link" href="#help-main">Skip to help content</a>
+    <header class="help-header">
+      <a class="site-brand" href="/" aria-label="FACHS home"><img src="assets/site-logo.png" alt="" width="42" height="42" /><span>FACHS</span></a>
+      <nav aria-label="Help navigation"><a href="/">Home</a><a href="/login">Log in</a><a class="button button-dark" href="/register">Get started</a></nav>
+    </header>
+    <main id="help-main">
+      <section class="help-hero">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> FACHS SUPPORT</p>
+        <h1 id="help-title">How can we <span>help you?</span></h1>
+        <p>Find clear answers about workouts, equipment scanning, nutrition, gym discovery, and your account.</p>
+        <label class="help-search" for="help-search-input"><span aria-hidden="true">⌕</span><input id="help-search-input" type="search" placeholder="Search help articles..." autocomplete="off" /><kbd>/</kbd></label>
+        <p id="help-search-count" class="help-search-count" aria-live="polite">Browse help topics below</p>
+      </section>
+
+      <section class="help-content" aria-label="Help topics">
+        <div class="help-category-grid" aria-label="Filter help topics">
+          <button class="help-category active" type="button" data-help-filter="all"><span>✳</span><b>All topics</b><small>Everything in one place</small></button>
+          <button class="help-category" type="button" data-help-filter="workouts"><span>↗</span><b>Workouts</b><small>Plans and progress</small></button>
+          <button class="help-category" type="button" data-help-filter="equipment"><span>⌗</span><b>Equipment & AI</b><small>Scanning and form checks</small></button>
+          <button class="help-category" type="button" data-help-filter="nutrition"><span>◒</span><b>Nutrition</b><small>Food and meal tracking</small></button>
+          <button class="help-category" type="button" data-help-filter="gyms"><span>⌖</span><b>Gym discovery</b><small>Locations and forecasts</small></button>
+          <button class="help-category" type="button" data-help-filter="account"><span>♙</span><b>Account & privacy</b><small>Login and your data</small></button>
+        </div>
+
+        <div class="help-article-column">
+          <section class="help-group" data-help-group="workouts">
+            <div class="help-group-heading"><div><p class="eyebrow">01 / TRAINING</p><h2>Workout plans & progress</h2></div><span>WORKOUTS</span></div>
+            <details class="help-article" data-help-item><summary>How does FACHS create my workout plan?</summary><p>FACHS uses the training details you provide, such as your goal, experience, preferred split, available equipment, training days, and session duration. Keep your profile and equipment list up to date so the plan reflects your current setup.</p></details>
+            <details class="help-article" data-help-item><summary>Can I change my workout split or equipment?</summary><p>Yes. Open your profile or equipment settings and update the details that have changed. Your available choices may affect the exercises FACHS can recommend.</p></details>
+            <details class="help-article" data-help-item><summary>What happens if I miss a workout?</summary><p>Workout plans follow daily progression rules. A session left unfinished from a previous day may expire when the plan advances. An expired session should not be counted as a workout completed today. Open your current workout plan to see the session available for the current day.</p></details>
+            <details class="help-article" data-help-item><summary>Why does FACHS say “Please come back tomorrow”?</summary><p>This message can appear after today's workout has been recorded as complete. If you completed an older session today and the message appears unexpectedly, refresh the workout page. If it continues, report the issue with the date of the workout and the message shown.</p></details>
+            <details class="help-article" data-help-item><summary>How is workout progress calculated?</summary><p>Progress reflects completed units in your selected training structure. The number and size of those units depend on the split, so different plans can move in different increments.</p></details>
+            <details class="help-article" data-help-item><summary>Can I edit a completed workout?</summary><p>Workout editing options depend on the controls available in your workout history. Check the session details before leaving the workout screen.</p></details>
+          </section>
+
+          <section class="help-group" data-help-group="equipment">
+            <div class="help-group-heading"><div><p class="eyebrow">02 / AI TOOLS</p><h2>Equipment scanning & form checks</h2></div><span>EQUIPMENT & AI</span></div>
+            <details class="help-article" data-help-item><summary>How do I scan gym equipment?</summary><p>Open the equipment scan feature, allow camera access when your browser asks, and capture a clear image with the equipment visible. You can also manage equipment manually where that option is available.</p></details>
+            <details class="help-article" data-help-item><summary>Why was my equipment not detected?</summary><p>Try better lighting, move closer, keep the equipment unobstructed, and capture one or a few items at a time. If scanning is unavailable, the recognition service may not be configured or temporarily reachable. You can select equipment manually instead.</p></details>
+            <details class="help-article" data-help-item><summary>Does equipment scanning know whether a machine is free?</summary><p>Equipment recognition and crowd analysis are separate features. Crowd analysis can estimate people and possible equipment overlap in the camera view, but it cannot guarantee that a machine is available.</p></details>
+            <details class="help-article" data-help-item><summary>How do I troubleshoot camera access?</summary><p>Use a supported browser, check that the site has camera permission, close other apps using the camera, and reload the page. Camera access generally requires a secure HTTPS connection.</p></details>
+            <details class="help-article" data-help-item><summary>How does exercise form feedback work?</summary><p>When the form-checking feature is available, it uses camera input and pose information to provide exercise guidance. Keep your full movement visible and follow the on-screen setup instructions. Treat automated feedback as guidance, not a medical assessment.</p></details>
+          </section>
+
+          <section class="help-group" data-help-group="nutrition">
+            <div class="help-group-heading"><div><p class="eyebrow">03 / FOOD</p><h2>Nutrition & food tracking</h2></div><span>NUTRITION</span></div>
+            <details class="help-article" data-help-item><summary>How do I track packaged food?</summary><p>Use the food scanner to look up a barcode or search by product name. Review the serving size and nutrition details before saving. If product information is missing, use manual entry and copy the values from the food label.</p></details>
+            <details class="help-article" data-help-item><summary>Are calorie and protein values always exact?</summary><p>No. Values depend on the source and serving information. Some menu or food listings may contain estimates or incomplete data. Check the package label or restaurant information when accuracy matters.</p></details>
+            <details class="help-article" data-help-item><summary>Why can't I find nearby food?</summary><p>Nearby discovery depends on location permission or a manually entered place, as well as an available places/menu provider. Check your location settings and try again. Listings and menus can change.</p></details>
+            <details class="help-article" data-help-item><summary>Can I set dietary preferences and allergies?</summary><p>You can add dietary preferences and allergy information in your profile. Always review ingredients with the food provider before eating, especially when you have an allergy. Do not rely on an automatically generated listing as an allergy guarantee.</p></details>
+          </section>
+
+          <section class="help-group" data-help-group="gyms">
+            <div class="help-group-heading"><div><p class="eyebrow">04 / YOUR GYM</p><h2>Gym discovery & crowd information</h2></div><span>GYM DISCOVERY</span></div>
+            <details class="help-article" data-help-item><summary>Why can't FACHS find a nearby gym?</summary><p>Allow location access or search using a place name. Results depend on third-party map data and coverage, so some gyms may be missing or have incomplete details.</p></details>
+            <details class="help-article" data-help-item><summary>Are gym opening hours guaranteed?</summary><p>No. Displayed hours depend on available listing data and may not include temporary changes or holiday schedules. Confirm directly with the gym before travelling.</p></details>
+            <details class="help-article" data-help-item><summary>How should I interpret crowd information?</summary><p>Crowd information is an estimate based on available data or visual analysis, depending on the feature. It is not a live guarantee of occupancy, waiting time, or equipment availability.</p></details>
+          </section>
+
+          <section class="help-group" data-help-group="account">
+            <div class="help-group-heading"><div><p class="eyebrow">05 / YOUR ACCOUNT</p><h2>Login, privacy & security</h2></div><span>ACCOUNT</span></div>
+            <details class="help-article" data-help-item><summary>I didn't receive my email verification or login code. What should I do?</summary><p>Check that the email address is correct, look in spam or junk folders, and wait for the resend timer before requesting another code. If the code still does not arrive, try again later and report the issue.</p></details>
+            <details class="help-article" data-help-item><summary>How do I reset my password?</summary><p>Choose “Forgot your password?” on the login screen, request a reset code, and follow the instructions to choose a new password.</p></details>
+            <details class="help-article" data-help-item><summary>How do I update my profile?</summary><p>Open your profile or settings, choose the edit option, update your details, and save your changes.</p></details>
+            <details class="help-article" data-help-item><summary>Does FACHS provide medical advice?</summary><p>No. FACHS is a fitness and general nutrition planning tool. It does not diagnose, treat, or replace advice from a qualified healthcare professional.</p></details>
+          </section>
+
+          <div id="help-empty-state" class="help-empty" hidden><span>⌕</span><h3>No matching articles</h3><p>Try a different search term or choose another topic.</p><button class="button button-dark" id="help-clear-search" type="button">Clear search</button></div>
+        </div>
+      </section>
+
+      <section class="help-contact">
+        <div><p class="eyebrow">STILL NEED A HAND?</p><h2>Something not working?</h2><p>Share the issue details with the FACHS team so it can be investigated. Please do not include passwords, OTPs, or private health information.</p></div>
+        <div class="help-report-card"><label for="help-report-message">Describe what happened</label><textarea id="help-report-message" rows="4" maxlength="1500" placeholder="What were you trying to do, and what happened instead?"></textarea><button class="button button-dark" id="help-copy-report" type="button">Copy bug report details</button><p id="help-report-status" role="status" aria-live="polite">This copies a report you can share through your usual support channel.</p></div>
+      </section>
+    </main>
+    <footer class="help-footer"><a class="site-brand" href="/"><img src="assets/site-logo.png" alt="" width="34" height="34" /><span>FACHS</span></a><span>Need help? Start with the articles above.</span><nav><a href="/">Home</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/login">Log in</a></nav></footer>
+  </section>
+
   <section id="screen-not-found" class="screen not-found-screen" aria-labelledby="not-found-title">
     <a class="skip-link" href="#not-found-title">Skip to content</a>
     <div class="not-found-mark" aria-hidden="true"><img src="assets/site-logo.png" alt="" width="56" height="56" /></div>
