@@ -1,6 +1,6 @@
 import { recordAiRequest } from "./metrics";
 /**
- * Shared AI transport for FitOS.
+ * Shared AI transport for FACHS.
  *
  * This module owns provider-specific HTTP formats, bounded retries, deadlines,
  * per-process concurrency protection and safe telemetry. Feature modules remain
@@ -61,7 +61,7 @@ function providerRequest(provider: AiTextProvider, input: AiTextRequest): {
 
   if (provider.name === "OpenRouter") {
     headers["HTTP-Referer"] = "https://fitos.app";
-    headers["X-Title"] = "FitOS";
+    headers["X-Title"] = "FACHS";
   }
 
   const body: Record<string, unknown> = anthropic
@@ -106,7 +106,7 @@ function extractText(provider: AiTextProvider, payload: unknown): string {
 export async function requestAiText(input: AiTextRequest): Promise<string> {
   if (!input.provider.apiKey) throw new Error(`${input.provider.name} is not configured.`);
   if (activeRequests >= MAX_CONCURRENT_AI_REQUESTS) {
-    throw new Error("AI_CONCURRENCY_LIMIT: FitOS AI capacity is temporarily busy.");
+    throw new Error("AI_CONCURRENCY_LIMIT: FACHS AI capacity is temporarily busy.");
   }
 
   activeRequests += 1;
