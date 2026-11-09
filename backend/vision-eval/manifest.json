@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Real-image evaluation set for the FitOS Roboflow SAM3 workflow. Add gym photos and manually verified labels before drawing accuracy conclusions.",
+  "description": "Real-image evaluation set for the FACHS Roboflow SAM3 workflow. Add gym photos and manually verified labels before drawing accuracy conclusions.",
   "expectedProvider": "roboflow-workflow-sam3",
   "iouThreshold": 0.5,
   "cases": [
