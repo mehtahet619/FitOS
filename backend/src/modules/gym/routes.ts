@@ -4,8 +4,11 @@ import { z } from "zod";
 import { db, nowIso } from "../../db/client";
 import { requireAuth, AuthedRequest } from "../../common/auth";
 import { registerGymIntelligenceRoutes } from "./intelligence";
+import { registerGymMlRoutes } from "./crowdMl";
 
 export const gymRouter = Router();
+// Machine-to-machine model pipeline endpoints use their own key, so register them before user auth.
+registerGymMlRoutes(gymRouter);
 gymRouter.use(requireAuth);
 
 function todayDateStr(): string {
