@@ -29,8 +29,8 @@ const Api = (() => {
     } catch (cause) {
       const timedOut = cause?.name === "AbortError";
       const error = new Error(timedOut
-        ? "The FitOS API took too long to respond. Please try again."
-        : "Cannot reach the FitOS API. Check your connection and try again.");
+        ? "The FACHS API took too long to respond. Please try again."
+        : "Cannot reach the FACHS API. Check your connection and try again.");
       error.cause = cause;
       error.retryable = true;
       error.timedOut = timedOut;
