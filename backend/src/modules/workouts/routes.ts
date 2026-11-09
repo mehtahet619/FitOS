@@ -50,9 +50,8 @@ function localDateKey(value: string | Date = new Date()): string {
     timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(value instanceof Date ? value : new Date(value));
 }
-const DAILY_WORKOUT_LOCK_MS = 22 * 60 * 60 * 1000;
-
 async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
+  const today = localDateKey();
   const latest = await dbConn.get<{ completedAt: string }>(
     `SELECT completedAt FROM Workout
      WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
@@ -60,11 +59,37 @@ async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Pro
     userId
   );
   if (!latest?.completedAt) return { locked: false, completedAt: null };
+  // The daily lock follows the app's local calendar day, never a rolling 22-hour window.
+  return { locked: localDateKey(latest.completedAt) === today, completedAt: latest.completedAt };
+}
 
-  const completedAtMs = new Date(latest.completedAt).getTime();
-  const elapsedMs = Date.now() - completedAtMs;
-  const locked = Number.isFinite(completedAtMs) && elapsedMs >= 0 && elapsedMs < DAILY_WORKOUT_LOCK_MS;
-  return { locked, completedAt: latest.completedAt };
+/**
+ * Reconcile an unfinished workout from a previous local calendar day.
+ * It advances the plan step but marks the workout as expired, not completed.
+ * No sets/history are fabricated and it does not lock today's workout.
+ * This runs on workout requests, catching up after server restarts or downtime.
+ */
+async function expirePreviousDayWorkout(dbConn: typeof db, userId: string, now = new Date()): Promise<boolean> {
+  const state = await getPlanState(dbConn, userId);
+  if (!state?.activeWorkoutId || state.cycleStatus !== "IN_PROGRESS") return false;
+  const workout = await dbConn.get<any>(
+    `SELECT id, status, createdAt FROM Workout WHERE id = ? AND userId = ?`,
+    state.activeWorkoutId, userId
+  );
+  if (!workout || workout.status !== "pending" || !workout.createdAt) return false;
+  if (localDateKey(workout.createdAt) >= localDateKey(now)) return false;
+
+  try {
+    await completeWorkout(dbConn, userId, { workoutId: workout.id }, workout.createdAt);
+  } catch (error: any) {
+    console.warn(`[workouts] Could not advance expired workout ${workout.id}: ${error?.message || error}`);
+    return false;
+  }
+  await dbConn.run(
+    `UPDATE Workout SET status = 'expired', completedAt = NULL WHERE id = ? AND userId = ? AND status = 'pending'`,
+    workout.id, userId
+  );
+  return true;
 }
 
 
@@ -82,6 +107,7 @@ workoutRouter.get("/plan/structures", async (_req, res) => {
 workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
+  await expirePreviousDayWorkout(db, userId);
   const dailyCompletion = await getDailyWorkoutCompletion(db, userId);
   const log = (label: string) => {
     console.info(`[TRACE] GET /workouts/plan:${label} durationMs=${Date.now() - started}`);
@@ -273,6 +299,7 @@ const generateSchema = z.object({
 });
 workoutRouter.post("/generate", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
+  await expirePreviousDayWorkout(db, userId);
   const profile = await db.get<any>(`SELECT * FROM UserProfile WHERE userId = ?`, userId);
   if (!profile) return res.status(400).json({ error: "Complete onboarding (PUT /user/profile) first" });
 
@@ -792,6 +819,8 @@ workoutRouter.post("/:id/complete-set", async (req: AuthedRequest, res) => {
   const workout = await db.get<any>(`SELECT id, userId, status FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== req.userId)
     return res.status(404).json({ error: "Workout not found" });
+  if (workout.status === "expired")
+    return res.status(409).json({ error: "This workout expired at the end of its workout day. Generate today's workout instead." });
   if (workout.status === "completed")
     return res.status(409).json({ error: "This workout has already been completed." });
   const exercise = await db.get<any>(
@@ -834,6 +863,7 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
   const parsed = finishWorkoutSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: "Invalid workout completion data." });
   const userId = req.userId!;
+  await expirePreviousDayWorkout(db, userId);
   const workout = await db.get<any>(`SELECT * FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== userId)
     return res.status(404).json({ error: "Workout not found" });
