@@ -14,7 +14,7 @@
   const api = (path, opts = {}) => {
     // api.js declares `const Api`, which is a global binding but not a window property; accept either.
     const client = window.Api || (typeof Api !== "undefined" ? Api : null);
-    if (!client) throw new Error("FitOS API client is not ready. Refresh the page and try again.");
+    if (!client) throw new Error("FACHS API client is not ready. Refresh the page and try again.");
     const method = (opts.method || "GET").toUpperCase();
     if (method === "GET") return client.get(path);
     if (method === "POST") return client.post(path, opts.body || {}, { timeoutMs: opts.timeoutMs });
@@ -50,9 +50,9 @@
       setStatus("food-camera-status", (error.message || "Product lookup failed.") + hint, true);
     } finally { lookupInFlight = false; }
   }
-  // FitOS food-search retrieval and typo-tolerance layer.
+  // FACHS food-search retrieval and typo-tolerance layer.
   // This is a deterministic lexical baseline; a neural Siamese model and LambdaMART
-  // should only be enabled after FitOS has representative labeled query/click data.
+  // should only be enabled after FACHS has representative labeled query/click data.
   const FOOD_VOCABULARY = [
     "greek yogurt", "yogurt", "curd", "dahi", "paneer", "tofu", "soya chunks",
     "protein powder", "protein bar", "oats", "muesli", "chole", "chana", "chickpeas",
@@ -379,7 +379,7 @@
         <label>Fat (g / 100 g/ml)<input id="food-review-fat" type="number" min="0" step="0.1" value="${n.fatG ?? ""}" placeholder="Not listed"></label>
         <label>Fiber (g / 100 g/ml)<input id="food-review-fiber" type="number" min="0" step="0.1" value="${n.fiberG ?? ""}" placeholder="Not listed"></label>
       </div>
-      <p class="food-data-note">${product.servingQuantityG ? `Package serving: ${esc(product.servingSize || product.servingQuantityG + " g")} (prefilled). ` : ""}The values above are per 100 g/ml. FitOS scales the available values to your selected serving. Confirm the package label and correct values if needed.</p>
+      <p class="food-data-note">${product.servingQuantityG ? `Package serving: ${esc(product.servingSize || product.servingQuantityG + " g")} (prefilled). ` : ""}The values above are per 100 g/ml. FACHS scales the available values to your selected serving. Confirm the package label and correct values if needed.</p>
       <div id="food-nutrition-guidance" class="food-nutrition-guidance" aria-live="polite"></div><div class="food-review-actions"><button type="button" class="btn btn-mint" id="food-confirm-log">Confirm & add to today</button><button type="button" class="btn btn-outline" id="food-cancel-review">Cancel</button></div>
       <p id="food-review-status" class="food-status" aria-live="polite"></p>`;
     $("food-confirm-log").addEventListener("click", confirmLog);
@@ -518,7 +518,7 @@
     if(proteinLeft!==null&&proteinLeft>0) next+=" Based on your log, about "+proteinLeft.toFixed(0)+" g protein remains; options include "+proteinFoods+".";
     if(caloriesLeft!==null&&caloriesLeft<0) next+=" Your logged calories are currently about "+Math.abs(caloriesLeft).toFixed(0)+" kcal above the estimate. This is context, not a reason to skip meals or compensate; just make your next choice balanced and comfortable.";
     else if(caloriesLeft!==null) next+=" About "+caloriesLeft.toFixed(0)+" kcal remains against your estimated daily target.";
-    host.innerHTML='<h3>Your daily balance</h3><p class="food-data-note">Goal: <strong>'+esc(goalLabels[goal]||goalLabels.general_fitness)+'</strong>. Targets are estimates based on your saved profile.</p>'+progress+'<div class="food-next-step"><strong>What to eat next</strong><p>'+esc(next)+'</p></div><p class="food-data-note">You are always free to choose what you eat. Health scores and macro targets are guidance only. FitOS shows the trade-offs and suggests ways to balance your overall intake, it does not block food choices.</p>';
+    host.innerHTML='<h3>Your daily balance</h3><p class="food-data-note">Goal: <strong>'+esc(goalLabels[goal]||goalLabels.general_fitness)+'</strong>. Targets are estimates based on your saved profile.</p>'+progress+'<div class="food-next-step"><strong>What to eat next</strong><p>'+esc(next)+'</p></div><p class="food-data-note">You are always free to choose what you eat. Health scores and macro targets are guidance only. FACHS shows the trade-offs and suggests ways to balance your overall intake, it does not block food choices.</p>';
   }
   async function loadLogs() {
     const result = await api("/nutrition/logs?date=" + localDate() + "&tzOffset=" + new Date().getTimezoneOffset());
