@@ -39,7 +39,7 @@
       feedback.textContent = `You've already guessed ₹${numberFormat.format(summary.userGuess)}. One guess is allowed per account or browser.`;
       feedback.classList.remove("is-error");
     } else if (!feedback.classList.contains("is-error")) {
-      feedback.textContent = "No sign-in required. Submit one guess from this browser, and help shape FitOS pricing.";
+      feedback.textContent = "No sign-in required. Submit one guess from this browser, and help shape FACHS pricing.";
     }
   }
 
@@ -71,7 +71,7 @@
     try {
       const result = await Api.post("/pricing-guesses", { price, guestId });
       renderSummary(result);
-      feedback.textContent = `Your guess of ₹${numberFormat.format(price)} is saved. Thanks for helping shape FitOS!`;
+      feedback.textContent = `Your guess of ₹${numberFormat.format(price)} is saved. Thanks for helping shape FACHS!`;
       input.value = "";
     } catch (error) {
       await loadSummary();
