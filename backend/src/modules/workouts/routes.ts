@@ -50,18 +50,18 @@ function localDateKey(value: string | Date = new Date()): string {
     timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(value instanceof Date ? value : new Date(value));
 }
-async function getDailyWorkoutCompletion(dbConn: typeof db, userId: string): Promise<{ locked: boolean; completedAt: string | null }> {
+async function getDailyWorkoutCompletion(state: Awaited<ReturnType<typeof getPlanState>>): Promise<{ locked: boolean; completedAt: string | null }> {
   const today = localDateKey();
-  const latest = await dbConn.get<{ completedAt: string }>(
-    `SELECT completedAt FROM Workout
-     WHERE userId = ? AND status = 'completed' AND completedAt IS NOT NULL
-     ORDER BY completedAt DESC LIMIT 1`,
-    userId
-  );
-  if (!latest?.completedAt) return { locked: false, completedAt: null };
-  // The daily lock follows the app's local calendar day, never a rolling 22-hour window.
-  // The completion route separately rejects workouts created on an earlier day.
-  return { locked: localDateKey(latest.completedAt) === today, completedAt: latest.completedAt };
+  // The daily lock must come from a unit completed in the ACTIVE plan cycle.
+  // A legacy workout, a workout from another cycle, or an expired previous-day
+  // workout must never lock today's session while this cycle still shows 0 done.
+  const completedToday = state?.units
+    .filter((unit) => unit.status === "COMPLETED" && unit.completedAt && localDateKey(unit.completedAt) === today)
+    .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0];
+  return {
+    locked: Boolean(completedToday),
+    completedAt: completedToday?.completedAt ?? null,
+  };
 }
 
 /**
@@ -110,14 +110,14 @@ workoutRouter.get("/plan", async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const started = Date.now();
   await expirePreviousDayWorkout(db, userId);
-  const dailyCompletion = await getDailyWorkoutCompletion(db, userId);
+  const state = await getPlanState(db, userId);
+  const dailyCompletion = await getDailyWorkoutCompletion(state);
   const log = (label: string) => {
     console.info(`[TRACE] GET /workouts/plan:${label} durationMs=${Date.now() - started}`);
   };
 
   try {
     log("plan-state:start");
-    const state = await getPlanState(db, userId);
     log("plan state fetched");
 
     if (!state) {
