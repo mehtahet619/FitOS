@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 
 class GymScreen extends StatefulWidget {
@@ -40,6 +41,10 @@ class _GymScreenState extends State<GymScreen> {
   Future<void> _checkin(String method) async {
     try {
       await ApiClient.instance.post("/gym/checkin", {"method": method});
+      capturePostHogEvent(
+        'gym_checkin_completed',
+        properties: {'checkin_method': method},
+      );
       await _load();
     } on ApiException catch (e) {
       setState(() {

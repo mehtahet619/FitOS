@@ -8,6 +8,8 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+        <!-- PostHog is configured manually from Dart. -->
+        <meta-data android:name="com.posthog.posthog.AUTO_INIT" android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

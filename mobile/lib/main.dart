@@ -4,8 +4,13 @@ import 'api/api_client.dart';
 import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_shell.dart';
+import 'posthog/posthog.dart';
+import 'posthog/posthog_logs.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await setupPostHog();
+  PosthogAppLogger.info('application_booted');
   runApp(const AdaptiveFitApp());
 }
 
@@ -39,6 +44,7 @@ class _BootScreenState extends State<BootScreen> {
   Future<void> _boot() async {
     await ApiClient.instance.loadTokens();
     if (!ApiClient.instance.isLoggedIn) {
+      PosthogAppLogger.info('boot_routed_to_authentication');
       _goTo(const AuthScreen());
       return;
     }
@@ -46,14 +52,18 @@ class _BootScreenState extends State<BootScreen> {
       final session = await ApiClient.instance.restoreSession();
       if (session["authenticated"] != true) {
         await ApiClient.instance.clearTokens();
+        PosthogAppLogger.warn('stored_session_rejected');
         _goTo(const AuthScreen());
         return;
       }
+      PosthogAppLogger.info('authenticated_session_restored');
       _goTo(const HomeShell());
     } on ApiException {
       await ApiClient.instance.clearTokens();
+      PosthogAppLogger.warn('session_restore_request_failed');
       _goTo(const AuthScreen());
     } catch (_) {
+      PosthogAppLogger.warn('session_restore_unexpected_failure');
       _goTo(const AuthScreen());
     }
   }

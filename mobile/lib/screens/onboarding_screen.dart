@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
+import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 import 'home_shell.dart';
 import 'equipment_scan_screen.dart';
@@ -82,6 +83,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         "dailyBudget": double.tryParse(_budget.text) ?? 0,
       });
       await ApiClient.instance.post("/equipment/user/equipment", {"equipmentNames": _selected.toList()});
+      capturePostHogEvent(
+        'onboarding_completed',
+        properties: {'equipment_count': _selected.length},
+      );
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const HomeShell()));
     } on ApiException catch (e) {
