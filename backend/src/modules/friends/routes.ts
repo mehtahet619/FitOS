@@ -69,7 +69,6 @@ friendsRouter.get("/leaderboard", async (req: AuthedRequest, res) => {
   await ensureTables();
   const userId = req.userId!;
   const code = await inviteCode(userId);
-  const week = new Date(Date.now() - 7 * 86400000).toISOString();
 
   // Include every friendship in either direction so both accounts see each other.
   const links = await db.all<{ otherId: string }>(
