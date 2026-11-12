@@ -671,7 +671,7 @@ $("verify-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/register/verify-otp", { email: verifyEmail, otp: $("verify-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     trackMarketingEvent("signup_verified", "email_otp");
-    sessionStorage.removeItem("pendingVerifyEmail"); AuthState.authenticated(data.user); navigate("/homepage", true);
+    sessionStorage.removeItem("pendingVerifyEmail"); AuthState.authenticated(data.user); const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/homepage"; if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite"); navigate(destination, true);
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify your email."); }
 });
 $("verify-resend").addEventListener("click", async () => {
