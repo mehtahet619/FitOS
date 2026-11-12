@@ -176,12 +176,10 @@
     return data;
   }
 
-  let friendSyncRequest = null;
   async function syncFriends(rows) {
-    if (friendSyncRequest) return friendSyncRequest;
-    friendSyncRequest = (async () => {
-      const targetRows = rows || document.getElementById("fitos-private-friend-rows");
-      if (!targetRows) return;
+    const targetRows = rows || document.getElementById("fitos-private-friend-rows");
+    if (!targetRows) return;
+    try {
       const me = await Api.get("/auth/me");
       if (!me?.authenticated) return;
 
@@ -204,15 +202,11 @@
       }
 
       await refreshRewards(targetRows);
-    })()
-      .catch((error) => {
-        const targetRows = rows || document.getElementById("fitos-private-friend-rows");
-        if (targetRows) targetRows.textContent = "Friends leaderboard is temporarily unavailable. Please try again.";
-        console.warn("[FACHS] Could not sync the friend leaderboard.", error);
-        throw error;
-      })
-      .finally(() => { friendSyncRequest = null; });
-    return friendSyncRequest;
+    } catch (error) {
+      targetRows.textContent = "Friends leaderboard is temporarily unavailable. Please try again.";
+      console.warn("[FACHS] Could not sync the friend leaderboard.", error);
+      throw error;
+    }
   }
 
   async function refreshXp() {
