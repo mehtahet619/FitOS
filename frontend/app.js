@@ -119,6 +119,7 @@ const AuthState = {
     this.user = user;
     this.profileComplete = user?.profileComplete === true;
     this.generation += 1;
+    window.dispatchEvent(new CustomEvent("fitos:authenticated"));
   },
   unauthenticated() {
     if (this.status === "UNAUTHENTICATED") return;
@@ -133,6 +134,21 @@ window.AuthState = AuthState;
 
 const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/gym": "gym", "/friends": "friends", "/history": "history", "/profile": "profile", "/settings": "settings" };
 const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
+
+// Preserve an invite before routing/auth redirects can remove the query string.
+(function preservePendingFriendInvite() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("invite");
+    if (!code || !/^[a-f0-9]{36}$/i.test(code)) return;
+    sessionStorage.setItem("fitos_pending_invite", code);
+    params.delete("invite");
+    const query = params.toString();
+    history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
+  } catch (error) {
+    console.warn("[FACHS] Could not preserve the friend invite link.", error);
+  }
+})();
 const routeMetadata = {
   "/": ["AI Workout Planner Based on Gym Equipment | FACHS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FACHS."],
   "/help": ["Help Center | FACHS", "Find help with FACHS workouts, equipment scanning, nutrition, gym discovery, and account access."],
@@ -397,7 +413,6 @@ function showScreen(id) {
   bottomNav.style.display = isProtectedScreen ? "flex" : "none";
   $("app").dataset.view = isProtectedScreen ? "protected" : "public";
 }
-
 /* ---------------- Boot ---------------- */
   async function boot() {
     const generation = ++authBootGeneration;
@@ -797,8 +812,7 @@ $("onboarding-submit").addEventListener("click", async () => {
     weightKg: Number($("ob-weight").value),
     fitnessLevel: $("ob-level").value,
     primaryGoal: $("ob-goal").value,
-    daysPerWeek: Number($("ob-days").value),
-    sessionMinutes: 60,
+    daysPerWeek: Number($("ob-days").value),    sessionMinutes: 60,
     dietaryPref: $("ob-diet").value,
     allergies: $("ob-allergies").value.split(",").map((s) => s.trim()).filter(Boolean),
     foodLikes: [],
@@ -855,6 +869,7 @@ function switchTab(tab, updateUrl = true) {
   if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
   if (tab === "history") { void showHistory(); return; }
   showScreen("screen-" + tab);
+  if (tab === "friends") window.dispatchEvent(new CustomEvent("fitos:friends-opened"));
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
 
   if (tab === "today") loadToday();
@@ -1197,8 +1212,7 @@ function renderImpactPlant(attendanceDays) {
     ? `<path d="M90 ${soilY + 1} C${88 - stage.height * .03} ${soilY - stage.height * .32} ${92 + stage.height * .025} ${soilY - stage.height * .72} 90 ${topY}" fill="none" stroke="#567a4e" stroke-width="${stage.width}" stroke-linecap="round"/>`
     : "";
   const seed = dayCount < 3
-    ? '<path d="M83 79c1-5 7-8 13-6 2 1 3 3 2 5-2 4-8 6-12 4-2-1-3-2-3-3Z" fill="#876343" stroke="#694a34" stroke-width="1"/><path d="M86 79c3-2 6-3 10-3" fill="none" stroke="#b08a5d" stroke-width="1" stroke-linecap="round"/>'
-    : "";
+    ? '<path d="M83 79c1-5 7-8 13-6 2 1 3 3 2 5-2 4-8 6-12 4-2-1-3-2-3-3Z" fill="#876343" stroke="#694a34" stroke-width="1"/><path d="M86 79c3-2 6-3 10-3" fill="none" stroke="#b08a5d" stroke-width="1" stroke-linecap="round"/>'    : "";
   const water = dayCount === 2
     ? '<path d="M70 67c-2 4-3 5-3 7a3 3 0 0 0 6 0c0-2-1-3-3-7Zm39 2c-2 3-2 4-2 6a2.5 2.5 0 0 0 5 0c0-2-1-3-3-6Z" fill="#8fb8a1" opacity=".9"/>'
     : "";
@@ -1597,8 +1611,7 @@ function renderPlanStructurePrompt() {
       `).join("")}
     </div>
   `).join("");
-  return `
-    <div class="card">
+  return `    <div class="card">
       <div class="card-label">Step 1: Choose your workout structure</div>
       <div class="card-sub">FACHS will enforce this structure until you complete a full cycle. You cannot jump to another plan mid-cycle.</div>
       <div class="chip-group" id="plan-chips" style="margin-top:10px; margin-bottom:10px;">
@@ -1998,7 +2011,6 @@ async function requestRefreshedExerciseDemo(exercise, excludeVideoId) {
     return null;
   }
 }
-
 async function startExerciseDemoPlayer(player, button, exercise) {
   const demo = exercise?.demoVideo;
   if (!demo || demo.kind !== "video" || !demo.videoId) {
@@ -2397,8 +2409,7 @@ function renderWorkout(workout, plan) {
   el.querySelectorAll(".exercise-demo-preview img").forEach((image) => {
     image.addEventListener("error", () => {
       const preview = image.closest(".exercise-demo-preview");
-      if (!preview || preview.querySelector(".exercise-demo-thumbnail-fallback")) return;
-      image.hidden = true;
+      if (!preview || preview.querySelector(".exercise-demo-thumbnail-fallback")) return;      image.hidden = true;
       const fallback = document.createElement("span");
       fallback.className = "exercise-demo-thumbnail-fallback";
       fallback.textContent = "Video preview unavailable";
@@ -2797,8 +2808,7 @@ function renderNearby(data, foodName) {
         <div class="empty-state">${data.message}</div>
       </div>
     `;
-    return;
-  }
+    return;  }
   if (data.places.length === 0) {
     el.innerHTML = `<div class="card"><div class="empty-state">No matches found nearby.</div></div>`;
     return;
@@ -3197,8 +3207,7 @@ function renderGymTour(equipment, plan, savedProfile) {
     `;
     const manualGroup = $("gym-manual-equipment");
     [...new Set([...equipmentNames, ...known])].forEach((name) => {
-      const button = document.createElement("button");
-      button.type = "button";
+      const button = document.createElement("button");      button.type = "button";
       button.className = `chip ${known.includes(name) ? "active" : ""}`;
       button.textContent = name;
       button.setAttribute("aria-pressed", String(known.includes(name)));
@@ -3597,8 +3606,7 @@ function renderGymScan(equipment, plan) {
           feedback.textContent = unique.size
             ? `Live detection: ${unique.size} equipment types recognized. Move the camera to scan more, then tap Stop & Review.`
             : "Live scan running. No known equipment recognized yet; adjust the camera angle or lighting.";
-          resultsDiv.style.display = "block";
-          resultsDiv.textContent = unique.size
+          resultsDiv.style.display = "block";          resultsDiv.textContent = unique.size
             ? "Currently detected: " + Array.from(unique.keys()).join(", ")
             : "Waiting for equipment detections…";
         }
