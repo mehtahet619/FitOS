@@ -209,10 +209,6 @@
     }
   }
 
-  async function refreshXp() {
-    return refreshRewards(document.getElementById("fitos-private-friend-rows"));
-  }
-
   function render() {
     const host = document.getElementById("friends-content");
     if (!host) return;
