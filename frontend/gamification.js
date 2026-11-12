@@ -5,11 +5,10 @@
   // user's completed workouts. The browser never invents or caches an XP total;
   // local workout history is only used for the live streak display.
   const SHARE_TEXT = "Bhai abhi to gym chalne";
-  const SHARE_URL = "https://adaptive-fit-web.onrender.com/";
   const XP_PER_WORKOUT = 100;
   const XP_PER_CONSECUTIVE_DAY = 25;
   const XP_PER_LEVEL = 500;
-  let inviteUrl = SHARE_URL;
+  let inviteUrl = "";
   let currentXp = 0;
   let historyRequest = null;
 
@@ -262,13 +261,17 @@
 
       document.getElementById("fitos-gamification-share").addEventListener("click", async () => {
         const message = SHARE_TEXT;
+        const button = document.getElementById("fitos-gamification-share");
         try {
           const data = await Api.get("/friends/leaderboard");
-          inviteUrl = data.inviteUrl || SHARE_URL;
+          if (!data?.inviteUrl) throw new Error("The server did not return your permanent invite link.");
+          inviteUrl = data.inviteUrl;
         } catch (error) {
+          const status = document.getElementById("fitos-gamification-status");
+          if (status) status.textContent = "Your unique invite link could not be loaded. Please try again.";
           console.warn("[FACHS] Invite link unavailable", error);
+          return;
         }
-        const button = document.getElementById("fitos-gamification-share");
         try {
           if (navigator.share) await navigator.share({ title: "FACHS", text: message, url: inviteUrl });
           else if (navigator.clipboard?.writeText) {
