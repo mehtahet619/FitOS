@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { db, nowIso } from "../../db/client";
 import { AuthedRequest, requireAuth } from "../../common/auth";
 import { loadXpForUsers } from "./xp";
+import { canonicalFriendPair } from "./relations";
 
 export const friendsRouter = Router();
 friendsRouter.use(requireAuth);
@@ -11,7 +12,39 @@ let ready: Promise<void> | undefined;
 async function ensureTables() {
   if (!ready) ready = (async () => {
     await db.exec(`CREATE TABLE IF NOT EXISTS UserInviteCode (id VARCHAR(36) PRIMARY KEY, userId VARCHAR(255) NOT NULL UNIQUE, code VARCHAR(64) NOT NULL UNIQUE, createdAt VARCHAR(40) NOT NULL)`);
+    // Keep the old table readable so existing one-to-one invite links can be
+    // copied forward without losing any established friendships.
     await db.exec(`CREATE TABLE IF NOT EXISTS UserFriendInvite (id VARCHAR(36) PRIMARY KEY, inviterUserId VARCHAR(255) NOT NULL, invitedUserId VARCHAR(255) NOT NULL UNIQUE, createdAt VARCHAR(40) NOT NULL, UNIQUE(inviterUserId, invitedUserId))`);
+    // Friendships are undirected and many-to-many. The canonical pair avoids
+    // duplicate rows regardless of which friend opened the other's invite.
+    await db.exec(`CREATE TABLE IF NOT EXISTS UserFriendship (id VARCHAR(36) PRIMARY KEY, userAId VARCHAR(255) NOT NULL, userBId VARCHAR(255) NOT NULL, createdAt VARCHAR(40) NOT NULL, UNIQUE(userAId, userBId))`);
+
+    const legacyLinks = await db.all<{ inviterUserId: string; invitedUserId: string; createdAt: string }>(
+      "SELECT inviterUserId, invitedUserId, createdAt FROM UserFriendInvite"
+    );
+    for (const link of legacyLinks) {
+      const pair = canonicalFriendPair(link.inviterUserId, link.invitedUserId);
+      if (!pair) continue;
+      const exists = await db.get<{ id: string }>(
+        "SELECT id FROM UserFriendship WHERE userAId=? AND userBId=?",
+        pair[0], pair[1]
+      );
+      if (!exists) {
+        try {
+          await db.run(
+            "INSERT INTO UserFriendship (id,userAId,userBId,createdAt) VALUES (?,?,?,?)",
+            uuidv4(), pair[0], pair[1], link.createdAt || nowIso()
+          );
+        } catch {
+          // A concurrent startup may have migrated the same pair first.
+          const raced = await db.get<{ id: string }>(
+            "SELECT id FROM UserFriendship WHERE userAId=? AND userBId=?",
+            pair[0], pair[1]
+          );
+          if (!raced) throw new Error("Could not migrate an existing friend link.");
+        }
+      }
+    }
   })().catch(e => { ready = undefined; throw e; });
   await ready;
 }
@@ -31,9 +64,9 @@ friendsRouter.get("/leaderboard", async (req: AuthedRequest, res) => {
 
   // Friendship is mutual: people I invited AND the person who invited me.
   const links = await db.all<{ otherId: string }>(
-    `SELECT invitedUserId AS otherId FROM UserFriendInvite WHERE inviterUserId = ?
+    `SELECT userBId AS otherId FROM UserFriendship WHERE userAId = ?
      UNION
-     SELECT inviterUserId AS otherId FROM UserFriendInvite WHERE invitedUserId = ?`,
+     SELECT userAId AS otherId FROM UserFriendship WHERE userBId = ?`,
     userId, userId
   );
   const memberIds = [userId, ...new Set(links.map((l) => l.otherId).filter((id) => id !== userId))];
@@ -84,9 +117,25 @@ friendsRouter.post("/accept-invite", async (req: AuthedRequest, res) => {
   const inviter = await db.get<{userId:string}>("SELECT userId FROM UserInviteCode WHERE code=?",code);
   if (!inviter) return res.status(404).json({error:"Invite link not found."});
   if (inviter.userId === req.userId) return res.status(400).json({error:"You cannot use your own invite link."});
-  const existing = await db.get<{inviterUserId:string}>("SELECT inviterUserId FROM UserFriendInvite WHERE invitedUserId=?",req.userId!);
-  if (existing) return existing.inviterUserId === inviter.userId ? res.json({linked:true,alreadyLinked:true}) : res.status(409).json({error:"This account is already linked to another inviter."});
-  try { await db.run("INSERT INTO UserFriendInvite (id,inviterUserId,invitedUserId,createdAt) VALUES (?,?,?,?)",uuidv4(),inviter.userId,req.userId!,nowIso()); }
-  catch { return res.status(409).json({error:"This account is already linked to another inviter."}); }
+  const pair = canonicalFriendPair(inviter.userId, req.userId!);
+  if (!pair) return res.status(400).json({error:"Invalid friend relationship."});
+  const existing = await db.get<{id:string}>(
+    "SELECT id FROM UserFriendship WHERE userAId=? AND userBId=?",
+    pair[0], pair[1]
+  );
+  if (existing) return res.json({linked:true,alreadyLinked:true});
+  try {
+    await db.run(
+      "INSERT INTO UserFriendship (id,userAId,userBId,createdAt) VALUES (?,?,?,?)",
+      uuidv4(), pair[0], pair[1], nowIso()
+    );
+  } catch {
+    const raced = await db.get<{id:string}>(
+      "SELECT id FROM UserFriendship WHERE userAId=? AND userBId=?",
+      pair[0], pair[1]
+    );
+    if (!raced) return res.status(500).json({error:"Could not create the friend link. Please try again."});
+    return res.json({linked:true,alreadyLinked:true});
+  }
   res.status(201).json({linked:true});
 });
