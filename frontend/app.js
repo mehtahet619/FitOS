@@ -142,6 +142,7 @@ const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrend
     const code = params.get("invite");
     if (!code || !/^[a-f0-9]{36}$/i.test(code)) return;
     sessionStorage.setItem("fitos_pending_invite", code);
+    sessionStorage.setItem("fitos_open_rewards_after_invite", "1");
     params.delete("invite");
     const query = params.toString();
     history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
@@ -320,7 +321,17 @@ async function routeCurrent() {
     return;
   }
   if (path === "/") {
-    // The marketing homepage is public even when a user is signed in.
+    // Invite links open the rewards comparison directly for signed-in users.
+    if (AuthState.status === "AUTHENTICATED" && sessionStorage.getItem("fitos_open_rewards_after_invite") === "1") {
+      if (AuthState.profileComplete === false) {
+        navigate("/profile", true);
+        return;
+      }
+      sessionStorage.removeItem("fitos_open_rewards_after_invite");
+      navigate("/friends", true);
+      return;
+    }
+    // The marketing homepage remains public for ordinary visits.
     showScreen("screen-landing");
     return;
   }
@@ -397,8 +408,7 @@ function $(id) { return document.getElementById(id); }
 function banner(el, type, msg) {
   el.innerHTML = msg ? `<div class="banner banner-${type}">${msg}</div>` : "";
 }
-function showScreen(id) {
-  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+function showScreen(id) {  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   const screen = $(id);
   if (!screen) return;
   screen.classList.add("active");
@@ -600,8 +610,10 @@ $("auth-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/login", { email, password });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     AuthState.authenticated(data.user);
-    navigate("/gym", true);
-    void handleGymChoiceAfterLogin();
+    const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym";
+    if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite");
+    navigate(destination, true);
+    if (destination === "/gym") void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
     banner(bannerEl, "error", e.message || "Something went wrong.");
@@ -633,7 +645,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/gym", true); void handleGymChoiceAfterLogin();
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym"; if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite"); navigate(destination, true); if (destination === "/gym") void handleGymChoiceAfterLogin();
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
@@ -797,8 +809,7 @@ $("onboarding-scan-btn").addEventListener("click", () => {
   startEquipmentScan("onboarding-scan-area", (detectedNames) => {
     activateEquipmentChips(detectedNames);
     $("onboarding-scan-area").innerHTML = `<div class="banner banner-success">Added ${detectedNames.join(", ")} to your selection below.</div>`;
-  });
-});
+  });});
 
 $("onboarding-submit").addEventListener("click", async () => {
   if (!profileEditMode) return;
@@ -848,6 +859,12 @@ function enterMainApp() {
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
   $("bottom-nav").style.display = "flex";
+  const openedFromInvite = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1";
+  if (openedFromInvite) {
+    sessionStorage.removeItem("fitos_open_rewards_after_invite");
+    navigate("/friends", true);
+    return;
+  }
   navigate("/gym", true);
   void handleGymChoiceAfterLogin();
 }
@@ -1197,8 +1214,7 @@ function renderImpactPlant(attendanceDays) {
     { min: 5, name: "developed seedling", height: 36, width: 2.8, leaves: [.36, .72], leafSize: .72 },
     { min: 3, name: "seedling with first leaves", height: 26, width: 2.2, leaves: [.56], leafSize: .6 },
     { min: 2, name: "emerging sprout", height: 13, width: 1.8, leaves: [.72], leafSize: .38 },
-    { min: 0, name: "seed", height: 0, width: 0, leaves: [], leafSize: 0 },
-  ];
+    { min: 0, name: "seed", height: 0, width: 0, leaves: [], leafSize: 0 },  ];
   const stage = stages.find((candidate) => dayCount >= candidate.min);
   const soilY = 78;
   const topY = soilY - stage.height;
@@ -1597,8 +1613,7 @@ function renderCircularProgress(plan) {
 
 const BRO_DEFAULT_UNITS = [
   { label: "Chest + Triceps", muscles: ["chest", "triceps"] },
-  { label: "Back + Biceps", muscles: ["back", "biceps"] },
-  { label: "Legs + Shoulders", muscles: ["quads", "hamstrings", "glutes", "calves", "shoulders"] },
+  { label: "Back + Biceps", muscles: ["back", "biceps"] },  { label: "Legs + Shoulders", muscles: ["quads", "hamstrings", "glutes", "calves", "shoulders"] },
 ];
 const BRO_MUSCLE_OPTIONS = ["chest", "back", "biceps", "triceps", "shoulders", "quads", "hamstrings", "glutes", "calves"];
 
@@ -1997,7 +2012,6 @@ function showUnavailableExerciseDemo(player, exercise, demo, message) {
   fallback.append(heading, instructions, hint);
   player.replaceChildren(fallback);
 }
-
 async function requestRefreshedExerciseDemo(exercise, excludeVideoId) {
   if (!exercise?.exerciseId) return null;
   try {
@@ -2397,8 +2411,7 @@ function renderWorkout(workout, plan) {
       document.addEventListener("pointermove", moveDrag, { passive: false });
       document.addEventListener("pointerup", finishDrag);
       document.addEventListener("pointercancel", cancelDrag);
-    });
-  });
+    });  });
 
   el.querySelectorAll('[data-action="edit-exercise"]').forEach((button) => {
     button.addEventListener("click", () => {
@@ -2798,7 +2811,6 @@ function findNearby(foodId, foodName) {
     }
   );
 }
-
 function renderNearby(data, foodName) {
   const el = $("nearby-results");
   if (!data.configured) {
@@ -3197,8 +3209,7 @@ function renderGymTour(equipment, plan, savedProfile) {
         <div class="chip-group" id="gym-manual-equipment" style="flex-wrap:wrap;gap:8px;"></div>
         <div class="field" style="margin-top:12px;">
           <label for="gym-custom-equipment-name">Add equipment not listed</label>
-          <div class="btn-row">
-            <input id="gym-custom-equipment-name" type="text" maxlength="120" placeholder="e.g. Pendulum squat machine">
+          <div class="btn-row">            <input id="gym-custom-equipment-name" type="text" maxlength="120" placeholder="e.g. Pendulum squat machine">
             <button class="btn btn-outline" id="gym-custom-equipment-add" type="button">Add</button>
           </div>
         </div>
@@ -3597,8 +3608,7 @@ function renderGymScan(equipment, plan) {
         if (!result.configured) {
           feedback.textContent = result.message || "Equipment detection is not configured on the backend.";
         } else {
-          latestDetections = Array.isArray(result.detections) ? result.detections : [];
-          const unique = new Map();
+          latestDetections = Array.isArray(result.detections) ? result.detections : [];          const unique = new Map();
           latestDetections.forEach(d => {
             const existing = unique.get(d.equipmentName);
             if (!existing || d.confidence > existing.confidence) unique.set(d.equipmentName, d);
