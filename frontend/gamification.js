@@ -292,7 +292,7 @@
         }
       });
 
-      void syncFriends(rows).catch(() => {});
+
     } else {
       void syncFriends(document.getElementById("fitos-private-friend-rows")).catch(() => {});
     }
