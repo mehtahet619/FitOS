@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { computeXp, loadXpForUsers } from "../modules/friends/xp";
+import { canonicalFriendPair } from "../modules/friends/relations";
+
+describe("friend relationships", () => {
+  it("stores the same undirected friendship pair regardless of invite direction", () => {
+    expect(canonicalFriendPair("user-a", "user-b")).toEqual(["user-a", "user-b"]);
+    expect(canonicalFriendPair("user-b", "user-a")).toEqual(["user-a", "user-b"]);
+    expect(canonicalFriendPair("user-a", "user-a")).toBeNull();
+    expect(canonicalFriendPair("user-a", "user-c")).toEqual(["user-a", "user-c"]);
+  });
+});
 
 describe("leaderboard XP", () => {
   it("awards 100 per workout and 25 per consecutive-day extension (IST days)", () => {

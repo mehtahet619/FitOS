@@ -88,11 +88,11 @@
       " · +" + stats.consistencyXp + " consistency XP earned";
   }
 
-  async function refreshXp() {
+  async function refreshRewards(rows) {
     if (historyRequest) return historyRequest;
     historyRequest = (async () => {
-      // Lifetime XP and completed-workout count are authoritative on the server.
-      // A separate history endpoint failure must never hide otherwise-valid XP.
+      // One leaderboard response is the source of truth for both the signed-in
+      // user's card and every friend's row. Both views therefore use one snapshot.
       const leaderboard = await Api.get("/friends/leaderboard");
       const members = Array.isArray(leaderboard?.members) ? leaderboard.members : [];
       const own = members.find((member) => member.isYou);
@@ -100,20 +100,22 @@
         throw new Error("Your rewards profile is missing from the friends leaderboard. XP was not replaced with a guessed value.");
       }
 
-      let stats = {
-        workoutCount: Math.max(0, Number(own.workouts) || 0),
-        workoutXp: Math.max(0, Number(own.workouts) || 0) * XP_PER_WORKOUT,
-        totalXp: Math.max(0, Number(own.xp) || 0),
-        consistencyXp: 0,
+      const workoutCount = Math.max(0, Number(own.workouts) || 0);
+      const totalXp = Math.max(0, Number(own.xp) || 0);
+      const stats = {
+        workoutCount,
+        workoutXp: workoutCount * XP_PER_WORKOUT,
+        totalXp,
+        consistencyXp: Math.max(0, totalXp - workoutCount * XP_PER_WORKOUT),
         currentStreak: null,
       };
-      stats.consistencyXp = Math.max(0, stats.totalXp - stats.workoutXp);
+
+      if (rows) renderLeaderboard(leaderboard, rows);
 
       try {
         const response = await Api.get("/workouts/history");
         const history = Array.isArray(response) ? response : (response?.history || response?.workouts || []);
-        const streakStats = calculateRewards(history);
-        stats.currentStreak = streakStats.currentStreak;
+        stats.currentStreak = calculateRewards(history).currentStreak;
       } catch (historyError) {
         console.warn("[FACHS] Workout history unavailable; keeping server XP.", historyError);
         const status = document.getElementById("fitos-gamification-status");
@@ -121,21 +123,22 @@
       }
 
       updateXpDisplay(stats);
-      return stats;
+      const status = document.getElementById("fitos-gamification-status");
+      if (status && stats.currentStreak != null) status.textContent = "";
+      return leaderboard;
     })()
       .catch((error) => {
         const status = document.getElementById("fitos-gamification-status");
         if (status) status.textContent = "Your rewards could not be loaded from the server. Please try again shortly.";
-        console.warn("[FACHS] Could not calculate rewards from workout history.", error);
+        console.warn("[FACHS] Could not load rewards from the server.", error);
         throw error;
       })
       .finally(() => { historyRequest = null; });
     return historyRequest;
   }
 
-  async function refreshLeaderboard(rows) {
-    const data = await Api.get("/friends/leaderboard");
-    const members = Array.isArray(data.members) ? data.members : [];
+  function renderLeaderboard(data, rows) {
+    const members = Array.isArray(data?.members) ? data.members : [];
     if (!rows) return data;
     rows.replaceChildren();
     rows.className = "fitos-friend-grid";
@@ -171,6 +174,39 @@
       rows.appendChild(item);
     });
     return data;
+  }
+
+  async function syncFriends(rows) {
+    const targetRows = rows || document.getElementById("fitos-private-friend-rows");
+    if (!targetRows) return;
+    try {
+      const me = await Api.get("/auth/me");
+      if (!me?.authenticated) return;
+
+      const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite");
+      if (pending) {
+        try {
+          await Api.post("/friends/accept-invite", { code: pending });
+          sessionStorage.removeItem("fitos_pending_invite");
+        } catch (error) {
+          if ([400, 404, 409].includes(error.status)) {
+            sessionStorage.removeItem("fitos_pending_invite");
+            const status = document.getElementById("fitos-gamification-status");
+            if (status) status.textContent = error.status === 409
+              ? "This account is already linked to another invite. The existing friend link was kept."
+              : "This friend invite link is invalid or no longer available.";
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      await refreshRewards(targetRows);
+    } catch (error) {
+      targetRows.textContent = "Friends leaderboard is temporarily unavailable. Please try again.";
+      console.warn("[FACHS] Could not sync the friend leaderboard.", error);
+      throw error;
+    }
   }
 
   function render() {
@@ -222,21 +258,7 @@
       board.appendChild(rows);
       host.appendChild(board);
 
-      void Api.get("/auth/me").then(async (me) => {
-        if (!me?.authenticated) return;
-        const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite");
-        if (pending) {
-          try {
-            await Api.post("/friends/accept-invite", { code: pending });
-            sessionStorage.removeItem("fitos_pending_invite");
-          } catch (error) {
-            if ([400, 404, 409].includes(error.status)) sessionStorage.removeItem("fitos_pending_invite");
-          }
-        }
-        await refreshLeaderboard(rows);
-      }).catch(() => {
-        rows.textContent = "Friends leaderboard is temporarily unavailable. Your XP is loaded from the server and will appear once it is reachable.";
-      });
+      void syncFriends(rows).catch(() => {});
 
       document.getElementById("fitos-gamification-share").addEventListener("click", async () => {
         const message = SHARE_TEXT;
@@ -260,9 +282,9 @@
         }
       });
 
-      void refreshXp().catch(() => {});
+
     } else {
-      void refreshXp().catch(() => {});
+      void syncFriends(document.getElementById("fitos-private-friend-rows")).catch(() => {});
     }
   }
 
@@ -276,11 +298,17 @@
     render();
   }
 
+  window.addEventListener("fitos:authenticated", () => {
+    void syncFriends(document.getElementById("fitos-private-friend-rows")).catch(() => {});
+  });
+  window.addEventListener("fitos:friends-opened", () => {
+    void syncFriends(document.getElementById("fitos-private-friend-rows")).catch(() => {});
+  });
   window.addEventListener("focus", () => {
-    if (document.getElementById("fitos-gamification-card")) void refreshXp().catch(() => {});
+    if (document.getElementById("fitos-gamification-card")) void syncFriends().catch(() => {});
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && document.getElementById("fitos-gamification-card")) void refreshXp().catch(() => {});
+    if (!document.hidden && document.getElementById("fitos-gamification-card")) void syncFriends().catch(() => {});
   });
 
   if (document.readyState === "loading") {

@@ -119,6 +119,7 @@ const AuthState = {
     this.user = user;
     this.profileComplete = user?.profileComplete === true;
     this.generation += 1;
+    window.dispatchEvent(new CustomEvent("fitos:authenticated"));
   },
   unauthenticated() {
     if (this.status === "UNAUTHENTICATED") return;
@@ -133,6 +134,22 @@ window.AuthState = AuthState;
 
 const routeTabs = { "/homepage": "today", "/today": "today", "/workout": "workout", "/workouts": "workout", "/nutrition": "diet", "/equipment": "gym-scan", "/gym": "gym", "/friends": "friends", "/history": "history", "/profile": "profile", "/settings": "settings" };
 const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrender.com";
+
+// Preserve an invite before routing/auth redirects can remove the query string.
+(function preservePendingFriendInvite() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("invite");
+    if (!code || !/^[a-f0-9]{36}$/i.test(code)) return;
+    sessionStorage.setItem("fitos_pending_invite", code);
+    sessionStorage.setItem("fitos_open_rewards_after_invite", "1");
+    params.delete("invite");
+    const query = params.toString();
+    history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
+  } catch (error) {
+    console.warn("[FACHS] Could not preserve the friend invite link.", error);
+  }
+})();
 const routeMetadata = {
   "/": ["AI Workout Planner Based on Gym Equipment | FACHS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FACHS."],
   "/help": ["Help Center | FACHS", "Find help with FACHS workouts, equipment scanning, nutrition, gym discovery, and account access."],
@@ -304,7 +321,17 @@ async function routeCurrent() {
     return;
   }
   if (path === "/") {
-    // The marketing homepage is public even when a user is signed in.
+    // Invite links open the rewards comparison directly for signed-in users.
+    if (AuthState.status === "AUTHENTICATED" && sessionStorage.getItem("fitos_open_rewards_after_invite") === "1") {
+      if (AuthState.profileComplete === false) {
+        navigate("/profile", true);
+        return;
+      }
+      sessionStorage.removeItem("fitos_open_rewards_after_invite");
+      navigate("/friends", true);
+      return;
+    }
+    // The marketing homepage remains public for ordinary visits.
     showScreen("screen-landing");
     return;
   }
@@ -585,8 +612,10 @@ $("auth-submit").addEventListener("click", async () => {
     const data = await Api.post("/auth/login", { email, password });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
     AuthState.authenticated(data.user);
-    navigate("/gym", true);
-    void handleGymChoiceAfterLogin();
+    const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym";
+    if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite");
+    navigate(destination, true);
+    if (destination === "/gym") void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
     banner(bannerEl, "error", e.message || "Something went wrong.");
@@ -618,7 +647,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); navigate("/gym", true); void handleGymChoiceAfterLogin();
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym"; if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite"); navigate(destination, true); if (destination === "/gym") void handleGymChoiceAfterLogin();
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
@@ -834,6 +863,12 @@ function enterMainApp() {
   $("screen-onboarding").classList.remove("active");
   $("main-app").style.display = "flex";
   $("bottom-nav").style.display = "flex";
+  const openedFromInvite = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1";
+  if (openedFromInvite) {
+    sessionStorage.removeItem("fitos_open_rewards_after_invite");
+    navigate("/friends", true);
+    return;
+  }
   navigate("/gym", true);
   void handleGymChoiceAfterLogin();
 }
@@ -855,6 +890,7 @@ function switchTab(tab, updateUrl = true) {
   if (updateUrl && pathForTab[tab] && location.pathname !== pathForTab[tab]) history.pushState({}, "", pathForTab[tab]);
   if (tab === "history") { void showHistory(); return; }
   showScreen("screen-" + tab);
+  if (tab === "friends") window.dispatchEvent(new CustomEvent("fitos:friends-opened"));
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
 
   if (tab === "today") loadToday();
