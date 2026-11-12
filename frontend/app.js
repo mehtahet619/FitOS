@@ -408,7 +408,8 @@ function $(id) { return document.getElementById(id); }
 function banner(el, type, msg) {
   el.innerHTML = msg ? `<div class="banner banner-${type}">${msg}</div>` : "";
 }
-function showScreen(id) {  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   const screen = $(id);
   if (!screen) return;
   screen.classList.add("active");
@@ -423,6 +424,7 @@ function showScreen(id) {  document.querySelectorAll(".screen").forEach((s) => s
   bottomNav.style.display = isProtectedScreen ? "flex" : "none";
   $("app").dataset.view = isProtectedScreen ? "protected" : "public";
 }
+
 /* ---------------- Boot ---------------- */
   async function boot() {
     const generation = ++authBootGeneration;
@@ -809,7 +811,8 @@ $("onboarding-scan-btn").addEventListener("click", () => {
   startEquipmentScan("onboarding-scan-area", (detectedNames) => {
     activateEquipmentChips(detectedNames);
     $("onboarding-scan-area").innerHTML = `<div class="banner banner-success">Added ${detectedNames.join(", ")} to your selection below.</div>`;
-  });});
+  });
+});
 
 $("onboarding-submit").addEventListener("click", async () => {
   if (!profileEditMode) return;
@@ -823,7 +826,8 @@ $("onboarding-submit").addEventListener("click", async () => {
     weightKg: Number($("ob-weight").value),
     fitnessLevel: $("ob-level").value,
     primaryGoal: $("ob-goal").value,
-    daysPerWeek: Number($("ob-days").value),    sessionMinutes: 60,
+    daysPerWeek: Number($("ob-days").value),
+    sessionMinutes: 60,
     dietaryPref: $("ob-diet").value,
     allergies: $("ob-allergies").value.split(",").map((s) => s.trim()).filter(Boolean),
     foodLikes: [],
@@ -1214,7 +1218,8 @@ function renderImpactPlant(attendanceDays) {
     { min: 5, name: "developed seedling", height: 36, width: 2.8, leaves: [.36, .72], leafSize: .72 },
     { min: 3, name: "seedling with first leaves", height: 26, width: 2.2, leaves: [.56], leafSize: .6 },
     { min: 2, name: "emerging sprout", height: 13, width: 1.8, leaves: [.72], leafSize: .38 },
-    { min: 0, name: "seed", height: 0, width: 0, leaves: [], leafSize: 0 },  ];
+    { min: 0, name: "seed", height: 0, width: 0, leaves: [], leafSize: 0 },
+  ];
   const stage = stages.find((candidate) => dayCount >= candidate.min);
   const soilY = 78;
   const topY = soilY - stage.height;
@@ -1228,7 +1233,8 @@ function renderImpactPlant(attendanceDays) {
     ? `<path d="M90 ${soilY + 1} C${88 - stage.height * .03} ${soilY - stage.height * .32} ${92 + stage.height * .025} ${soilY - stage.height * .72} 90 ${topY}" fill="none" stroke="#567a4e" stroke-width="${stage.width}" stroke-linecap="round"/>`
     : "";
   const seed = dayCount < 3
-    ? '<path d="M83 79c1-5 7-8 13-6 2 1 3 3 2 5-2 4-8 6-12 4-2-1-3-2-3-3Z" fill="#876343" stroke="#694a34" stroke-width="1"/><path d="M86 79c3-2 6-3 10-3" fill="none" stroke="#b08a5d" stroke-width="1" stroke-linecap="round"/>'    : "";
+    ? '<path d="M83 79c1-5 7-8 13-6 2 1 3 3 2 5-2 4-8 6-12 4-2-1-3-2-3-3Z" fill="#876343" stroke="#694a34" stroke-width="1"/><path d="M86 79c3-2 6-3 10-3" fill="none" stroke="#b08a5d" stroke-width="1" stroke-linecap="round"/>'
+    : "";
   const water = dayCount === 2
     ? '<path d="M70 67c-2 4-3 5-3 7a3 3 0 0 0 6 0c0-2-1-3-3-7Zm39 2c-2 3-2 4-2 6a2.5 2.5 0 0 0 5 0c0-2-1-3-3-6Z" fill="#8fb8a1" opacity=".9"/>'
     : "";
@@ -1613,7 +1619,8 @@ function renderCircularProgress(plan) {
 
 const BRO_DEFAULT_UNITS = [
   { label: "Chest + Triceps", muscles: ["chest", "triceps"] },
-  { label: "Back + Biceps", muscles: ["back", "biceps"] },  { label: "Legs + Shoulders", muscles: ["quads", "hamstrings", "glutes", "calves", "shoulders"] },
+  { label: "Back + Biceps", muscles: ["back", "biceps"] },
+  { label: "Legs + Shoulders", muscles: ["quads", "hamstrings", "glutes", "calves", "shoulders"] },
 ];
 const BRO_MUSCLE_OPTIONS = ["chest", "back", "biceps", "triceps", "shoulders", "quads", "hamstrings", "glutes", "calves"];
 
@@ -1626,7 +1633,8 @@ function renderPlanStructurePrompt() {
       `).join("")}
     </div>
   `).join("");
-  return `    <div class="card">
+  return `
+    <div class="card">
       <div class="card-label">Step 1: Choose your workout structure</div>
       <div class="card-sub">FACHS will enforce this structure until you complete a full cycle. You cannot jump to another plan mid-cycle.</div>
       <div class="chip-group" id="plan-chips" style="margin-top:10px; margin-bottom:10px;">
@@ -2012,6 +2020,7 @@ function showUnavailableExerciseDemo(player, exercise, demo, message) {
   fallback.append(heading, instructions, hint);
   player.replaceChildren(fallback);
 }
+
 async function requestRefreshedExerciseDemo(exercise, excludeVideoId) {
   if (!exercise?.exerciseId) return null;
   try {
@@ -2025,6 +2034,7 @@ async function requestRefreshedExerciseDemo(exercise, excludeVideoId) {
     return null;
   }
 }
+
 async function startExerciseDemoPlayer(player, button, exercise) {
   const demo = exercise?.demoVideo;
   if (!demo || demo.kind !== "video" || !demo.videoId) {
@@ -2411,7 +2421,8 @@ function renderWorkout(workout, plan) {
       document.addEventListener("pointermove", moveDrag, { passive: false });
       document.addEventListener("pointerup", finishDrag);
       document.addEventListener("pointercancel", cancelDrag);
-    });  });
+    });
+  });
 
   el.querySelectorAll('[data-action="edit-exercise"]').forEach((button) => {
     button.addEventListener("click", () => {
@@ -2422,7 +2433,8 @@ function renderWorkout(workout, plan) {
   el.querySelectorAll(".exercise-demo-preview img").forEach((image) => {
     image.addEventListener("error", () => {
       const preview = image.closest(".exercise-demo-preview");
-      if (!preview || preview.querySelector(".exercise-demo-thumbnail-fallback")) return;      image.hidden = true;
+      if (!preview || preview.querySelector(".exercise-demo-thumbnail-fallback")) return;
+      image.hidden = true;
       const fallback = document.createElement("span");
       fallback.className = "exercise-demo-thumbnail-fallback";
       fallback.textContent = "Video preview unavailable";
@@ -2811,6 +2823,7 @@ function findNearby(foodId, foodName) {
     }
   );
 }
+
 function renderNearby(data, foodName) {
   const el = $("nearby-results");
   if (!data.configured) {
@@ -2820,7 +2833,8 @@ function renderNearby(data, foodName) {
         <div class="empty-state">${data.message}</div>
       </div>
     `;
-    return;  }
+    return;
+  }
   if (data.places.length === 0) {
     el.innerHTML = `<div class="card"><div class="empty-state">No matches found nearby.</div></div>`;
     return;
@@ -3209,7 +3223,8 @@ function renderGymTour(equipment, plan, savedProfile) {
         <div class="chip-group" id="gym-manual-equipment" style="flex-wrap:wrap;gap:8px;"></div>
         <div class="field" style="margin-top:12px;">
           <label for="gym-custom-equipment-name">Add equipment not listed</label>
-          <div class="btn-row">            <input id="gym-custom-equipment-name" type="text" maxlength="120" placeholder="e.g. Pendulum squat machine">
+          <div class="btn-row">
+            <input id="gym-custom-equipment-name" type="text" maxlength="120" placeholder="e.g. Pendulum squat machine">
             <button class="btn btn-outline" id="gym-custom-equipment-add" type="button">Add</button>
           </div>
         </div>
@@ -3218,7 +3233,8 @@ function renderGymTour(equipment, plan, savedProfile) {
     `;
     const manualGroup = $("gym-manual-equipment");
     [...new Set([...equipmentNames, ...known])].forEach((name) => {
-      const button = document.createElement("button");      button.type = "button";
+      const button = document.createElement("button");
+      button.type = "button";
       button.className = `chip ${known.includes(name) ? "active" : ""}`;
       button.textContent = name;
       button.setAttribute("aria-pressed", String(known.includes(name)));
@@ -3608,7 +3624,8 @@ function renderGymScan(equipment, plan) {
         if (!result.configured) {
           feedback.textContent = result.message || "Equipment detection is not configured on the backend.";
         } else {
-          latestDetections = Array.isArray(result.detections) ? result.detections : [];          const unique = new Map();
+          latestDetections = Array.isArray(result.detections) ? result.detections : [];
+          const unique = new Map();
           latestDetections.forEach(d => {
             const existing = unique.get(d.equipmentName);
             if (!existing || d.confidence > existing.confidence) unique.set(d.equipmentName, d);
@@ -3616,7 +3633,8 @@ function renderGymScan(equipment, plan) {
           feedback.textContent = unique.size
             ? `Live detection: ${unique.size} equipment types recognized. Move the camera to scan more, then tap Stop & Review.`
             : "Live scan running. No known equipment recognized yet; adjust the camera angle or lighting.";
-          resultsDiv.style.display = "block";          resultsDiv.textContent = unique.size
+          resultsDiv.style.display = "block";
+          resultsDiv.textContent = unique.size
             ? "Currently detected: " + Array.from(unique.keys()).join(", ")
             : "Waiting for equipment detections…";
         }
