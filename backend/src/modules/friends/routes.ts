@@ -62,7 +62,7 @@ friendsRouter.get("/leaderboard", async (req: AuthedRequest, res) => {
   const code = await inviteCode(userId);
   const week = new Date(Date.now() - 7 * 86400000).toISOString();
 
-  // Friendship is mutual: people I invited AND the person who invited me.
+  // Include every friendship in either direction so both accounts see each other.
   const links = await db.all<{ otherId: string }>(
     `SELECT userBId AS otherId FROM UserFriendship WHERE userAId = ?
      UNION
