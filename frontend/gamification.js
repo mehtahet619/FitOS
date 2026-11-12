@@ -16,10 +16,15 @@
   function localDateKey(value) {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return null;
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return year + "-" + month + "-" + day;
+    // Match the backend's Asia/Kolkata calendar-day boundaries exactly.
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value || "";
+    return part("year") + "-" + part("month") + "-" + part("day");
   }
 
   function dayNumber(key) {
@@ -50,12 +55,11 @@
       if (currentRun > 1) consistencyBonusDays += 1;
     }
 
-    const todayKey = localDateKey(new Date());
-    const yesterdayKey = localDateKey(Date.now() - 86400000);
+    const todayNumber = dayNumber(localDateKey(new Date()));
+    const daySet = new Set(uniqueDays.map(dayNumber));
     let currentStreak = 0;
-    if (uniqueDays.includes(todayKey) || uniqueDays.includes(yesterdayKey)) {
-      let cursor = dayNumber(uniqueDays[uniqueDays.length - 1]);
-      const daySet = new Set(uniqueDays.map(dayNumber));
+    if (daySet.has(todayNumber) || daySet.has(todayNumber - 1)) {
+      let cursor = daySet.has(todayNumber) ? todayNumber : todayNumber - 1;
       while (daySet.has(cursor)) {
         currentStreak += 1;
         cursor -= 1;
@@ -80,36 +84,48 @@
     card.querySelector("#fitos-gamification-next").textContent = (XP_PER_LEVEL - progress) + " XP to next level";
     card.querySelector("#fitos-gamification-workouts").textContent = stats.workoutCount + " completed workouts · +" + stats.workoutXp + " XP";
     card.querySelector("#fitos-gamification-consistency").textContent =
-      stats.currentStreak + " day current streak · +" + stats.consistencyXp + " consistency XP earned";
+      (stats.currentStreak == null ? "Streak unavailable" : stats.currentStreak + " day current streak") +
+      " · +" + stats.consistencyXp + " consistency XP earned";
   }
 
   async function refreshXp() {
     if (historyRequest) return historyRequest;
-    historyRequest = Promise.all([
-      Api.get("/workouts/history"),
-      Api.get("/friends/leaderboard"),
-    ])
-      .then(([response, leaderboard]) => {
+    historyRequest = (async () => {
+      // Lifetime XP and completed-workout count are authoritative on the server.
+      // A separate history endpoint failure must never hide otherwise-valid XP.
+      const leaderboard = await Api.get("/friends/leaderboard");
+      const members = Array.isArray(leaderboard?.members) ? leaderboard.members : [];
+      const own = members.find((member) => member.isYou);
+      if (!own) {
+        throw new Error("Your rewards profile is missing from the friends leaderboard. XP was not replaced with a guessed value.");
+      }
+
+      let stats = {
+        workoutCount: Math.max(0, Number(own.workouts) || 0),
+        workoutXp: Math.max(0, Number(own.workouts) || 0) * XP_PER_WORKOUT,
+        totalXp: Math.max(0, Number(own.xp) || 0),
+        consistencyXp: 0,
+        currentStreak: null,
+      };
+      stats.consistencyXp = Math.max(0, stats.totalXp - stats.workoutXp);
+
+      try {
+        const response = await Api.get("/workouts/history");
         const history = Array.isArray(response) ? response : (response?.history || response?.workouts || []);
-        const stats = calculateRewards(history);
-        const members = Array.isArray(leaderboard?.members) ? leaderboard.members : [];
-        const own = members.find((member) => member.isYou);
-        if (!own) {
-          throw new Error("Your rewards profile is missing from the friends leaderboard. XP was not replaced with a guessed value.");
-        }
-        // The server is the single source of truth for lifetime XP. Workout
-        // history is retained for the live streak display, not a second XP
-        // calculation that can drift from the leaderboard.
-        stats.workoutCount = Math.max(0, Number(own.workouts) || 0);
-        stats.workoutXp = stats.workoutCount * XP_PER_WORKOUT;
-        stats.totalXp = Math.max(0, Number(own.xp) || 0);
-        stats.consistencyXp = Math.max(0, stats.totalXp - stats.workoutXp);
-        updateXpDisplay(stats);
-        return stats;
-      })
+        const streakStats = calculateRewards(history);
+        stats.currentStreak = streakStats.currentStreak;
+      } catch (historyError) {
+        console.warn("[FACHS] Workout history unavailable; keeping server XP.", historyError);
+        const status = document.getElementById("fitos-gamification-status");
+        if (status) status.textContent = "XP is up to date. Current streak is temporarily unavailable.";
+      }
+
+      updateXpDisplay(stats);
+      return stats;
+    })()
       .catch((error) => {
         const status = document.getElementById("fitos-gamification-status");
-        if (status) status.textContent = "Workout history could not be loaded. Your XP will update when it is available.";
+        if (status) status.textContent = "Your rewards could not be loaded from the server. Please try again shortly.";
         console.warn("[FACHS] Could not calculate rewards from workout history.", error);
         throw error;
       })
