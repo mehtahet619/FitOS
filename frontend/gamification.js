@@ -82,10 +82,13 @@
     card.querySelector("#fitos-gamification-level").textContent = "Level " + level;
     card.querySelector("#fitos-gamification-progress").style.width = (progress / XP_PER_LEVEL * 100) + "%";
     card.querySelector("#fitos-gamification-next").textContent = (XP_PER_LEVEL - progress) + " XP to next level";
-    card.querySelector("#fitos-gamification-workouts").textContent = stats.workoutCount + " completed workouts · +" + stats.workoutXp + " XP";
+    card.querySelector("#fitos-gamification-workouts").textContent =
+      stats.workoutCount == null
+        ? "Your total XP is saved to your FACHS account"
+        : stats.workoutCount + " completed workouts · +" + stats.workoutXp + " XP";
     card.querySelector("#fitos-gamification-consistency").textContent =
       (stats.currentStreak == null ? "Streak unavailable" : stats.currentStreak + " day current streak") +
-      " · +" + stats.consistencyXp + " consistency XP earned";
+      (stats.consistencyXp == null ? " · XP synced from database" : " · +" + stats.consistencyXp + " consistency XP earned");
   }
 
   async function refreshRewards(rows) {
@@ -100,13 +103,12 @@
         throw new Error("Your rewards profile is missing from the friends leaderboard. XP was not replaced with a guessed value.");
       }
 
-      const workoutCount = Math.max(0, Number(own.workouts) || 0);
       const totalXp = Math.max(0, Number(own.xp) || 0);
       const stats = {
-        workoutCount,
-        workoutXp: workoutCount * XP_PER_WORKOUT,
+        workoutCount: null,
+        workoutXp: null,
         totalXp,
-        consistencyXp: Math.max(0, totalXp - workoutCount * XP_PER_WORKOUT),
+        consistencyXp: null,
         currentStreak: null,
       };
 
@@ -165,11 +167,9 @@
       name.textContent = (member.name || "FACHS member") + (member.isYou ? " (You)" : "");
       const stats = document.createElement("div");
       stats.className = "fitos-friend-stats";
-      const workouts = document.createElement("span");
-      workouts.textContent = String(Number(member.weeklyWorkouts) || 0) + " workouts this week";
       const xp = document.createElement("strong");
       xp.textContent = (Number(member.xp) || 0).toLocaleString() + " XP";
-      stats.append(workouts, xp);
+      stats.append(xp);
       item.append(top, name, stats);
       rows.appendChild(item);
     });
