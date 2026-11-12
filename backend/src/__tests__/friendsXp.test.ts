@@ -7,6 +7,7 @@ describe("friend relationships", () => {
     expect(canonicalFriendPair("user-a", "user-b")).toEqual(["user-a", "user-b"]);
     expect(canonicalFriendPair("user-b", "user-a")).toEqual(["user-a", "user-b"]);
     expect(canonicalFriendPair("user-a", "user-a")).toBeNull();
+    expect(canonicalFriendPair("user-a", "user-c")).toEqual(["user-a", "user-c"]);
   });
 });
 
