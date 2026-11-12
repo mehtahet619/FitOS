@@ -12,6 +12,15 @@ let ready: Promise<void> | undefined;
 async function ensureTables() {
   if (!ready) ready = (async () => {
     await db.exec(`CREATE TABLE IF NOT EXISTS UserInviteCode (id VARCHAR(36) PRIMARY KEY, userId VARCHAR(255) NOT NULL UNIQUE, code VARCHAR(64) NOT NULL UNIQUE, createdAt VARCHAR(40) NOT NULL)`);
+    // Persist the exact shareable identity shown to friends. The invite code is
+    // stable per owner; name and XP are refreshed from the shared database.
+    await db.exec(`CREATE TABLE IF NOT EXISTS UserSharedProfile (
+      userId VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      xp INTEGER NOT NULL DEFAULT 0,
+      inviteCode VARCHAR(64) NOT NULL UNIQUE,
+      updatedAt VARCHAR(40) NOT NULL
+    )`);
     // Keep the old table readable so existing one-to-one invite links can be
     // copied forward without losing any established friendships.
     await db.exec(`CREATE TABLE IF NOT EXISTS UserFriendInvite (id VARCHAR(36) PRIMARY KEY, inviterUserId VARCHAR(255) NOT NULL, invitedUserId VARCHAR(255) NOT NULL UNIQUE, createdAt VARCHAR(40) NOT NULL, UNIQUE(inviterUserId, invitedUserId))`);
@@ -75,31 +84,65 @@ friendsRouter.get("/leaderboard", async (req: AuthedRequest, res) => {
     `SELECT id, name FROM "User" WHERE id IN (${memberIds.map(() => "?").join(",")})`,
     ...memberIds
   );
-  const nameById = new Map(users.map((u) => [u.id, u.name]));
-  const liveIds = memberIds.filter((id) => id === userId || nameById.has(id));
+  const nameById = new Map(users.map((u) => [u.id, u.name || "FACHS member"]));
+  const xpByUser = await loadXpForUsers(db, memberIds);
 
-  const weeklyRows = await db.all<{ userId: string; weeklyWorkouts: number | string }>(
-    `SELECT userId, COUNT(*) AS weeklyWorkouts FROM Workout
-     WHERE userId IN (${liveIds.map(() => "?").join(",")})
-       AND status = 'completed' AND completedAt IS NOT NULL AND completedAt >= ?
-     GROUP BY userId`,
-    ...liveIds, week
+  // Save one current snapshot for every linked account. XP is recalculated from
+  // that account's completed workouts on every leaderboard request, then stored
+  // with the same permanent invite code. No workout count is stored or exposed.
+  for (const id of memberIds) {
+    const codeForMember = await inviteCode(id);
+    const name = nameById.get(id) || "FACHS member";
+    const xp = Math.max(0, Number(xpByUser.get(id)?.xp) || 0);
+    const existing = await db.get<{ userId: string }>(
+      "SELECT userId FROM UserSharedProfile WHERE userId=?",
+      id
+    );
+    if (existing) {
+      await db.run(
+        "UPDATE UserSharedProfile SET name=?, xp=?, inviteCode=?, updatedAt=? WHERE userId=?",
+        name, xp, codeForMember, nowIso(), id
+      );
+    } else {
+      try {
+        await db.run(
+          "INSERT INTO UserSharedProfile (userId,name,xp,inviteCode,updatedAt) VALUES (?,?,?,?,?)",
+          id, name, xp, codeForMember, nowIso()
+        );
+      } catch {
+        // Handle simultaneous first-time requests without creating duplicates.
+        const raced = await db.get<{ userId: string }>(
+          "SELECT userId FROM UserSharedProfile WHERE userId=?",
+          id
+        );
+        if (!raced) throw new Error("Could not save the shared rewards profile.");
+        await db.run(
+          "UPDATE UserSharedProfile SET name=?, xp=?, inviteCode=?, updatedAt=? WHERE userId=?",
+          name, xp, codeForMember, nowIso(), id
+        );
+      }
+    }
+  }
+
+  const savedProfiles = await db.all<{
+    userId: string;
+    name: string;
+    xp: number | string;
+    inviteCode: string;
+  }>(
+    `SELECT userId, name, xp, inviteCode FROM UserSharedProfile
+     WHERE userId IN (${memberIds.map(() => "?").join(",")})`,
+    ...memberIds
   );
-  const weeklyById = new Map(weeklyRows.map((r) => [r.userId, Number(r.weeklyWorkouts) || 0]));
-  const xpByUser = await loadXpForUsers(db, liveIds);
-
-  const members = liveIds.map((id) => {
-    const stats = xpByUser.get(id)!;
-    const isYou = id === userId;
-    return {
-      id,
-      name: nameById.get(id) || (isYou ? "You" : "FACHS member"),
-      isYou,
-      workouts: stats.workouts,
-      weeklyWorkouts: weeklyById.get(id) ?? 0,
-      xp: stats.xp,
-    };
-  }).sort((a, b) => b.xp - a.xp || b.weeklyWorkouts - a.weeklyWorkouts || a.name.localeCompare(b.name));
+  const members = savedProfiles
+    .map((profile) => ({
+      id: profile.userId,
+      name: profile.name,
+      xp: Math.max(0, Number(profile.xp) || 0),
+      inviteUrl: `${process.env.FRONTEND_PUBLIC_URL || "https://adaptive-fit-web.onrender.com"}/?invite=${profile.inviteCode}`,
+      isYou: profile.userId === userId,
+    }))
+    .sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name));
 
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Pragma", "no-cache");
