@@ -65,7 +65,7 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
     if (_playSize.isEmpty) return;
     _bottles
       ..clear()
-      ..addAll(List<_Bottle>.generate(6 + math.min(_level - 1, 3), (index) {
+      ..addAll(List<_Bottle>.generate(6 + math.min(_level - 1, 3).toInt(), (index) {
         final count = 6 + math.min(_level - 1, 3).toInt();
         final gap = math.min(58.0, (_playSize.width - 48) / count).toDouble();
         final total = gap * (count - 1);
@@ -123,7 +123,7 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
   void _step() {
     if (!mounted || _playSize.isEmpty) return;
     final now = _clock.elapsedMicroseconds / 1000000.0;
-    final dt = (now - _lastTick).clamp(0.0, 0.032);
+    final dt = (now - _lastTick).clamp(0.0, 0.032).toDouble();
     _lastTick = now;
     if (dt <= 0) return;
 
@@ -149,7 +149,6 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
             bottle.vx = (shot.vx * 0.22).clamp(-260.0, 260.0).toDouble();
             bottle.vy = -105;
             bottle.angularVelocity = shot.vx >= 0 ? 5.8 : -5.8;
-            bottle.hit = true;
             _score += 10;
             _projectile = null;
             _burst(bottle.x, bottle.baseY - 35);
@@ -395,7 +394,6 @@ class _Bottle {
   double vy = 0;
   double angle = 0;
   double angularVelocity = 0;
-  bool hit = false;
   bool toppled = false;
 }
 
