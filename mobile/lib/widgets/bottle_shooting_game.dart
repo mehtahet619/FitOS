@@ -66,7 +66,7 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
     _bottles
       ..clear()
       ..addAll(List<_Bottle>.generate(6 + math.min(_level - 1, 3), (index) {
-        final count = 6 + math.min(_level - 1, 3);
+        final count = 6 + math.min(_level - 1, 3).toInt();
         final gap = math.min(58.0, (_playSize.width - 48) / count).toDouble();
         final total = gap * (count - 1);
         final left = (_playSize.width - total) / 2;
@@ -517,7 +517,7 @@ class _BottleRangePainter extends CustomPainter {
     if (aimPoint != null && projectile == null) {
       final delta = aimPoint! - cannon;
       if (delta.dy < 0) {
-        final direction = delta / math.max(1, delta.distance);
+        final direction = delta / math.max(1.0, delta.distance).toDouble();
         final end = cannon + direction * 150;
         final guide = Paint()
           ..color = const Color(0xFFB7F2C6).withOpacity(0.75)
