@@ -67,7 +67,7 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
       ..clear()
       ..addAll(List<_Bottle>.generate(6 + math.min(_level - 1, 3), (index) {
         final count = 6 + math.min(_level - 1, 3);
-        final gap = math.min(58.0, (_playSize.width - 48) / count);
+        final gap = math.min(58.0, (_playSize.width - 48) / count).toDouble();
         final total = gap * (count - 1);
         final left = (_playSize.width - total) / 2;
         return _Bottle(
@@ -146,7 +146,7 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
           final dx = shot.x - bottle.x;
           final dy = shot.y - (bottle.baseY - 34);
           if (dx * dx + dy * dy < 27 * 27) {
-            bottle.vx = (shot.vx * 0.22).clamp(-260.0, 260.0);
+            bottle.vx = (shot.vx * 0.22).clamp(-260.0, 260.0).toDouble();
             bottle.vy = -105;
             bottle.angularVelocity = shot.vx >= 0 ? 5.8 : -5.8;
             bottle.hit = true;
@@ -219,7 +219,6 @@ class _BottleShootingGameOverlayState extends State<BottleShootingGameOverlay>
     if (changed || _particles.isNotEmpty) {
       // The ticker drives the painter directly; setState is only needed for
       // score and round changes, avoiding a rebuild on every animation frame.
-      _ticker.notifyStatusListeners(AnimationStatus.forward);
     }
   }
 
@@ -494,7 +493,7 @@ class _BottleRangePainter extends CustomPainter {
     }
 
     for (final particle in particles) {
-      final alpha = particle.life.clamp(0.0, 1.0);
+      final alpha = particle.life.clamp(0.0, 1.0).toDouble();
       canvas.drawCircle(
         Offset(particle.x, particle.y),
         2.5 + alpha * 2,
