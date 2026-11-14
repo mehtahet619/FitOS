@@ -243,7 +243,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
             if (_workout!["status"] != "completed") MintButton(label: "Mark workout complete", onPressed: _completeWorkout),
           ],
-          ],
         ],
       ),
       if (_showBottleGame)
