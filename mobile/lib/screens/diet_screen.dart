@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import '../api/api_client.dart';
 import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
+import '../widgets/bottle_shooting_game.dart';
 
 class DietScreen extends StatefulWidget {
   const DietScreen({super.key});
@@ -14,6 +15,7 @@ class _DietScreenState extends State<DietScreen> {
   bool _loading = true;
   bool _needsGenerate = false;
   bool _generating = false;
+  bool _showBottleGame = false;
   Map<String, dynamic>? _nutrition;
   String? _error;
 
@@ -50,7 +52,10 @@ class _DietScreenState extends State<DietScreen> {
   }
 
   Future<void> _generate() async {
-    setState(() => _generating = true);
+    setState(() {
+      _generating = true;
+      _showBottleGame = true;
+    });
     try {
       await ApiClient.instance.post("/nutrition/generate", {});
       capturePostHogEvent('nutrition_plan_generated');
@@ -58,7 +63,10 @@ class _DietScreenState extends State<DietScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
-      if (mounted) setState(() => _generating = false);
+      if (mounted) setState(() {
+        _generating = false;
+        _showBottleGame = false;
+      });
     }
   }
 
@@ -100,10 +108,13 @@ class _DietScreenState extends State<DietScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading && !_showBottleGame) return const Center(child: CircularProgressIndicator());
 
     return SafeArea(
-      child: ListView(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
         children: [
           Text("Diet", style: Theme.of(context).textTheme.headlineMedium),
@@ -140,6 +151,13 @@ class _DietScreenState extends State<DietScreen> {
             ),
             InfoBanner.info(_nutrition!["disclaimer"]),
           ],
+          ],
+          if (_showBottleGame)
+            const Positioned.fill(
+              child: BottleShootingGameOverlay(
+                statusText: "Preparing your meal plan...",
+              ),
+            ),
         ],
       ),
     );

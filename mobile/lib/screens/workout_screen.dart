@@ -3,6 +3,7 @@ import '../api/api_client.dart';
 import '../posthog/posthog.dart';
 import '../theme/app_theme.dart';
 import 'equipment_scan_screen.dart';
+import '../widgets/bottle_shooting_game.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -16,6 +17,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   Map<String, dynamic>? _plan;
   String _selectedStructure = "PPL";
   bool _generating = false;
+  bool _showBottleGame = false;
   bool _choosingNewPlan = false;
   String? _banner;
   bool _bannerIsError = false;
@@ -79,7 +81,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _generate({List<String>? scannedEquipment}) async {
-    setState(() => _generating = true);
+    setState(() {
+      _generating = true;
+      _showBottleGame = true;
+    });
     try {
       await ApiClient.instance.post("/workouts/generate", scannedEquipment == null
           ? {"equipmentMode": "FULL_GYM"}
@@ -98,7 +103,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         _bannerIsError = true;
       });
     } finally {
-      if (mounted) setState(() => _generating = false);
+      if (mounted) setState(() {
+        _generating = false;
+        _showBottleGame = false;
+      });
     }
   }
 
@@ -162,7 +170,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: ListView(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
         children: [
           Text("Workout", style: Theme.of(context).textTheme.headlineMedium),
@@ -232,6 +243,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
             if (_workout!["status"] != "completed") MintButton(label: "Mark workout complete", onPressed: _completeWorkout),
           ],
+          ],
+          if (_showBottleGame)
+            const Positioned.fill(
+              child: BottleShootingGameOverlay(
+                statusText: "Building your workout...",
+              ),
+            ),
         ],
       ),
     );
