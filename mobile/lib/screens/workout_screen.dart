@@ -244,15 +244,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             if (_workout!["status"] != "completed") MintButton(label: "Mark workout complete", onPressed: _completeWorkout),
           ],
           ],
-          if (_showBottleGame)
-            const Positioned.fill(
-              child: BottleShootingGameOverlay(
-                statusText: "Building your workout...",
-              ),
-            ),
         ],
       ),
-    );
+      if (_showBottleGame)
+        const Positioned.fill(
+          child: BottleShootingGameOverlay(
+            statusText: "Building your workout...",
+          ),
+        ),
+    ],
+  ),
+);
   }
 
   Widget _structurePicker() {
