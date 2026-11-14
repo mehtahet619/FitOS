@@ -152,15 +152,17 @@ class _DietScreenState extends State<DietScreen> {
             InfoBanner.info(_nutrition!["disclaimer"]),
           ],
           ],
-          if (_showBottleGame)
-            const Positioned.fill(
-              child: BottleShootingGameOverlay(
-                statusText: "Preparing your meal plan...",
-              ),
-            ),
         ],
       ),
-    );
+      if (_showBottleGame)
+        const Positioned.fill(
+          child: BottleShootingGameOverlay(
+            statusText: "Preparing your meal plan...",
+          ),
+        ),
+    ],
+  ),
+);
   }
 
   Widget _mealTile(dynamic meal) {
